@@ -1,0 +1,177 @@
+:root {
+  --bg-main: #2c3e50;
+  --bg-card: rgba(30, 43, 56, 0.75);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --brand-pink: #e25b8b;
+  --brand-green: #7fb041;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --input-bg: rgba(20, 30, 40, 0.6);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at top right, #34495e, #2c3e50);
+  overflow: hidden;
+}
+
+/* Hafif marka renkli yansımalar (Çok soft, göz yormaz) */
+body::before {
+  content: '';
+  position: absolute;
+  top: -10%;
+  left: -5%;
+  width: 40%;
+  height: 40%;
+  background: radial-gradient(circle, rgba(226, 91, 139, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+body::after {
+  content: '';
+  position: absolute;
+  bottom: -10%;
+  right: -5%;
+  width: 40%;
+  height: 40%;
+  background: radial-gradient(circle, rgba(127, 176, 65, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100vh;
+}
+
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.glass-card h1 {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  text-align: center;
+  color: var(--brand-green);
+}
+
+.glass-card p {
+  color: var(--text-secondary);
+  text-align: center;
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+
+.tab-container {
+  display: flex;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.tab-btn.active {
+  background: var(--brand-pink);
+  color: white;
+  box-shadow: 0 2px 8px rgba(226, 91, 139, 0.3);
+}
+
+.input-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-group label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.input-group input {
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px 16px;
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.input-group input:focus {
+  border-color: var(--brand-pink);
+  box-shadow: 0 0 0 2px rgba(226, 91, 139, 0.2);
+}
+
+.btn-primary {
+  width: 100%;
+  background: var(--brand-pink);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 14px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 10px;
+}
+
+.btn-primary:hover {
+  background: #d44a7a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(226, 91, 139, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
