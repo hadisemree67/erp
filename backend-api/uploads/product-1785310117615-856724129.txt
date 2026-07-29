@@ -1,0 +1,9 @@
+cd backend-api
+npm run dev
+2. Terminal (Masaüstü Uygulamasını başlatmak için):
+
+powershell
+cd desktop-app
+npm run desktop
+
+http://192.168.10.159:3002/

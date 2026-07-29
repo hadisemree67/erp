@@ -144,6 +144,13 @@
   border-left-color: #e45b8e; /* Brand pink subtle touch */
 }
 
+.dropdown-item.active-sub {
+  color: #38bdf8; /* Premium bright blue text */
+  background-color: #1e293b;
+  border-left: 3px solid #38bdf8; /* Thicker, matching blue border */
+  font-weight: 700;
+}
+
 /* Stok Subsection Styling */
 .subsection {
   margin-bottom: 8px;

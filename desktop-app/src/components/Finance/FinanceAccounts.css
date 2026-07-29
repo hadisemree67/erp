@@ -1,0 +1,516 @@
+/**
+ * ============================================================================
+ * DOSYA ADI: FinanceAccounts.css
+ * MODÜL / KATMAN: Arayüz Stilleri - Gelir ve Gider Hesapları (Yumuşak Açık Tema / Minimalist)
+ * 
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   - Kullanıcının gözünü yormayan yumuşak açık tema (#f8fafc zemin, #ffffff kartlar).
+ *   - Kalın çerçeveler ve sert zeminler yerine çok hafif gölge ve ton farklarıyla ayrıştırma.
+ *   - Emoji yerine monokrom SVG çizgi ikonlar ve kontrollü tipografi (24-25px rakamlar).
+ *   - Kutu rozetler yerine nokta (dot) + yalın metin gösterimi.
+ * ============================================================================
+ */
+
+.finance-accounts-container {
+    padding: 24px 32px;
+    background: #f8fafc; /* Göz yormayan yumuşak açık gri zemin */
+    min-height: calc(100vh - 64px);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: #0f172a;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+/* Üst Başlık ve Sekmeler */
+.finance-header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    background: #ffffff;
+    padding: 20px 24px;
+    border-radius: 16px;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+    border: 1px solid #f1f5f9;
+}
+
+.finance-title-area h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: -0.01em;
+}
+
+.finance-title-area p {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0;
+}
+
+.finance-tab-switch {
+    display: flex;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 10px;
+    gap: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+.finance-tab-btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    color: #64748b;
+}
+
+.finance-tab-btn:hover {
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.finance-tab-btn.active-gider, .finance-tab-btn.active-gelir {
+    background: #0f172a;
+    color: #ffffff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.add-expense-btn, .add-income-btn {
+    padding: 10px 20px;
+    background: #0f172a;
+    color: #ffffff;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
+.add-expense-btn:hover, .add-income-btn:hover {
+    background: #1e293b;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+
+/* Özet Kartları Row (Sade, ince kenarlıksız, yumuşak gölgeli beyaz kartlar) */
+.finance-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+}
+
+.f-card {
+    background: #ffffff;
+    padding: 16px 20px;
+    border-radius: 14px;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    transition: transform 0.2s, border-color 0.2s;
+}
+
+.f-card:hover {
+    border-color: #e2e8f0;
+    transform: translateY(-2px);
+}
+
+.f-card-header {
+    display: flex;
+    align-items: center;
+}
+
+.f-card-title {
+    font-size: 0.775rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.f-card-value {
+    font-size: 1.55rem; /* ~25px kontrollü ve dengeli boyut */
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+}
+
+.f-card-value.negative {
+    color: #dc2626; /* Negatif bakiye için yumuşak kırmızı */
+}
+
+/* Filtre ve Arama Alanı */
+.finance-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    background: #ffffff;
+    padding: 14px 20px;
+    border-radius: 14px;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02);
+}
+
+.f-search-box {
+    display: flex;
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 14px;
+    width: 300px;
+    transition: all 0.2s;
+}
+
+.f-search-box:focus-within {
+    border-color: #64748b;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.08);
+}
+
+.f-search-input {
+    border: none;
+    background: transparent;
+    outline: none;
+    width: 100%;
+    margin-left: 8px;
+    font-size: 0.875rem;
+    color: #0f172a;
+}
+
+.f-search-input::placeholder {
+    color: #94a3b8;
+}
+
+.f-filter-pills {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.f-pill {
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.f-pill:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.f-pill.active {
+    background: #0f172a;
+    color: #ffffff;
+    border-color: #0f172a;
+}
+
+/* Tablo / Liste Alanı (Temiz beyaz, hafif çizgili) */
+.finance-table-card {
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+    overflow: hidden;
+}
+
+.f-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.f-table th {
+    background: #f8fafc;
+    padding: 14px 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.f-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f8fafc;
+    font-size: 0.885rem;
+    color: #334155;
+    vertical-align: middle;
+}
+
+.f-table tr:last-child td {
+    border-bottom: none;
+}
+
+.f-table tr:hover {
+    background: #f8fafc;
+}
+
+.f-item-title {
+    font-weight: 600;
+    color: #0f172a;
+    font-size: 0.925rem;
+    margin-bottom: 2px;
+}
+
+/* Mavi ikon bulunmayan, silik ve sakin alt metin */
+.f-item-subtitle {
+    font-size: 0.785rem;
+    color: #64748b;
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+/* Kutu rozet yerine nokta (dot) + metin yapısı */
+.f-badge-minimal {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.825rem;
+    color: #475569;
+    font-weight: 500;
+}
+
+.f-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.f-amount {
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: right;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+}
+
+.f-action-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: none;
+    background: #f8fafc;
+    color: #64748b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.f-action-btn:hover:not(:disabled) {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.f-action-btn:disabled {
+    background: transparent;
+    color: #cbd5e1;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Modal Stilleri (Yumuşak Açık Tema) */
+.finance-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    animation: fadeIn 0.15s ease-out;
+}
+
+.finance-modal-content {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 500px;
+    box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    animation: scaleUp 0.15s ease-out;
+}
+
+.finance-modal-header {
+    background: #f8fafc;
+    padding: 18px 24px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.finance-modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.modal-close-btn {
+    background: transparent;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.modal-close-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.finance-modal-body {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.f-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.f-form-group label {
+    font-size: 0.825rem;
+    font-weight: 500;
+    color: #475569;
+}
+
+.f-form-input, .f-form-select {
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    font-size: 0.9rem;
+    color: #0f172a;
+    background: #ffffff;
+    transition: border-color 0.2s;
+}
+
+.f-form-input:focus, .f-form-select:focus {
+    outline: none;
+    border-color: #64748b;
+    box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.08);
+}
+
+.f-quick-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.f-chip {
+    padding: 4px 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.f-chip:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
+.finance-modal-footer {
+    padding: 16px 24px;
+    background: #f8fafc;
+    border-top: 1px solid #f1f5f9;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+.btn-cancel {
+    padding: 9px 16px;
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+    border-radius: 8px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.btn-submit-gider, .btn-submit-gelir {
+    padding: 9px 20px;
+    background: #0f172a;
+    border: none;
+    color: white;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-submit-gider:hover, .btn-submit-gelir:hover {
+    background: #1e293b;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+    from { transform: scale(0.97); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}

@@ -1,0 +1,135 @@
+2026-07-20T15:20:11.890Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:20:12.736Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:20:33.256Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:24.091Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:24.645Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:24.819Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:24.991Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:25.151Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:25.313Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:25.485Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:25.658Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:25.821Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:25.977Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:21:35.458Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='6'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:22:01.039Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:22:10.901Z - PUT /:id Error: Error: Truncated incorrect DOUBLE value: 'bulk-edit'
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:22:33.925Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:22:34.514Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:22:34.700Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:24:47.411Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:16.949Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:17.363Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:17.530Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:17.683Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:17.835Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:17.990Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:18.154Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:18.320Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:18.481Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:18.647Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:18.814Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:18.977Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:37.744Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-07-20T15:25:42.188Z - PUT /:id Error: Error: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near ''[]', ProductionTime=0 
+            WHERE Id='9'' at line 2
+    at C:\Users\dedih\Desktop\stokerpsistemi\backend-api\routes\products.js:162:35
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)

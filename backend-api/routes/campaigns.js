@@ -1,0 +1,309 @@
+/**
+ * ============================================================================
+ * DOSYA ADI: campaigns.js
+ * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Kampanya ve Promosyon Yönetimi
+ * 
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   E-Ticaret ve satış operasyonlarında kullanılacak indirim kampanyalarının (2 al 1 öde, tutar indirimi, hediye ürün vb.), kapak resimlerinin ve geçerlilik tarihlerinin yönetildiği CRUD uç noktalarıdır.
+ * 
+ * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
+ *   - Express.js Router, Multer (Dosya Yükleme), MySQL Veritabanı Sorguları
+ * 
+ * MİMARİ VE ENTEGRASYON NOTLARI:
+ *   - Önyüzdeki CampaignList ve CampaignForm bileşenleri ile iletişim kurar.
+ * ============================================================================
+ */
+
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+const { logActivity } = require('../utils/logger');
+const multer = require('multer');
+const path = require('path');
+
+// Multer storage config for campaign cover images
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'campaign-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Veritabanı Tablosu Kontrolü ve Örnek Veri Ekleme
+const ensureCampaignsTable = async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS campaigns (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                campaign_type VARCHAR(100) NOT NULL,
+                discount_rate DECIMAL(10,2) NULL,
+                min_amount DECIMAL(10,2) NULL,
+                buy_quantity INT NULL,
+                pay_quantity INT NULL,
+                gift_quantity INT NULL,
+                gift_product_name VARCHAR(255) NULL,
+                target_product_id INT NULL,
+                target_barcode VARCHAR(100) NULL,
+                start_date DATE NULL,
+                end_date DATE NULL,
+                status VARCHAR(50) DEFAULT 'Aktif',
+                cover_image_path VARCHAR(255) NULL,
+                description TEXT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        try { 
+            await db.query('ALTER TABLE campaigns ADD COLUMN target_product_id INT NULL'); 
+        } catch(e) { 
+            if (e.errno !== 1060 && e.code !== 'ER_DUP_FIELDNAME') console.warn('Kolon ekleme hatası (target_product_id):', e.message); 
+        }
+        try { 
+            await db.query('ALTER TABLE campaigns ADD COLUMN target_barcode VARCHAR(100) NULL'); 
+        } catch(e) { 
+            if (e.errno !== 1060 && e.code !== 'ER_DUP_FIELDNAME') console.warn('Kolon ekleme hatası (target_barcode):', e.message); 
+        }
+
+        const [rows] = await db.query('SELECT COUNT(*) as count FROM campaigns');
+        if (rows[0].count === 0) {
+            const sampleCampaigns = [
+                [
+                    '✨ Büyük Yaz Sezonu: 2 Al 1 Öde Fırsatı!',
+                    'buy_x_pay_y',
+                    null, null, 2, 1, null, null,
+                    '2026-07-01', '2026-08-31', 'Aktif',
+                    null,
+                    'Tüm yazlık giyim ve plaj ürünlerinde geçerli 2 ürün alımında 1 ürün bedava! Sepette otomatik uygulanır.'
+                ],
+                [
+                    '🔥 12.000 TL ve Üzeri Alışverişlerde Anında %10 İndirim!',
+                    'min_amount_discount',
+                    10.00, 12000.00, null, null, null, null,
+                    '2026-07-15', '2026-09-15', 'Aktif',
+                    null,
+                    'Toptan veya perakende 12.000 TL üzeri tüm siparişlerinizde sepet tutarı üzerinden net %10 indirim kazanın.'
+                ],
+                [
+                    '🎁 5 Adet Kutu Ürün Alana +1 Adet Hediye!',
+                    'gift_product',
+                    null, null, 5, null, 1, 'Özel Promosyon Seti',
+                    '2026-07-20', '2026-10-01', 'Aktif',
+                    null,
+                    'Seçili paket ürünlerden 5 adet alım yapan müşterilerimize 1 adet özel hediyeli paket ücretsiz gönderilir.'
+                ]
+            ];
+
+            for (const camp of sampleCampaigns) {
+                await db.query(`
+                    INSERT INTO campaigns (
+                        title, campaign_type, discount_rate, min_amount, buy_quantity, pay_quantity, 
+                        gift_quantity, gift_product_name, start_date, end_date, status, cover_image_path, description
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `, camp);
+            }
+            console.log('✅ Örnek kampanyalar başarıyla eklendi.');
+        }
+    } catch (error) {
+        console.error('Kampanya tablosu oluşturulurken hata:', error);
+    }
+};
+ensureCampaignsTable();
+
+// GET: Tüm kampanyaları getir
+router.get('/', async (req, res) => {
+    try {
+        const { search, status } = req.query;
+        let query = 'SELECT * FROM campaigns';
+        let params = [];
+        let conditions = [];
+
+        if (search) {
+            conditions.push('(title LIKE ? OR description LIKE ? OR gift_product_name LIKE ?)');
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        }
+
+        if (status && status !== 'All') {
+            conditions.push('status = ?');
+            params.push(status);
+        }
+
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+
+        query += ' ORDER BY CASE WHEN status = "Aktif" THEN 1 ELSE 2 END, created_at DESC';
+
+        const [rows] = await db.query(query, params);
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('Kampanyalar getirilirken hata:', error);
+        res.status(500).json({ success: false, message: 'Kampanyalar getirilemedi: ' + error.message });
+    }
+});
+
+// GET: Tek kampanya detayı
+router.get('/:id', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [req.params.id]);
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Kampanya bulunamadı.' });
+        }
+        res.json({ success: true, data: rows[0] });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// POST: Yeni kampanya ekle
+router.post('/', upload.single('cover_image'), async (req, res) => {
+    try {
+        const {
+            title, campaign_type, discount_rate, min_amount, buy_quantity,
+            pay_quantity, gift_quantity, gift_product_name, target_product_ids, target_barcode, start_date,
+            end_date, status, description
+        } = req.body;
+
+        if (!title || !campaign_type) {
+            return res.status(400).json({ success: false, message: 'Kampanya başlığı ve türü zorunludur.' });
+        }
+
+        const cover_image_path = req.file ? `/uploads/${req.file.filename}` : null;
+
+        const [result] = await db.query(`
+            INSERT INTO campaigns (
+                title, campaign_type, discount_rate, min_amount, buy_quantity, pay_quantity,
+                gift_quantity, gift_product_name, target_product_ids, target_barcode, start_date, end_date, status, cover_image_path, description
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            title, campaign_type,
+            discount_rate ? parseFloat(discount_rate) : null,
+            min_amount ? parseFloat(min_amount) : null,
+            buy_quantity ? parseInt(buy_quantity, 10) : null,
+            pay_quantity ? parseInt(pay_quantity, 10) : null,
+            gift_quantity ? parseInt(gift_quantity, 10) : null,
+            gift_product_name || null,
+            target_product_ids || null,
+            target_barcode || null,
+            start_date || null,
+            end_date || null,
+            status || 'Aktif',
+            cover_image_path,
+            description || null
+        ]);
+
+        await logActivity(req.headers['x-user-id'] || '', 'INSERT', 'campaigns', result.insertId, `"${title}" kampanyası oluşturuldu.`, null);
+
+        res.json({ success: true, message: 'Kampanya başarıyla oluşturuldu.', id: result.insertId });
+    } catch (error) {
+        console.error('Kampanya eklerken hata:', error);
+        res.status(500).json({ success: false, message: 'Kampanya oluşturulamadı: ' + error.message });
+    }
+});
+
+// PUT: Kampanya güncelle
+router.put('/:id', upload.single('cover_image'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const {
+            title, campaign_type, discount_rate, min_amount, buy_quantity,
+            pay_quantity, gift_quantity, gift_product_name, target_product_ids, target_barcode, start_date,
+            end_date, status, description, existing_cover_image
+        } = req.body;
+
+        const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
+        if (oldRows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Kampanya bulunamadı.' });
+        }
+
+        const cover_image_path = req.file ? `/uploads/${req.file.filename}` : (existing_cover_image !== undefined ? existing_cover_image : oldRows[0].cover_image_path);
+
+        await db.query(`
+            UPDATE campaigns SET 
+                title = ?, campaign_type = ?, discount_rate = ?, min_amount = ?, 
+                buy_quantity = ?, pay_quantity = ?, gift_quantity = ?, gift_product_name = ?, 
+                target_product_ids = ?, target_barcode = ?, start_date = ?, end_date = ?, status = ?, cover_image_path = ?, description = ?
+            WHERE id = ?
+        `, [
+            title, campaign_type,
+            discount_rate ? parseFloat(discount_rate) : null,
+            min_amount ? parseFloat(min_amount) : null,
+            buy_quantity ? parseInt(buy_quantity, 10) : null,
+            pay_quantity ? parseInt(pay_quantity, 10) : null,
+            gift_quantity ? parseInt(gift_quantity, 10) : null,
+            gift_product_name || null,
+            target_product_ids || null,
+            target_barcode || null,
+            start_date || null,
+            end_date || null,
+            status || 'Aktif',
+            cover_image_path,
+            description || null,
+            id
+        ]);
+
+        await logActivity(req.headers['x-user-id'] || '', 'UPDATE', 'campaigns', id, `"${title}" kampanyası güncellendi.`, oldRows[0]);
+
+        res.json({ success: true, message: 'Kampanya başarıyla güncellendi.' });
+    } catch (error) {
+        console.error('Kampanya güncellerken hata:', error);
+        res.status(500).json({ success: false, message: 'Kampanya güncellenemedi: ' + error.message });
+    }
+});
+
+// PATCH & PUT: Durum değiştir (Aktif <-> Pasif)
+const updateStatusHandler = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        
+        const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
+        if (oldRows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Güncellenecek kampanya bulunamadı (ID: ' + id + ').' });
+        }
+
+        await db.query('UPDATE campaigns SET status = ? WHERE id = ?', [status, id]);
+        
+        try {
+            await logActivity(req.headers['x-user-id'] || '', 'UPDATE', 'campaigns', id, `"${oldRows[0].title}" kampanyasının durumu "${status}" yapıldı.`, oldRows[0]);
+        } catch (logErr) {
+            console.warn('Kampanya durum güncellerken loglama hatası (önemsiz):', logErr.message);
+        }
+
+        res.json({ success: true, message: 'Kampanya durumu başarıyla güncellendi.' });
+    } catch (error) {
+        console.error('Kampanya durumu güncellenirken sunucu hatası:', error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası: ' + error.message });
+    }
+};
+
+router.patch('/:id/status', updateStatusHandler);
+router.put('/:id/status', updateStatusHandler);
+
+// DELETE: Kampanya sil
+router.delete('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
+        if (oldRows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Kampanya bulunamadı.' });
+        }
+
+        await db.query('DELETE FROM campaigns WHERE id = ?', [id]);
+        await logActivity(req.headers['x-user-id'] || '', 'DELETE', 'campaigns', id, `"${oldRows[0].title}" kampanyası silindi.`, oldRows[0]);
+
+        res.json({ success: true, message: 'Kampanya başarıyla silindi.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+module.exports = router;

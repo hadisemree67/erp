@@ -1,3 +1,8 @@
+﻿/**
+ * Dosya: initDb.js
+ * Kısım: Backend Yardımcı/Bakım Scripti
+ * Ne İşe Yarar: Sistemin ilk kurulumunda MySQL veritabanını ve tablolarını (kullanıcılar, ürünler vb.) baştan oluşturan kurulum scripti.
+ */
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
@@ -10,14 +15,14 @@ async function initDb() {
       password: process.env.DB_PASSWORD,
     });
 
-    console.log('Veritabanına bağlanıldı.');
+    console.log('VeritabanÄ±na baÄŸlanÄ±ldÄ±.');
 
-    // Veritabanını oluştur ve kullan
+    // VeritabanÄ±nÄ± oluÅŸtur ve kullan
     await connection.query(`CREATE DATABASE IF NOT EXISTS \`${process.env.DB_NAME}\``);
     await connection.query(`USE \`${process.env.DB_NAME}\``);
 
-    // users tablosunu oluştur
-    // ER diyagramındaki alanlara ek olarak giriş yapabilmesi için 'username' eklendi.
+    // users tablosunu oluÅŸtur
+    // ER diyagramÄ±ndaki alanlara ek olarak giriÅŸ yapabilmesi iÃ§in 'username' eklendi.
     await connection.query(`
       CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -29,35 +34,36 @@ async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    console.log('users tablosu hazır.');
+    console.log('users tablosu hazÄ±r.');
 
-    // Yönetici kullanıcısının şifresini hash'le
+    // YÃ¶netici kullanÄ±cÄ±sÄ±nÄ±n ÅŸifresini hash'le
     const plainPassword = '74565404Hey.';
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(plainPassword, saltRounds);
 
-    // Kullanıcıyı veritabanına ekle (Eğer yoksa ekle)
+    // KullanÄ±cÄ±yÄ± veritabanÄ±na ekle (EÄŸer yoksa ekle)
     const [rows] = await connection.query('SELECT * FROM users WHERE username = ?', ['hadisemreylmz']);
     if (rows.length === 0) {
       await connection.query(
         'INSERT INTO users (username, name, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-        ['hadisemreylmz', 'Yönetici', 'admin@dermoeczanem.com', passwordHash, 'admin']
+        ['hadisemreylmz', 'YÃ¶netici', 'admin@dermoeczanem.com', passwordHash, 'admin']
       );
-      console.log('Yönetici hadisemreylmz başarıyla eklendi!');
+      console.log('YÃ¶netici hadisemreylmz baÅŸarÄ±yla eklendi!');
     } else {
-      // Şifreyi güncelle (test için kolaylık olsun diye)
+      // Åifreyi gÃ¼ncelle (test iÃ§in kolaylÄ±k olsun diye)
       await connection.query(
         'UPDATE users SET password_hash = ? WHERE username = ?',
         [passwordHash, 'hadisemreylmz']
       );
-      console.log('Yönetici zaten mevcut, şifresi güncellendi.');
+      console.log('YÃ¶netici zaten mevcut, ÅŸifresi gÃ¼ncellendi.');
     }
 
     await connection.end();
-    console.log('Veritabanı kurulumu tamamlandı!');
+    console.log('VeritabanÄ± kurulumu tamamlandÄ±!');
   } catch (error) {
     console.error('Hata:', error);
   }
 }
 
 initDb();
+

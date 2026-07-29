@@ -1,3 +1,8 @@
+﻿/**
+ * Dosya: inspectDb.js
+ * Kısım: Backend Yardımcı/Bakım Scripti
+ * Ne İşe Yarar: Veritabanındaki belirli bir tablonun kolonlarını ve yapısını konsola dökerek incelemeye yarayan script.
+ */
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
@@ -13,3 +18,4 @@ async function inspect() {
   conn.end();
 }
 inspect();
+

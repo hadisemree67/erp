@@ -1,0 +1,51 @@
+/**
+ * ============================================================================
+ * DOSYA ADI: GlobalErrorBoundary.jsx
+ * MODÜL / KATMAN: Önyüz Çekirdeği - Global Hata Yakalama Kalkanı (Error Boundary)
+ * 
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   React bileşen ağacında render sırasında, yaşam döngüsü metodlarında veya alt bileşenlerde meydana gelebilecek beklenmeyen hataları (crash) yakalar; uygulamanın tamamen beyaz ekrana düşmesini engelleyerek kullanıcıya şık bir hata ekranı ve yenileme seçeneği sunar.
+ * 
+ * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
+ *   - React Class Component, Error Boundary Yaşam Döngüsü (componentDidCatch)
+ * 
+ * MİMARİ VE ENTEGRASYON NOTLARI:
+ *   - main.jsx içerisinde ana App bileşenini sarmalayarak tüm önyüzü uygulama çökmelerine karşı korur.
+ * ============================================================================
+ */
+
+import React from 'react';
+
+class GlobalErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    console.error('GlobalErrorBoundary caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '20px', backgroundColor: 'white', color: 'red', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, overflow: 'auto' }}>
+          <h2>React Kritik Çökme!</h2>
+          <pre style={{ whiteSpace: 'pre-wrap', fontWeight: 'bold' }}>{this.state.error && this.state.error.toString()}</pre>
+          <details style={{ whiteSpace: 'pre-wrap', marginTop: '10px', color: '#333' }}>
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </details>
+          <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 20px', fontSize: '16px' }}>Sayfayı Yenile</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default GlobalErrorBoundary;

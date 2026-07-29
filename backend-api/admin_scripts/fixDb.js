@@ -1,3 +1,8 @@
+﻿/**
+ * Dosya: fixDb.js
+ * Kısım: Backend Yardımcı/Bakım Scripti
+ * Ne İşe Yarar: Veritabanı kayıtlarındaki hatalı tipleri (örneğin null veya string kalmış verileri) düzeltmeye yarayan onarım scripti.
+ */
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
 require('dotenv').config();
@@ -11,9 +16,9 @@ async function fixDb() {
       database: process.env.DB_NAME,
     });
 
-    console.log('Veritabanına bağlanıldı.');
+    console.log('VeritabanÄ±na baÄŸlanÄ±ldÄ±.');
 
-    // Tabloya username eklemeyi dene, varsa hata fırlatabilir ama yakalarız
+    // Tabloya username eklemeyi dene, varsa hata fÄ±rlatabilir ama yakalarÄ±z
     try {
       await connection.query('ALTER TABLE users ADD COLUMN username VARCHAR(50) UNIQUE AFTER id');
       console.log('username kolonu eklendi.');
@@ -21,7 +26,7 @@ async function fixDb() {
       if (e.code === 'ER_DUP_FIELDNAME') {
         console.log('username kolonu zaten var.');
       } else {
-        console.error('Kolon eklenirken hata (veya tablo zaten bu yapıda değil):', e.message);
+        console.error('Kolon eklenirken hata (veya tablo zaten bu yapÄ±da deÄŸil):', e.message);
       }
     }
 
@@ -32,15 +37,15 @@ async function fixDb() {
     if (rows.length === 0) {
       await connection.query(
         'INSERT INTO users (username, name, email, password, role) VALUES (?, ?, ?, ?, ?)',
-        ['hadisemreylmz', 'Hadis Emre Yılmaz', 'admin@dermoeczanem.com', passwordHash, 'admin']
+        ['hadisemreylmz', 'Hadis Emre YÄ±lmaz', 'admin@dermoeczanem.com', passwordHash, 'admin']
       );
-      console.log('Yönetici başarıyla eklendi!');
+      console.log('YÃ¶netici baÅŸarÄ±yla eklendi!');
     } else {
       await connection.query(
         'UPDATE users SET password = ? WHERE username = ?',
         [passwordHash, 'hadisemreylmz']
       );
-      console.log('Yönetici şifresi güncellendi.');
+      console.log('YÃ¶netici ÅŸifresi gÃ¼ncellendi.');
     }
 
     await connection.end();
@@ -50,3 +55,4 @@ async function fixDb() {
 }
 
 fixDb();
+
