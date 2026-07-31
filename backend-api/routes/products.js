@@ -565,6 +565,14 @@ router.delete('/bulk', async (req, res) => {
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
             
+            // İlişkili kayıtları sil (Stoklar, Siparişler, Hareketler vb.)
+            await db.query('DELETE FROM orderitems WHERE ProductId = ?', [id]);
+            await db.query('DELETE FROM product_barcodes WHERE product_id = ?', [id]);
+            await db.query('DELETE FROM product_suppliers WHERE product_id = ?', [id]);
+            await db.query('DELETE FROM production_requests WHERE product_id = ?', [id]);
+            await db.query('DELETE FROM stockmovements WHERE ProductId = ?', [id]);
+            await db.query('DELETE FROM wms_stock_balances WHERE product_id = ?', [id]);
+
             await db.query('DELETE FROM products WHERE Id = ?', [id]);
             await logActivity(req.headers['x-user-id'], 'DELETE', 'products', id, `"${oldData.ProductName}" adlı ürünü toplu silme ile sildi.`, oldData);
         }
@@ -585,6 +593,14 @@ router.delete('/:id', async (req, res) => {
     try {
         const [oldRows] = await db.query('SELECT * FROM products WHERE Id = ?', [id]);
         const oldData = oldRows.length > 0 ? oldRows[0] : null;
+
+        // İlişkili kayıtları sil (Stoklar, Siparişler, Hareketler vb.)
+        await db.query('DELETE FROM orderitems WHERE ProductId = ?', [id]);
+        await db.query('DELETE FROM product_barcodes WHERE product_id = ?', [id]);
+        await db.query('DELETE FROM product_suppliers WHERE product_id = ?', [id]);
+        await db.query('DELETE FROM production_requests WHERE product_id = ?', [id]);
+        await db.query('DELETE FROM stockmovements WHERE ProductId = ?', [id]);
+        await db.query('DELETE FROM wms_stock_balances WHERE product_id = ?', [id]);
 
         const [result] = await db.query('DELETE FROM products WHERE Id = ?', [id]);
 

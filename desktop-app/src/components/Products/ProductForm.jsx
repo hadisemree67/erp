@@ -88,11 +88,11 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     Description: product?.Description || '',
     Formula: product?.Formula || '',
     ProductionTime: product?.ProductionTime || 0,
-    Width: product?.Width || 0,
-    Height: product?.Height || 0,
-    Depth: product?.Depth || 0,
-    Diameter: product?.Diameter || 0,
-    Weight: product?.Weight || 0,
+    Width: product?.Width || '',
+    Height: product?.Height || '',
+    Depth: product?.Depth || '',
+    Diameter: product?.Diameter || '',
+    Weight: product?.Weight || '',
     is_stackable: (product?.is_stackable === 1 || product?.is_stackable === true || product?.is_stackable === '1' || product?.is_stackable === 'true') ? true : false,
     max_stack_limit: product?.max_stack_limit || 1,
     supplier_id: product?.supplier_id || '',
@@ -603,8 +603,13 @@ const ProductForm = ({ product, onClose, currentUser }) => {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#ef4444', marginBottom: '6px' }}>Kritik Stok Seviyesi</label>
-              <input type="number" step="1" min="0" name="critical_stock_level" value={formData.critical_stock_level} onChange={handleChange} placeholder="Örn: 100" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #fca5a5' }} />
+              <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                Kritik Stok Seviyesi
+                <span title="Stok miktarı bu seviyenin altına düştüğünde ana sayfada uyarı verir." style={{ cursor: 'help', color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                </span>
+              </label>
+              <input type="number" step="1" min="0" name="critical_stock_level" value={formData.critical_stock_level} onChange={handleChange} placeholder="Örn: 100" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
             </div>
           </div>
 
