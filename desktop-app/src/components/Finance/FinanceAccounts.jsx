@@ -1,14 +1,6 @@
-/**
- * ============================================================================
- * DOSYA ADI: FinanceAccounts.jsx
- * MODÜL / KATMAN: Arayüz Bileşenleri (Frontend Components) - Gelir & Gider Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   - Koyu tema (Dark Mode) ve minimalist vektör çizgilerle (Lucide stili) tasarlanmış finans ekrani.
- *   - Emoji ve görsel kalabalık (visual noise) sıfıra indirilmiştir.
- *   - Rakam boyutları kontrollü (25px) ve alt metinler sade, mavi ikonsuz yapıdadır.
- *   - Kaba gri kutu rozetler yerine minimal nokta (dot) + yalın metin ile kategorizasyon sunar.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (FinanceAccounts.jsx), Finansal hesaplar, e-fatura modalları ve genel bütçe göstergelerini içerir.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -100,7 +92,9 @@ const SvgIcon = ({ name }) => {
 };
 
 const FinanceAccounts = ({ onNavigate }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [activeTab, setActiveTab] = useState('GİDER'); // 'GİDER' veya 'GELİR'
+    const [activePeriod, setActivePeriod] = useState('this_month'); // Dönem filtresi
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [accountsData, setAccountsData] = useState([]);
     const [summary, setSummary] = useState({
@@ -147,10 +141,12 @@ const FinanceAccounts = ({ onNavigate }) => {
         'Diğer Gelirler'
     ];
 
+    // 3. Backend API İstekleri (Veri Çekme)
+
     const fetchAccounts = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/finance/accounts?tab=${activeTab}`);
+            const res = await apiFetch(`http://localhost:3000/api/finance/accounts?tab=${activeTab}&period=${activePeriod}`);
             const data = await res.json();
             if (data.success) {
                 setAccountsData(data.data || []);
@@ -167,11 +163,15 @@ const FinanceAccounts = ({ onNavigate }) => {
         }
     };
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         fetchAccounts();
         setFilterCategory('Tümü');
         setSearchTerm('');
-    }, [activeTab]);
+    }, [activeTab, activePeriod]);
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleOpenModal = () => {
         setFormData({
@@ -300,6 +300,8 @@ const FinanceAccounts = ({ onNavigate }) => {
             .replace(/^[\s-]+|[\s-]+$/g, '') || category;
     };
 
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
+
     return (
         <div className="finance-accounts-container">
             {/* Üst Başlık ve Sekme Anahtarı */}
@@ -380,15 +382,29 @@ const FinanceAccounts = ({ onNavigate }) => {
 
             {/* Arama, Kategori Filtreleri */}
             <div className="finance-toolbar">
-                <div className="f-search-box">
-                    <SvgIcon name="search" />
-                    <input 
-                        type="text" 
-                        className="f-search-input" 
-                        placeholder="Kalem adı, tedarikçi veya açıklama ara..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                <div style={{ display: 'flex', gap: '12px', flex: 1, alignItems: 'center' }}>
+                    <div className="f-search-box" style={{ flex: 1, minWidth: '200px' }}>
+                        <SvgIcon name="search" />
+                        <input 
+                            type="text" 
+                            className="f-search-input" 
+                            placeholder="Kalem adı, tedarikçi veya açıklama ara..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <select 
+                        style={{ height: '40px', padding: '0 32px 0 16px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#1e293b', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', cursor: 'pointer', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '12px', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%2394a3b8\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'%3E%3C/path%3E%3C/svg%3E")' }}
+                        value={activePeriod}
+                        onChange={(e) => setActivePeriod(e.target.value)}
+                        title="Dönem Seçimi"
+                    >
+                        <option value="this_month">Bu Ay</option>
+                        <option value="last_3_months">Son 3 Ay (Çeyrek)</option>
+                        <option value="last_6_months">Son 6 Ay</option>
+                        <option value="this_year">Bu Yıl</option>
+                        <option value="all">Tüm Zamanlar</option>
+                    </select>
                 </div>
 
                 <div className="f-filter-pills">
@@ -425,7 +441,7 @@ const FinanceAccounts = ({ onNavigate }) => {
 
             {/* Tablo Alanı (Koyu tema, sıfır gürültü) */}
             <div className="finance-table-card">
-                {loading ? (
+                {loading && accountsData.length === 0 ? (
                     <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '0.9rem' }}>
                         Finansal hesaplar yükleniyor...
                     </div>

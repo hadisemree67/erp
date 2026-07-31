@@ -14,13 +14,19 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (BulkEditModal.jsx), Ürün katalogu, fason/satın alma detayları, barkod işlemleri ve toplu ürün güncelleme araçlarını içerir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [field, setField] = useState('SalePrice');
     
-    // Independent states for each field to allow multiple updates
+    // Çoklu güncellemeyi desteklemek için her alana bağımsız state'ler ayarla
     const [salePriceData, setSalePriceData] = useState({ actionType: 'percentage', direction: 'decrease', numValue: '' });
     const [purchasePriceData, setPurchasePriceData] = useState({ actionType: 'percentage', direction: 'decrease', numValue: '' });
     const [categoryValue, setCategoryValue] = useState('');
@@ -32,8 +38,11 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
-        // Fetch categories and brands when modal opens
+        // Modal açıldığında kategori ve markaları getir
+        // 3. Backend API İstekleri (Veri Çekme)
         const fetchData = async () => {
             try {
                 const [catRes, brandRes] = await Promise.all([
@@ -54,7 +63,7 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
         
         const updates = [];
 
-        // Check SalePrice
+        // Satış fiyatını (SalePrice) kontrol et
         if (salePriceData.numValue && !isNaN(salePriceData.numValue) && parseFloat(salePriceData.numValue) > 0) {
             const parsed = parseFloat(salePriceData.numValue);
             updates.push({ 
@@ -64,7 +73,7 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
             });
         }
 
-        // Check PurchasePrice
+        // Alış fiyatını (PurchasePrice) kontrol et
         if (purchasePriceData.numValue && !isNaN(purchasePriceData.numValue) && parseFloat(purchasePriceData.numValue) > 0) {
             const parsed = parseFloat(purchasePriceData.numValue);
             updates.push({ 
@@ -74,12 +83,12 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
             });
         }
 
-        // Check Category
+        // Kategoriyi kontrol et
         if (categoryValue) {
             updates.push({ field: 'Category', type: 'string', value: categoryValue });
         }
 
-        // Check Brand
+        // Markayı kontrol et
         if (brandValue) {
             updates.push({ field: 'Brand', type: 'string', value: brandValue });
         }
@@ -119,6 +128,8 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
     };
 
     const isNumericField = ['SalePrice', 'PurchasePrice'].includes(field);
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>

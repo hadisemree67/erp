@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu script, kargo/ambalaj kutuları için "packaging_boxes" tablosunu oluşturur 
+ * ve "orders" tablosuna sipariş paketleme (kutu, ağırlık vs.) sütunlarını ekler.
+ */
+
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 

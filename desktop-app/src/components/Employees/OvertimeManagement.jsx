@@ -1,7 +1,13 @@
+/*
+ * ÖZET:
+ * Bu dosya (OvertimeManagement.jsx), Personel listesi, mesai (overtime) ve izin (leave) yönetim arayüzlerini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const OvertimeManagement = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [salaries, setSalaries] = useState([]);
     const [loading, setLoading] = useState(false);
     const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -15,9 +21,13 @@ const OvertimeManagement = ({ currentUser }) => {
     const [submitting, setSubmitting] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         fetchSalaries();
     }, [month, year]);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchSalaries = async () => {
         setLoading(true);
@@ -98,6 +108,8 @@ const OvertimeManagement = ({ currentUser }) => {
     const formatCurrency = (val) => {
         return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(val || 0);
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ padding: '24px', backgroundColor: '#f1f5f9', minHeight: 'calc(100vh - 80px)', color: '#0f172a' }}>

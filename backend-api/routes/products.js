@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, sistemdeki ürünlerin, kategorilerin, markaların listelenmesi, 
+ * yeni ürün eklenmesi, düzenlenmesi ve toplu güncellenmesi işlemlerini yürüten API rotalarıdır.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -21,7 +27,7 @@ const { logActivity } = require('../utils/logger');
 const multer = require('multer');
 const path = require('path');
 
-// Multer storage config
+// Multer (dosya yükleme) depolama ayarları
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, 'uploads/');
@@ -66,13 +72,22 @@ router.get('/', async (req, res) => {
         const [suppliers] = await db.query('SELECT ps.*, s.SupplierName FROM product_suppliers ps LEFT JOIN suppliers s ON ps.supplier_id = s.Id');
         
         // Çektiğimiz tedarikçileri, ilgili ürünlerin altına bir dizi (array) olarak eşleştirip ekliyoruz.
-        const productsWithSuppliers = rows.map(product => {
+        // Aynı zamanda raf/depo konumlarını da ekliyoruz.
+        const [locations] = await db.query(`
+            SELECT b.product_id, b.warehouse_id, b.shelf_code, b.quantity, w.name as warehouse_name 
+            FROM wms_stock_balances b 
+            LEFT JOIN warehouses w ON b.warehouse_id = w.id
+            WHERE b.quantity > 0
+        `);
+
+        const productsWithDetails = rows.map(product => {
             product.suppliers = suppliers.filter(s => s.product_id === product.Id);
+            product.locations = locations.filter(l => l.product_id === product.Id);
             return product;
         });
 
         // Sonucu ön yüze (Frontend) gönderiyoruz.
-        res.json(productsWithSuppliers);
+        res.json(productsWithDetails);
     } catch (error) {
         console.error('Ürünler listelenirken hata:', error);
         res.status(500).json({ success: false, message: 'Ürünler getirilirken sunucu hatası oluştu.' });
@@ -83,7 +98,7 @@ router.get('/', async (req, res) => {
 // Bu uç nokta, yeni bir ürün oluşturmak ve aynı anda birden fazla tedarikçi atamak için kullanılır.
 // "upload.any()" kullanılarak multer üzerinden form-data içindeki resim ve pdf (sözleşme) dosyaları yakalanır.
 router.post('/', upload.any(), async (req, res) => {
-    const { Barcode, ProductName, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers } = req.body;
+    const { Barcode, ProductName, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type } = req.body;
     
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch(e) { console.warn('JSON Parse Error (Barcode):', e.message); }
@@ -139,8 +154,8 @@ router.post('/', upload.any(), async (req, res) => {
 
         const query = `
             INSERT INTO products 
-            (Barcode, ProductName, Brand, Category, unit_type, package_capacity, package_name, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit, critical_stock_level, minimum_production_quantity, supplier_id, shelf_life_months) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (Barcode, ProductName, Brand, Category, unit_type, package_capacity, package_name, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit, critical_stock_level, minimum_production_quantity, supplier_id, shelf_life_months, supply_type) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         
         const values = [
@@ -172,7 +187,8 @@ router.post('/', upload.any(), async (req, res) => {
             safeInt(critical_stock_level, 0),
             safeInt(minimum_production_quantity, 0),
             safeInt(supplier_id, null),
-            safeInt(shelf_life_months, 0)
+            safeInt(shelf_life_months, 0),
+            supply_type || 'MANUFACTURE'
         ];
 
         const [result] = await db.query(query, values);
@@ -280,7 +296,7 @@ router.put('/bulk-edit', async (req, res) => {
 // PUT: Ürün güncelle
 router.put('/:id', upload.any(), async (req, res) => {
     const { id } = req.params;
-    const { Barcode, ProductName, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers } = req.body;
+    const { Barcode, ProductName, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type } = req.body;
 
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch(e) { console.warn('JSON Parse Error (Barcode update):', e.message); }
@@ -368,18 +384,19 @@ router.put('/:id', upload.any(), async (req, res) => {
             req.body.minimum_production_quantity !== undefined ? safeInt(req.body.minimum_production_quantity, 0) : safeInt(oldData.minimum_production_quantity, 0),
             req.body.supplier_id !== undefined ? safeInt(req.body.supplier_id, null) : (oldData.supplier_id ? safeInt(oldData.supplier_id, null) : null),
             req.body.shelf_life_months !== undefined ? safeInt(req.body.shelf_life_months, 0) : safeInt(oldData.shelf_life_months, 0),
+            req.body.supply_type !== undefined ? req.body.supply_type : (oldData.supply_type || 'MANUFACTURE'),
             id
         ];
 
         let query = `
             UPDATE products 
-            SET Barcode=?, ProductName=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?
+            SET Barcode=?, ProductName=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?, supply_type=?
             WHERE Id=?
         `;
 
         await db.query(query, values);
 
-        // Update Suppliers
+        // Tedarikçileri güncelle
         let suppliersChanged = false;
         if (req.body.suppliers !== undefined) {
             const [oldSuppliersRows] = await db.query('SELECT supplier_id, unit_price, lead_time_days FROM product_suppliers WHERE product_id = ? ORDER BY supplier_id', [id]);

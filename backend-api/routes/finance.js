@@ -1,17 +1,7 @@
-/**
- * ============================================================================
- * DOSYA ADI: finance.js
- * MODÜL / KATMAN: Arkayüz Rotaları (Backend Routes) - Finans & Gelir/Gider Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Uygulamanın Gelir ve Gider hesaplamalarını yönetir.
- *   - Manüel eklenen kira, fatura, ofis gideri gibi harcamaları barındırır.
- *   - İnsan Kaynakları (İK) modülündeki aktif personellerin maaşlarını otomatik çeker ve gider listesine ekler.
- *   - Satın Alma ve Depo (WMS) modülündeki malzeme siparişlerini (birim maliyet * tedarik miktarı) otomatik hesaplar ve gider kalemi olarak yansıtır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Asenkron SQL Sorguları (mysql2), Otomatik Veri Birleştirme (Aggregation)
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu modül, uygulamanın gelir ve gider hesaplamalarını yönetir. Manüel eklenen 
+ * harcamaları ve sistem tarafından otomatik hesaplanan maaş/tedarik giderlerini sunar.
  */
 
 const express = require('express');
@@ -28,14 +18,37 @@ const safeNum = (val, def = 0) => {
 router.get('/accounts', async (req, res) => {
     try {
         const tab = req.query.tab || 'GİDER';
+        const period = req.query.period || 'this_month';
+
+        let dateConditionTx = "1=1";
+        let dateConditionPO = "1=1";
+        let dateConditionWMS = "1=1";
+
+        if (period === 'this_month') {
+            dateConditionTx = "transaction_date >= DATE_FORMAT(NOW(), '%Y-%m-01')";
+            dateConditionPO = "DATE(po.created_at) >= DATE_FORMAT(NOW(), '%Y-%m-01')";
+            dateConditionWMS = "DATE(b.last_counted_at) >= DATE_FORMAT(NOW(), '%Y-%m-01')";
+        } else if (period === 'last_3_months') {
+            dateConditionTx = "transaction_date >= DATE_SUB(NOW(), INTERVAL 3 MONTH)";
+            dateConditionPO = "DATE(po.created_at) >= DATE_SUB(NOW(), INTERVAL 3 MONTH)";
+            dateConditionWMS = "DATE(b.last_counted_at) >= DATE_SUB(NOW(), INTERVAL 3 MONTH)";
+        } else if (period === 'last_6_months') {
+            dateConditionTx = "transaction_date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)";
+            dateConditionPO = "DATE(po.created_at) >= DATE_SUB(NOW(), INTERVAL 6 MONTH)";
+            dateConditionWMS = "DATE(b.last_counted_at) >= DATE_SUB(NOW(), INTERVAL 6 MONTH)";
+        } else if (period === 'this_year') {
+            dateConditionTx = "transaction_date >= DATE_FORMAT(NOW(), '%Y-01-01')";
+            dateConditionPO = "DATE(po.created_at) >= DATE_FORMAT(NOW(), '%Y-01-01')";
+            dateConditionWMS = "DATE(b.last_counted_at) >= DATE_FORMAT(NOW(), '%Y-01-01')";
+        }
 
         // 1) Toplam Gelirleri hesapla
-        const [incRows] = await db.query("SELECT COALESCE(SUM(amount), 0) AS total FROM finance_transactions WHERE type = 'GELİR'");
+        const [incRows] = await db.query(`SELECT COALESCE(SUM(amount), 0) AS total FROM finance_transactions WHERE type = 'GELİR' AND ${dateConditionTx}`);
         const totalIncome = safeNum(incRows[0].total);
 
         if (tab === 'GİDER') {
             // --- A) MANUEL GİDERLER (finance_transactions) ---
-            const [manRows] = await db.query("SELECT * FROM finance_transactions WHERE type = 'GİDER' ORDER BY transaction_date DESC, id DESC");
+            const [manRows] = await db.query(`SELECT * FROM finance_transactions WHERE type = 'GİDER' AND ${dateConditionTx} ORDER BY transaction_date DESC, id DESC`);
             let manualTotal = 0;
             const manualExpenses = manRows.map(row => {
                 const amt = safeNum(row.amount);
@@ -56,21 +69,37 @@ router.get('/accounts', async (req, res) => {
             });
 
             // --- B) OTOMATİK PERSONEL MAAŞLARI (employees) ---
-            const [empRows] = await db.query("SELECT id, full_name, department, position, salary, work_status FROM employees WHERE work_status IN ('Çalışıyor', 'Aktif', 'İzinli') AND salary > 0");
+            const [empRows] = await db.query(`
+                SELECT e.id, e.full_name, e.department, e.position, e.salary, e.work_status,
+                       COALESCE(SUM(o.total_amount), 0) AS current_month_overtime
+                FROM employees e
+                LEFT JOIN employee_overtimes o ON e.id = o.employee_id 
+                                               AND o.month = MONTH(CURRENT_DATE()) 
+                                               AND o.year = YEAR(CURRENT_DATE())
+                WHERE e.work_status IN ('Çalışıyor', 'Aktif', 'İzinli') AND e.salary > 0
+                GROUP BY e.id
+            `);
             let salaryTotal = 0;
             const salaryExpenses = empRows.map(emp => {
-                const amt = safeNum(emp.salary);
+                const baseSalary = safeNum(emp.salary);
+                const overtime = safeNum(emp.current_month_overtime);
+                const amt = baseSalary + overtime;
                 salaryTotal += amt;
+                
+                let subtitleStr = `${emp.department || 'Genel'} — ${emp.position || 'Personel'} (Maaş: ${baseSalary.toLocaleString('tr-TR')} ₺`;
+                if (overtime > 0) subtitleStr += ` + Mesai: ${overtime.toLocaleString('tr-TR')} ₺`;
+                subtitleStr += `)`;
+
                 return {
                     id: `emp_${emp.id}`,
                     raw_id: emp.id,
                     type: 'SALARY',
                     category: 'Personel Maaşı',
                     title: `${emp.full_name}`,
-                    subtitle: `${emp.department || 'Genel'} — ${emp.position || 'Personel'} (Aylık Sabit Maaş Gideri)`,
+                    subtitle: subtitleStr,
                     amount: amt,
                     date: new Date().toISOString().split('T')[0],
-                    badge: '👥 İK - Otomatik Maaş',
+                    badge: '👥 İK - Mesaili Maaş (Tahmini)',
                     color: '#0284c7',
                     is_manual: false
                 };
@@ -82,7 +111,7 @@ router.get('/accounts', async (req, res) => {
                 FROM purchase_orders po
                 LEFT JOIN suppliers s ON po.supplier_id = s.Id
                 LEFT JOIN products p ON po.product_name = p.ProductName
-                WHERE po.status != 'İptal'
+                WHERE po.status != 'İptal' AND ${dateConditionPO}
                 ORDER BY po.id DESC
             `);
             let procurementTotal = 0;
@@ -123,7 +152,7 @@ router.get('/accounts', async (req, res) => {
                 JOIN products p ON b.product_id = p.id
                 LEFT JOIN suppliers s ON b.supplier_id = s.Id
                 LEFT JOIN warehouses w ON b.warehouse_id = w.id
-                WHERE b.unit_price > 0 AND b.quantity > 0
+                WHERE b.unit_price > 0 AND b.quantity > 0 AND ${dateConditionWMS}
                 ORDER BY b.id DESC
             `);
             const wmsProcurementExpenses = wmsRows.map(b => {

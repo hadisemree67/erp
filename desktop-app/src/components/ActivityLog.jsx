@@ -14,17 +14,20 @@
  * ============================================================================
  */
 
-import { apiFetch } from '../utils/api';
-/**
- * Dosya: ActivityLog.jsx
- * Sayfa: Son Hareketler
- * Ne İşe Yarar: activity_logs tablosunu okuyarak listeler ve adminlere Geri Al butonu sunar.
+/*
+ * ÖZET:
+ * Bu dosya (ActivityLog.jsx), Uygulamanın arayüz bileşenlerini barındırır.
  */
+
+import { apiFetch } from '../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const ActivityLog = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [activities, setActivities] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchActivities = async () => {
         try {
@@ -37,6 +40,8 @@ const ActivityLog = ({ currentUser }) => {
             setLoading(false);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchActivities();
@@ -72,6 +77,8 @@ const ActivityLog = ({ currentUser }) => {
             default: return { bg: '#f1f5f9', text: '#475569', label: actionType };
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div>

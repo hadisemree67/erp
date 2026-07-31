@@ -1,17 +1,7 @@
-/**
- * ============================================================================
- * DOSYA ADI: campaigns.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Kampanya ve Promosyon Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   E-Ticaret ve satış operasyonlarında kullanılacak indirim kampanyalarının (2 al 1 öde, tutar indirimi, hediye ürün vb.), kapak resimlerinin ve geçerlilik tarihlerinin yönetildiği CRUD uç noktalarıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Multer (Dosya Yükleme), MySQL Veritabanı Sorguları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki CampaignList ve CampaignForm bileşenleri ile iletişim kurar.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu modül, sistemdeki indirim kampanyalarının (2 al 1 öde, tutar indirimi vb.), 
+ * kapak resimlerinin ve geçerlilik tarihlerinin yönetildiği CRUD uç noktalarıdır.
  */
 
 const express = require('express');
@@ -21,7 +11,7 @@ const { logActivity } = require('../utils/logger');
 const multer = require('multer');
 const path = require('path');
 
-// Multer storage config for campaign cover images
+// Kampanya kapak resimleri için multer (dosya yükleme) depolama ayarları
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, 'uploads/');

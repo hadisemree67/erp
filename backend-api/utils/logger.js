@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, sistem hatalarını, istisnaları ve önemli operasyonel olayları 
+ * loglayan (kaydeden) yardımcı bir araçtır.
+ */
+
 const db = require('../db');
 
 /**

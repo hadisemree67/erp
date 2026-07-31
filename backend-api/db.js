@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, veritabanı bağlantı havuzunu (connection pool) yönetir ve tüm rotaların 
+ * veritabanı ile güvenli asenkron SQL sorguları çalıştırması için ortak bir yapı sunar.
+ */
+
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 

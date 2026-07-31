@@ -1,3 +1,9 @@
+/*
+ * main.js
+ * Projenin çalışması için gereken kodları barındırıyor.
+ * Biraz karışık görünebilir ama işin özünü burada hallediyoruz.
+ */
+
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';

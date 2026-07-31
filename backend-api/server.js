@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya arkayüz (backend) uygulamasının başlangıç noktasıdır. Express.js sunucusunu başlatır, 
+ * güvenlik ayarlarını yapar ve tüm API rotalarını sisteme bağlar.
+ */
+
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -23,6 +29,10 @@ const helmet = require('helmet');
 const { logActivity } = require('./utils/logger');
 const path = require('path');
 const { checkUpcomingMaintenances } = require('./utils/machineNotifier');
+const { initializeWhatsAppBot } = require('./services/whatsappBot');
+
+// Maaş ve mesai otomasyonunu başlat
+require('./utils/salaryCron');
 
 // 1. GLOBAL CRASH GUARDS (Sunucu Çökme Kalkanı)
 // Beklenmeyen / yakalanmayan hataların Node.js sürecini (process) sonlandırmasını engeller.
@@ -60,6 +70,61 @@ app.get('/', (req, res) => {
 });
 
 // Yönlendirmeler
+// --- GLOBAL AUTHENTICATION (KİMLİK DOĞRULAMA) DUVARI ---
+const authMiddleware = require('./middleware/auth');
+app.use((req, res, next) => {
+    // console.log(`[AUTH] Method: ${req.method}, Path: ${req.path}`);
+    
+    // CORS preflight isteklerine izin ver
+    if (req.method === 'OPTIONS') {
+        return next();
+    }
+    // Login isteği, public mail linkleri veya sistem durumunu soruyorsa güvenliği atla
+    if (
+        req.path.includes('/login') || 
+        req.path.includes('/settings/status') || 
+        req.path.startsWith('/uploads') ||
+        req.path.startsWith('/api/purchasing/orders/action') ||
+        req.path.startsWith('/api/supplier-approval') ||
+        req.path.startsWith('/api/whatsapp-entries/') // if whatsapp uses direct API links too
+    ) {
+        return next();
+    }
+    // Diğer tüm istekler (GET, POST, vb.) token doğrulamasına tabi tutulsun
+    return authMiddleware(req, res, next);
+});
+
+const settingsRouter = require('./routes/settings');
+app.use('/api/settings', settingsRouter);
+
+// --- GLOBAL MIDDLEWARE: SİSTEM DURAKLATMA (SAYIM/BAKIM MODU) ---
+app.use(async (req, res, next) => {
+    // Sadece veri değiştiren istekleri engelle (POST, PUT, DELETE, PATCH)
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+        // İstisna yollar
+        const isExempt = 
+            req.path.startsWith('/api/settings') || 
+            req.path.includes('/login') ||
+            req.path.startsWith('/api/purchasing/orders/action') ||
+            req.path.startsWith('/api/supplier-approval');
+        if (!isExempt) {
+            try {
+                const [rows] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'system_paused'");
+                if (rows.length > 0 && rows[0].setting_value === 'true') {
+                    return res.status(503).json({ 
+                        success: false, 
+                        message: 'Sistem şu anda depo sayımı veya bakım nedeniyle duraklatılmıştır. Veri değişikliği yapılamaz.' 
+                    });
+                }
+            } catch (err) {
+                console.error("Sistem durumu kontrol edilirken hata:", err);
+            }
+        }
+    }
+    next();
+});
+// ----------------------------------------------------------------
+
 const productsRouter = require('./routes/products');
 app.use('/api/products', productsRouter);
 
@@ -104,6 +169,11 @@ app.use('/api/orders', ordersRouter);
 
 const boxesRouter = require('./routes/boxes');
 app.use('/api/boxes', boxesRouter);
+
+const whatsappRoutes = require('./routes/whatsappEntries');
+const mobileRoutes = require('./routes/mobile');
+app.use('/api/whatsapp-entries', whatsappRoutes);
+app.use('/api/mobile', mobileRoutes);
 
 app.get('/api/brands', async (req, res) => {
     try {
@@ -205,9 +275,6 @@ app.post('/api/login', async (req, res) => {
         if (role === 'admin' && employeeRoles.includes(dbRole)) {
              return res.status(403).json({ success: false, message: 'Bu hesap Yönetici girişine yetkili değildir.' });
         }
-        if (role === 'employee' && !employeeRoles.includes(dbRole)) {
-             return res.status(403).json({ success: false, message: 'Lütfen Yönetici girişi sekmesini kullanın.' });
-        }
 
         const isMatch = await bcrypt.compare(password, user.password);
 
@@ -224,9 +291,17 @@ app.post('/api/login', async (req, res) => {
         `, [user.id]);
         const permissions = permRows.map(r => r.permission_key);
 
+        const jwt = require('jsonwebtoken');
+        const token = jwt.sign(
+            { id: user.id, username: user.username, role: user.role, permissions },
+            process.env.JWT_SECRET || 'gizli_anahtar_degistir_lutfen_123!',
+            { expiresIn: '24h' }
+        );
+
         // Başarılı giriş
         res.json({
             success: true,
+            token: token,
             user: {
                 id: user.id,
                 username: user.username,
@@ -285,4 +360,9 @@ app.listen(PORT, () => {
     // Arka plan otomatik bakım hatırlatması kontrolü (İlk açılışta ve her 6 saatte bir)
     setTimeout(checkUpcomingMaintenances, 5000);
     setInterval(checkUpcomingMaintenances, 1000 * 60 * 60 * 6);
+
+    // WhatsApp Bot'u başlat
+    setTimeout(() => {
+        initializeWhatsAppBot();
+    }, 2000);
 });

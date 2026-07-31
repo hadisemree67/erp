@@ -1,22 +1,7 @@
-/**
- * ============================================================================
- * DOSYA ADI: boxes.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Kutu ve Ambalaj Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemde kullanılan kargo/ambalaj kutularının tanımlanması, çoklu tedarikçi 
- *   ve sözleşme (PDF) bilgilerinin tutulması (box_suppliers) ve stok ekleme/düşme 
- *   işlemlerini yöneten API uç noktalarını barındırır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, SQL Veritabanı Sorguları (db.js), Multer (Dosya Yükleme)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki PackagingBoxes.jsx bileşeni tarafından kullanılır.
- *   - Yüklenen sözleşme dosyaları /uploads/contracts/ dizinine kaydedilir.
- *   - Stok minimum seviyenin altına düştüğünde emailService kullanılarak 
- *     ilgili tedarikçiye (ana/ilk tedarikçi) uyarı maili atılır.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu modül, sistemde kullanılan kargo/ambalaj kutularının tanımlanması, 
+ * çoklu tedarikçi bilgileri ve stok ekleme/düşme işlemlerini yöneten API rotalarıdır.
  */
 const express = require('express');
 const router = express.Router();
@@ -221,6 +206,20 @@ router.post('/:id/add-stock', async (req, res) => {
             SET StockQuantity = COALESCE(StockQuantity, 0) + ? 
             WHERE Id = ?
         `, [Quantity, id]);
+
+        // 4.5 Finans Gider Kaydı (Otomatik)
+        if (priceToSave && priceToSave > 0 && Quantity > 0) {
+            const totalCost = parseFloat(priceToSave) * Quantity;
+            const supName = mainSupplier ? mainSupplier.SupplierName : 'Bilinmeyen Tedarikçi';
+            const boxName = box.BoxName || 'Kutu/Ambalaj';
+            const desc = `${boxName} malzemesi için ${supName} adlı tedarikçiden ${Quantity} adet alım yapıldı.`;
+            
+            await db.query(`
+                INSERT INTO finance_transactions 
+                (type, amount, category, description, transaction_date) 
+                VALUES ('GİDER', ?, 'Hammadde / Ürün Alımı', ?, CURDATE())
+            `, [totalCost, desc]);
+        }
 
         // 5. Yeni stoğu kontrol et ve gerekiyorsa e-posta at
         const newStock = (box.StockQuantity || 0) + parseInt(Quantity, 10);

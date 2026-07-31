@@ -1,13 +1,6 @@
-/**
- * ============================================================================
- * DOSYA ADI: EInvoiceModal.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Finans & Satınalma Modülü / e-Fatura & İrsaliye Önizleme
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Satınalma siparişleri veya mal kabul işlemleri gerçekleştiğinde, GİB e-Fatura / e-İrsaliye standartlarına
- *   birebir uygun, resmi görünümlü (QR kodlu, ETTN numaralı, vergi detaylı ve karşılıklı imza alanlı)
- *   bir belge önizlemesi sunar ve yazıcıdan A4 formatında temiz çıktı alınmasını (window.print) sağlar.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (EInvoiceModal.jsx), Finansal hesaplar, e-fatura modalları ve genel bütçe göstergelerini içerir.
  */
 
 import React from 'react';
@@ -68,6 +61,8 @@ const EInvoiceModal = ({ isOpen, onClose, invoiceData }) => {
     const ettn = generateETTN(invoiceData.raw_id || invoiceData.id);
     const faturaNo = `EPR202600000${(invoiceData.raw_id || invoiceData.id || 12).toString().replace(/[^0-9]/g, '').padStart(4, '0')}`;
     const productCode = invoiceData.product_code || `STK-${invoiceData.raw_id || '01'}`;
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div className="e-invoice-modal-overlay" style={{

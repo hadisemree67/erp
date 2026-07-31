@@ -1,16 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: FinanceAccounts.css
- * MODÜL / KATMAN: Arayüz Stilleri - Gelir ve Gider Hesapları (Yumuşak Açık Tema / Minimalist)
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   - Kullanıcının gözünü yormayan yumuşak açık tema (#f8fafc zemin, #ffffff kartlar).
- *   - Kalın çerçeveler ve sert zeminler yerine çok hafif gölge ve ton farklarıyla ayrıştırma.
- *   - Emoji yerine monokrom SVG çizgi ikonlar ve kontrollü tipografi (24-25px rakamlar).
- *   - Kutu rozetler yerine nokta (dot) + yalın metin gösterimi.
- * ============================================================================
- */
-
 .finance-accounts-container {
     padding: 24px 32px;
     background: #f8fafc; /* Göz yormayan yumuşak açık gri zemin */

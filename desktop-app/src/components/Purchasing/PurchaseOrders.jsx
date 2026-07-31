@@ -14,15 +14,23 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (PurchaseOrders.jsx), Satın alma talepleri, onay süreçleri ve satın alma siparişlerinin takibini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import EInvoiceModal from '../Finance/EInvoiceModal';
 
 const PurchaseOrders = () => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [orders, setOrders] = useState([]);
     const [selectedInvoice, setSelectedInvoice] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchOrders = async () => {
         setLoading(true);
@@ -51,6 +59,8 @@ const PurchaseOrders = () => {
             console.error(err);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchOrders();
@@ -96,6 +106,8 @@ const PurchaseOrders = () => {
             default: return { bg: '#f1f5f9', color: '#475569', border: '#e2e8f0' };
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div>

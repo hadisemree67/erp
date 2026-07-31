@@ -14,12 +14,19 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (App.jsx), Uygulamanın ana çekirdeği; genel yönlendirme (routing), kenar çubuğu (Sidebar) ve hata yakalama (ErrorBoundary) yapılarını barındırır.
+ */
+
 import { useState, useEffect } from 'react';
 import { apiFetch } from './utils/api';
 import Sidebar from './components/Sidebar';
 import ActivityLog from './components/ActivityLog';
 import ProductList from './components/Products/ProductList';
 import ProductForm from './components/Products/ProductForm';
+import OutsourcedProducts from './components/Products/OutsourcedProducts';
+import PurchasedProducts from './components/Products/PurchasedProducts';
 import StaffList from './components/Staff/StaffList';
 import StaffForm from './components/Staff/StaffForm';
 import EmployeeList from './components/Employees/EmployeeList';
@@ -31,6 +38,7 @@ import StockEntry from './components/WMS/StockEntry';
 import StockList from './components/WMS/StockList';
 import InventoryEntry from './components/WMS/InventoryEntry';
 import InventoryList from './components/WMS/InventoryList';
+import WhatsAppApprovals from './components/WMS/WhatsAppApprovals';
 import WarehouseList from './components/Warehouses/WarehouseList';
 import WarehouseForm from './components/Warehouses/WarehouseForm';
 import WarehouseTransfer from './components/WMS/WarehouseTransfer';
@@ -55,9 +63,12 @@ import PackagingBoxes from './components/Orders/PackagingBoxes';
 import OrderPacking from './components/Orders/OrderPacking';
 import CourierDelivery from './components/Orders/CourierDelivery';
 import Reports from './components/Reports/Reports';
+import Settings from './components/Settings/Settings';
+import DataImport from './components/DataImport/DataImport';
 import './index.css';
 
 function App() {
+  // 1. Durum (State) Tanımlamaları ve Hook'lar
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('admin');
@@ -80,9 +91,11 @@ function App() {
     todayOrders: 0
   });
 
+  // 3. Backend API İstekleri (Veri Çekme)
+
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/dashboard-stats');
+      const res = await apiFetch('http://localhost:3000/api/dashboard-stats');
       const data = await res.json();
       if (data.success) {
         setStats(data);
@@ -95,7 +108,7 @@ function App() {
   const fetchPendingRequests = async () => {
     if (!isLoggedIn) return;
     try {
-      const res = await fetch('http://localhost:3000/api/production/requests');
+      const res = await apiFetch('http://localhost:3000/api/production/requests');
       const data = await res.json();
       if (data.success) {
         setPendingRequests(data.data.filter(r => r.status === 'Bekleyen'));
@@ -104,6 +117,8 @@ function App() {
       console.error('Bildirimler alınamadı', err);
     }
   };
+
+  // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -130,6 +145,7 @@ function App() {
       const data = await response.json();
 
       if (data.success) {
+        localStorage.setItem('token', data.token);
         setCurrentUser(data.user);
         setIsLoggedIn(true);
         const perms = data.user.permissions || [];
@@ -158,6 +174,7 @@ function App() {
   };
 
   if (isLoggedIn) {
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
       <div style={{ display: 'flex', width: '100vw', height: '100vh', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
         <Sidebar 
@@ -232,6 +249,7 @@ function App() {
           
           <div style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>
           
+          {currentView === 'ayarlar' && <Settings currentUser={currentUser} />}
           {currentView === 'anasayfa' && (
             <div>
               <h1 style={{ color: '#0f172a', fontFamily: 'Inter, sans-serif', fontSize: '24px', fontWeight: 'bold' }}>
@@ -268,6 +286,8 @@ function App() {
 
           {currentView === 'urun-listesi' && <ProductList currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'urun-ekle' && <ProductForm currentUser={currentUser} product={null} onClose={() => setCurrentView('urun-listesi')} />}
+          {currentView === 'fason-urunler' && <OutsourcedProducts currentUser={currentUser} />}
+          {currentView === 'ticari-urunler' && <PurchasedProducts currentUser={currentUser} />}
 
           {currentView === 'stok-giris' && <StockEntry currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'stok-listesi' && <StockList currentUser={currentUser} initialEntryVisible={false} />}
@@ -281,6 +301,7 @@ function App() {
           {currentView === 'depo-kabulleri' && <WarehouseAcceptance currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'mal-kabul' && <GoodsReceipt currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'depo-krokisi' && <WarehouseLayout currentUser={currentUser} />}
+          {currentView === 'whatsapp-onaylari' && <WhatsAppApprovals currentUser={currentUser} />}
 
           {currentView === 'personeller' && <StaffList currentUser={currentUser} onAdd={() => { setSelectedStaff(null); setCurrentView('personel-ekle'); }} onEdit={(user) => { setSelectedStaff(user); setCurrentView('personel-ekle'); }} />}
           {currentView === 'personel-ekle' && <StaffForm currentUser={currentUser} staff={selectedStaff} onClose={() => setCurrentView('personeller')} />}
@@ -311,6 +332,7 @@ function App() {
           {currentView === 'uretim-listesi' && <ProductionList currentUser={currentUser} onNavigate={(view, orderId) => { setSelectedOrderId(orderId); setCurrentView(view); }} />}
           {currentView === 'uretim-detayi' && <ProductionDetail currentUser={currentUser} orderId={selectedOrderId} onNavigate={setCurrentView} />}
           {currentView === 'raporlar' && <Reports currentUser={currentUser} />}
+          {currentView === 'veri-ice-aktar' && <DataImport currentUser={currentUser} />}
         </div>
         </div>
       </div>

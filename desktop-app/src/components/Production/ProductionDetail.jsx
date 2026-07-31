@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (ProductionDetail.jsx), Üretim talepleri, makineler, reçete (BOM) tanımları ve aktif üretim süreçlerini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [loading, setLoading] = useState(true);
     const [order, setOrder] = useState(null);
     const [materials, setMaterials] = useState([]);
@@ -49,6 +55,8 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
     const [warehouseUsers, setWarehouseUsers] = useState([]);
     const [deliveredToUserId, setDeliveredToUserId] = useState('');
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         if (orderId) {
             handleViewOrder(orderId);
@@ -57,6 +65,8 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
             onNavigate('uretim-listesi');
         }
     }, [orderId]);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchWarehouseUsers = async () => {
         try {
@@ -98,6 +108,8 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
         setBarcodeMatched(false);
         setPickError('');
     };
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleBarcodeChange = (e) => {
         const val = e.target.value;
@@ -368,6 +380,8 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
     if (loading || !order) {
         return <div style={{ padding: '24px', fontSize: '16px', color: '#64748b' }}>Yükleniyor...</div>;
     }
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ backgroundColor: '#fff', padding: '32px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)', maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>

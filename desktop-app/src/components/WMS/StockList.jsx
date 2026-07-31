@@ -14,11 +14,17 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (StockList.jsx), Mal kabul, stok giriş/çıkış, raf transferleri ve genel depo envanter işlemlerini (Warehouse Management System) yönetir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect, Fragment } from 'react';
 import StockEntry from './StockEntry';
 
 const StockList = ({ currentUser, initialEntryVisible = false }) => {
+  // 1. Durum (State) Tanımlamaları ve Hook'lar
   const [stockItems, setStockItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -33,12 +39,20 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
 
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState('');
+  
+  const [isFastDeductVisible, setIsFastDeductVisible] = useState(false);
+  const [fastDeductBarcode, setFastDeductBarcode] = useState('');
+  const [fastDeductQty, setFastDeductQty] = useState('');
+  const [fastDeductLoading, setFastDeductLoading] = useState(false);
+
   // Edit State
   const [editingStock, setEditingStock] = useState(null);
   const [sortBy, setSortBy] = useState('isim');
   const [productionRequestProduct, setProductionRequestProduct] = useState(null);
   const [warehouses, setWarehouses] = useState([]);
   const [allShelvesCapacity, setAllShelvesCapacity] = useState({});
+
+  // 3. Backend API İstekleri (Veri Çekme)
 
   const fetchStockList = async () => {
     setLoading(true);
@@ -57,6 +71,8 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
       setLoading(false);
     }
   };
+
+  // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
   useEffect(() => {
     setIsEntryVisible(initialEntryVisible);
@@ -83,9 +99,43 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
       }
   }, [editingStock?.warehouse_id, editingStock?.product_id]);
 
+  // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
+
   const handleEditStock = (item) => {
       setEditingStock({...item});
   };
+
+  const handleFastDeductSubmit = async (e) => {
+        e.preventDefault();
+        if (!fastDeductBarcode.trim() || !fastDeductQty || fastDeductQty <= 0) {
+            alert('Lütfen geçerli barkod ve miktar giriniz.');
+            return;
+        }
+
+        setFastDeductLoading(true);
+        try {
+            const res = await apiFetch('http://localhost:3000/api/wms/deduct-fefo', {
+                method: 'POST',
+                headers: { 'x-user-id': currentUser?.id, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ barcode: fastDeductBarcode, quantity: fastDeductQty })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(data.message);
+                setIsFastDeductVisible(false);
+                setFastDeductBarcode('');
+                setFastDeductQty('');
+                fetchStockList();
+            } else {
+                alert('Hata: ' + data.message);
+            }
+        } catch (err) {
+            console.error('Fast deduct error:', err);
+            alert('Sunucu ile bağlantı kurulamadı.');
+        } finally {
+            setFastDeductLoading(false);
+        }
+    };
 
   const handleDeleteStock = async (id) => {
       if (!window.confirm('Bu stok bakiye kaydını tamamen silmek istediğinize emin misiniz?')) return;
@@ -149,6 +199,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
 
   // Eğer form açıksa, doğrudan formu göster
   if (isEntryVisible) {
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ position: 'relative' }}>
             <button 
@@ -238,15 +289,26 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
           <h1 style={{ color: '#0f172a', fontFamily: 'Inter, sans-serif', fontSize: '24px', fontWeight: 'bold' }}>Envanter ve Stok Listesi</h1>
           <p style={{ color: '#64748b', marginTop: '4px' }}>Depolardaki ürünleri, raf konumlarını ve bakiye miktarlarını görüntüleyin.</p>
         </div>
-        <button 
-          onClick={() => setIsEntryVisible(true)}
-          style={{
-            backgroundColor: '#10b981', color: 'white', padding: '10px 20px', borderRadius: '8px', 
-            border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
-          }}
-        >
-          + Yeni Stok Girişi (Mal Kabul)
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button 
+            onClick={() => setIsFastDeductVisible(true)}
+            style={{
+              backgroundColor: '#ef4444', color: 'white', padding: '10px 20px', borderRadius: '8px', 
+              border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.3)'
+            }}
+          >
+            - Acil Çıkış
+          </button>
+          <button 
+            onClick={() => setIsEntryVisible(true)}
+            style={{
+              backgroundColor: '#10b981', color: 'white', padding: '10px 20px', borderRadius: '8px', 
+              border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
+            }}
+          >
+            + Manuel Stok Girişi
+          </button>
+        </div>
       </div>
 
       {error && <div style={{ padding: '16px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '8px', marginBottom: '16px' }}>{error}</div>}
@@ -501,7 +563,14 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                             return `${qty} ${u}`;
                                         };
 
-                                        const totalCap = group.batches.reduce((sum, b) => sum + (b.shelf_max_capacity || 0), 0);
+                                        const uniqueShelves = [];
+                                        group.batches.forEach(b => {
+                                            const key = `${b.warehouse_name}-${b.shelf_code}`;
+                                            if (!uniqueShelves.find(s => s.key === key)) {
+                                                uniqueShelves.push({ key, cap: b.shelf_max_capacity || 0 });
+                                            }
+                                        });
+                                        const totalCap = uniqueShelves.reduce((sum, s) => sum + s.cap, 0);
                                         return group.product?.unit_type && group.product.unit_type !== 'Adet' && group.product?.package_capacity > 0 ? (
                                             <span style={{ fontSize: '13px', color: '#0369a1' }}>
                                                 {formatDualStr(group.total_quantity, totalCap, group.product.unit_type)} <br/>
@@ -583,6 +652,10 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                   <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
                       {selectedGroup.batches.map((batch, index) => {
                           const isFirstOut = index === 0 && (batch.expiration_date || batch.batch_number || selectedGroup.batches.length > 1);
+                          const totalOnShelf = selectedGroup.batches
+                              .filter(b => b.warehouse_name === batch.warehouse_name && b.shelf_code === batch.shelf_code)
+                              .reduce((sum, b) => sum + b.quantity, 0);
+
                           return (
                               <div key={batch.balance_id} style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#fff', position: 'relative' }}>
                                   {isFirstOut && (
@@ -598,13 +671,13 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                           <div style={{ color: '#0f172a', fontWeight: '600' }}>{batch.warehouse_name} / {batch.shelf_code}</div>
                                       </div>
                                       <div>
-                                          <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Miktar (Dolu / Kapasite)</div>
+                                          <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Miktar (Bu Parti)</div>
                                           <div style={{ color: '#0f172a', fontWeight: '600', fontSize: '15px' }}>
-                                              {batch.quantity} {batch.shelf_max_capacity > 0 ? `/ ${batch.shelf_max_capacity}` : ''} <span style={{ fontSize: '13px', color: '#0369a1' }}>{batch.unit_type || 'Adet'}</span>
+                                              {batch.quantity} <span style={{ fontSize: '13px', color: '#0369a1' }}>{batch.unit_type || 'Adet'}</span>
                                           </div>
                                           {batch.shelf_max_capacity > 0 && (
-                                              <div style={{ color: '#10b981', fontSize: '12px', fontWeight: '600', marginTop: '2px' }}>
-                                                  %{Math.min(((batch.quantity / batch.shelf_max_capacity) * 100), 100).toFixed(1)} Dolu
+                                              <div style={{ color: '#10b981', fontSize: '12px', fontWeight: '600', marginTop: '4px' }}>
+                                                  Raf Toplamı: {totalOnShelf} / {batch.shelf_max_capacity} (%{Math.min(((totalOnShelf / batch.shelf_max_capacity) * 100), 100).toFixed(1)} Dolu)
                                               </div>
                                           )}
                                           {batch.unit_type && batch.unit_type !== 'Adet' && batch.package_capacity > 0 && (

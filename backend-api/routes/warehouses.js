@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, fiziksel depoların oluşturulması, depo içindeki raf, koridor ve hücre yapılandırmalarının 
+ * tanımlanması ve depo yerleşim düzeninin yönetildiği API uç noktalarını sağlar.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -143,13 +149,13 @@ router.post('/', async (req, res) => {
         // 2. Rafları Ekle
         if (shelves && Array.isArray(shelves) && shelves.length > 0) {
             for (let shelf of shelves) {
-                // If it's a string (legacy), default volume to 0. If object, use shelf_code and max_volume
+                // Eğer string ise (eski yapı), varsayılan hacmi 0 yap. Obje ise shelf_code ve max_volume kullan
                 const shelf_code = typeof shelf === 'string' ? shelf : shelf.shelfCode;
                 const width = typeof shelf === 'object' && shelf.width ? parseFloat(shelf.width) || 0 : 0;
                 const height = typeof shelf === 'object' && shelf.height ? parseFloat(shelf.height) || 0 : 0;
                 const depth = typeof shelf === 'object' && shelf.depth ? parseFloat(shelf.depth) || 0 : 0;
                 const barcode = typeof shelf === 'object' && shelf.barcode ? shelf.barcode.trim() : null;
-                // If it came from legacy maxVolume but no width (rare but possible), preserve it, else calculate.
+                // Eski maxVolume'dan geldiyse ama genişlik yoksa (nadir ama mümkün), koru, aksi takdirde hesapla.
                 const legacyVol = typeof shelf === 'object' && shelf.maxVolume ? parseFloat(shelf.maxVolume) || 0 : 0;
                 const max_volume = (width > 0 && height > 0 && depth > 0) ? (width * height * depth) : legacyVol;
                 

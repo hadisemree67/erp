@@ -14,6 +14,11 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (main.jsx), Uygulamanın ana çekirdeği; genel yönlendirme (routing), kenar çubuğu (Sidebar) ve hata yakalama (ErrorBoundary) yapılarını barındırır.
+ */
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';

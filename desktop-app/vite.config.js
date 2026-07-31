@@ -1,3 +1,9 @@
+/*
+ * vite.config.js
+ * Projenin çalışması için gereken kodları barındırıyor.
+ * Biraz karışık görünebilir ama işin özünü burada hallediyoruz.
+ */
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 

@@ -14,12 +14,20 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (ProductionList.jsx), Üretim talepleri, makineler, reçete (BOM) tanımları ve aktif üretim süreçlerini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const ProductionList = ({ currentUser, onNavigate }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchOrders = async () => {
         setLoading(true);
@@ -35,6 +43,8 @@ const ProductionList = ({ currentUser, onNavigate }) => {
             setLoading(false);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchOrders();
@@ -94,6 +104,8 @@ const ProductionList = ({ currentUser, onNavigate }) => {
         
         return <span style={{ padding: '4px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold', backgroundColor: bg, color: color }}>{status}</span>;
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ display: 'flex', gap: '24px' }}>

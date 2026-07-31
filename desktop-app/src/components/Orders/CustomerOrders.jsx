@@ -1,13 +1,6 @@
-/**
- * ============================================================================
- * DOSYA ADI: CustomerOrders.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Sipariş Yönetimi (Müşteri Siparişleri)
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Gelen veya manuel oluşturulan B2B/B2C müşteri siparişlerinin yönetildiği ekrandır.
- *   - "Manuel Sipariş Ekle" butonu ile birden fazla ürün kalemi ("+ Ürün Ekle") eklenebilir.
- *   - Sipariş miktarı stok miktarını aşsa bile sipariş engellenmez! Aşan miktar için otomatik üretim talebi tetiklenir.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (CustomerOrders.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -15,6 +8,7 @@ import { apiFetch } from '../../utils/api';
 
 const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' }) => {
     const hasPerm = (key) => currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(key);
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [orders, setOrders] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [products, setProducts] = useState([]);
@@ -59,12 +53,20 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
     // Prompt Modal for Quantity
     const [qtyPrompt, setQtyPrompt] = useState({ isOpen: false, foundItem: null, remaining: 0, inputVal: '' });
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         fetchInitialData();
+        const intervalId = setInterval(() => {
+            fetchInitialData(false); // pass false to avoid loading spinner
+        }, 5000);
+        return () => clearInterval(intervalId);
     }, []);
 
-    const fetchInitialData = async () => {
-        setLoading(true);
+    // 3. Backend API İstekleri (Veri Çekme)
+
+    const fetchInitialData = async (showLoading = true) => {
+        if (showLoading) setLoading(true);
         try {
             const [ordersRes, customersRes, productsRes, boxesRes, campaignsRes] = await Promise.all([
                 apiFetch('http://localhost:3000/api/orders'),
@@ -101,6 +103,8 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             setLoading(false);
         }
     };
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleAddItemRow = () => {
         setOrderItems([...orderItems, { productId: '', quantity: 1, unitPrice: 0 }]);
@@ -189,6 +193,10 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             alert('Lütfen bir müşteri seçiniz.');
             return;
         }
+        if (!shippingAddress || !shippingAddress.trim()) {
+            alert('Lütfen sevkiyat adresi giriniz.');
+            return;
+        }
 
         const validItems = orderItems.filter(i => i.productId && i.quantity > 0);
         if (validItems.length === 0) {
@@ -236,6 +244,8 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
         }
     };
 
+
+
     const handleUpdateStatus = async (orderId, newStatus) => {
         if (newStatus === 'İptal' || newStatus === 'İptal Edildi') {
             if (!window.confirm('Bu siparişi iptal etmek istediğinize emin misiniz? (Düşülen stoklar orijinal raflarına iade edilecektir.)')) return;
@@ -259,23 +269,23 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
     };
 
     const handleApproveOrder = async (orderId) => {
-        if (!window.confirm('Bu siparişi onaylayıp Hazırlanıyor aşamasına almak istediğinize emin misiniz?')) return;
+        if (!window.confirm('Bu siparişi onaylayıp Onaylandı aşamasına almak istediğinize emin misiniz?')) return;
         
         try {
             const res = await apiFetch(`http://localhost:3000/api/orders/${orderId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'Hazırlanıyor' })
+                body: JSON.stringify({ status: 'Onaylandı' })
             });
             const data = await res.json();
             if (data.success) {
-                alert(`Sipariş Onaylandı ve Hazırlanıyor aşamasına alındı.`);
+                alert(`Sipariş Onaylandı. Artık depo toplayıcıları tarafından alınabilir.`);
                 fetchInitialData();
             } else {
                 alert(data.message || 'Sipariş onaylanamadı.');
             }
         } catch (err) {
-            console.error('Onay hatası:', err);
+            console.error('Onaylama hatası:', err);
             alert('Sunucu hatası.');
         }
     };
@@ -313,14 +323,45 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
 
     const getRecommendedBox = (order) => {
         if (!boxes || boxes.length === 0) return null;
-        const ordWeight = parseFloat(order.TotalWeight) || 0;
-        let validBoxes = boxes.filter(b => parseFloat(b.MaxWeightCapacity) >= ordWeight);
-        if (validBoxes.length === 0) validBoxes = [...boxes];
         
+        const ordWeight = parseFloat(order.TotalWeight) || 0;
+        
+        let totalItemsVolume = 0;
+        if (order && order.items) {
+            order.items.forEach(item => {
+                const w = parseFloat(item.Width) || 10;
+                const h = parseFloat(item.Height) || 10;
+                const d = parseFloat(item.Depth) || 10;
+                const qty = parseInt(item.Quantity) || 1;
+                totalItemsVolume += (w * h * d) * qty;
+            });
+        }
+        
+        let validBoxes = boxes.filter(b => {
+            const boxNetW = parseFloat(b.Width) - 5;
+            const boxNetD = parseFloat(b.Depth) - 5;
+            const boxNetH = parseFloat(b.Height) - 3;
+            const netVol = boxNetW * boxNetD * boxNetH;
+            
+            return parseFloat(b.MaxWeightCapacity) >= ordWeight && netVol >= totalItemsVolume;
+        });
+        
+        if (validBoxes.length === 0) {
+            // Hiçbir kutu yetmiyorsa, bari en büyük kutuyu önerelim.
+            let allBoxes = [...boxes];
+            allBoxes.sort((a, b) => {
+                const volA = (parseFloat(a.Width)||1) * (parseFloat(a.Height)||1) * (parseFloat(a.Depth)||1);
+                const volB = (parseFloat(b.Width)||1) * (parseFloat(b.Height)||1) * (parseFloat(b.Depth)||1);
+                return volB - volA; // Azalan sıra (en büyük ilk)
+            });
+            return allBoxes[0];
+        }
+        
+        // Yeterli olanlar arasından en küçüğünü seç
         validBoxes.sort((a, b) => {
             const volA = (parseFloat(a.Width)||1) * (parseFloat(a.Height)||1) * (parseFloat(a.Depth)||1);
             const volB = (parseFloat(b.Width)||1) * (parseFloat(b.Height)||1) * (parseFloat(b.Depth)||1);
-            return volA - volB;
+            return volA - volB; // Artan sıra (en küçük yeterli olan ilk)
         });
         return validBoxes[0];
     };
@@ -501,14 +542,18 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
 
     const getStatusStyle = (status) => {
         switch (status) {
-            case 'Beklemede': return { bg: '#fef3c7', color: '#d97706', label: 'Beklemede' };
-            case 'Hazırlanıyor': return { bg: '#e0e7ff', color: '#4f46e5', label: 'Hazırlanıyor' };
-            case 'Kargoya Verildi': return { bg: '#e0f2fe', color: '#0284c7', label: 'Kargoya Verildi' };
-            case 'Teslim Edildi': return { bg: '#dcfce3', color: '#16a34a', label: 'Teslim Edildi' };
-            case 'İptal Edildi': return { bg: '#fee2e2', color: '#dc2626', label: 'İptal Edildi' };
+            case 'Beklemede': return { bg: '#f1f5f9', color: '#475569', label: 'Beklemede' };
+            case 'Onaylandı': return { bg: '#e2e8f0', color: '#334155', label: 'Onaylandı' };
+            case 'Hazırlanıyor': return { bg: '#f1f5f9', color: '#475569', label: 'Hazırlanıyor' };
+            case 'Paketlendi': return { bg: '#e2e8f0', color: '#334155', label: 'Paketlendi' };
+            case 'Kargoya Verildi': return { bg: '#f1f5f9', color: '#475569', label: 'Kargoya Verildi' };
+            case 'Teslim Edildi': return { bg: '#dcfce3', color: '#166534', label: 'Teslim Edildi' };
+            case 'İptal Edildi': return { bg: '#fee2e2', color: '#991b1b', label: 'İptal Edildi' };
             default: return { bg: '#f1f5f9', color: '#64748b', label: status || 'Belirsiz' };
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ padding: '24px', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: `'Inter', sans-serif` }}>
@@ -549,13 +594,13 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     <div style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Bekleyen / Hazırlanan</div>
-                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#2563eb', marginTop: '6px' }}>
-                        {orders.filter(o => ['Beklemede', 'Hazırlanıyor'].includes(o.OrderStatus)).length}
+                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#0f172a', marginTop: '6px' }}>
+                        {orders.filter(o => ['Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Paketlendi'].includes(o.OrderStatus)).length}
                     </div>
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     <div style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Tamamlanan (Teslim Edildi)</div>
-                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#16a34a', marginTop: '6px' }}>
+                    <div style={{ fontSize: '24px', fontWeight: '800', color: '#0f172a', marginTop: '6px' }}>
                         {orders.filter(o => o.OrderStatus === 'Teslim Edildi').length}
                     </div>
                 </div>
@@ -572,7 +617,9 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {[
                         { id: 'Beklemede', label: 'Beklemede (Yeni)' },
+                        { id: 'Onaylandı', label: 'Onaylandı' },
                         { id: 'Hazırlanıyor', label: 'Hazırlanıyor' },
+                        { id: 'Paketlendi', label: 'Paketlendi' },
                         { id: 'Kargoya Verildi', label: 'Kargoya Verildi' },
                         { id: 'Teslim Edildi', label: 'Teslim Edildi' },
                         { id: 'İptal Edildi', label: 'İptal Edildi' }
@@ -714,7 +761,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                 {order.OrderStatus === 'Beklemede' && hasPerm('order_approve') && (
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleApproveOrder(order.Id); }} 
-                                                        style={{ padding: '6px 10px', backgroundColor: '#4f46e5', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                        style={{ padding: '6px 12px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                                                         title="Siparişi Onayla, Kutu Ata ve Kargo Barkodu Oluştur"
                                                     >
                                                         Onayla
@@ -724,12 +771,41 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); handleOpenPackingModal(order); }} 
-                                                            style={{ padding: '6px 14px', backgroundColor: '#0284c7', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                            style={{ padding: '6px 14px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                                                             title="Siparişi Paketle (Barkod Doğrulama)"
                                                         >
-                                                            📦 Paketlemeye Başla
+                                                            Paketlemeye Başla
                                                         </button>
                                                     </div>
+                                                )}
+                                                {order.OrderStatus === 'Paketlendi' && hasPerm('order_ship') && (
+                                                    <>
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setSelectedOrderForLabel(order);
+                                                                setIsLabelModalOpen(true);
+                                                            }} 
+                                                            style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                            title="Kargo Etiketi Çıkar"
+                                                        >
+                                                            Etiket Yazdır
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'Kargoya Verildi'); }} 
+                                                            style={{ padding: '6px 12px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                            title="Siparişi kargoya ver"
+                                                        >
+                                                            Kargoya Ver
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'Teslim Edildi'); }} 
+                                                            style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                            title="Siparişi kargoya vermeden elden teslim et"
+                                                        >
+                                                            Elden Teslim
+                                                        </button>
+                                                    </>
                                                 )}
                                                 {order.OrderStatus === 'Kargoya Verildi' && hasPerm('order_ship') && (
                                                     <>
@@ -739,38 +815,38 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                                 setSelectedOrderForLabel(order);
                                                                 setIsLabelModalOpen(true);
                                                             }} 
-                                                            style={{ padding: '6px 10px', backgroundColor: '#4f46e5', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                            style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                                                             title="Kargo Etiketi Çıkar"
                                                         >
                                                             Etiket Yazdır
                                                         </button>
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'Teslim Edildi'); }} 
-                                                            style={{ padding: '6px 10px', backgroundColor: '#16a34a', color: 'white', border: '1px solid #14532d', borderRadius: '6px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                                                            style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
                                                             title="Siparişi Manuel Olarak Teslim Edildiye Çek (Test/Yedek)"
                                                         >
-                                                            Teslim Edildi Yap (Test)
+                                                            Teslim Edildi Yap
                                                         </button>
                                                     </>
                                                 )}
                                                 {order.OrderStatus !== 'İptal Edildi' && order.OrderStatus !== 'Teslim Edildi' && hasPerm('order_cancel') && (
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'İptal Edildi'); }} 
-                                                        style={{ padding: '6px 10px', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                        style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#94a3b8', border: 'none', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'underline' }}
                                                         title="Siparişi İptal Et"
                                                     >
-                                                        İptal
+                                                        İptal Et
                                                     </button>
                                                 )}
-                                                <button 
-                                                    onClick={() => handleDeleteOrder(order.Id, order.OrderNumber)} 
-                                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '6px' }}
-                                                    title="Siparişi Sil"
-                                                    onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
-                                                    onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
-                                                >
-                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                                </button>
+                                                {hasPerm('order_delete') && order.OrderStatus !== 'Onaylandı' && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.Id, order.OrderNumber); }} 
+                                                        style={{ padding: '5px 10px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '6px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                        title="Siparişi Kalıcı Olarak Sil"
+                                                    >
+                                                        Siparişi Sil
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
@@ -802,7 +878,20 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Müşteri Seçiniz *</label>
                                     <select
                                         value={selectedCustomerId}
-                                        onChange={e => setSelectedCustomerId(e.target.value)}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setSelectedCustomerId(val);
+                                            if (val) {
+                                                const cust = customers.find(c => c.Id.toString() === val.toString() || (c.id && c.id.toString() === val.toString()));
+                                                if (cust && cust.Address) {
+                                                    setShippingAddress(cust.Address);
+                                                } else {
+                                                    setShippingAddress('');
+                                                }
+                                            } else {
+                                                setShippingAddress('');
+                                            }
+                                        }}
                                         required
                                         style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', color: '#0f172a', backgroundColor: 'white' }}
                                     >
@@ -813,11 +902,12 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                     </select>
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Sevkiyat Adresi (İsteğe Bağlı)</label>
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Sevkiyat Adresi *</label>
                                     <input
                                         type="text"
                                         value={shippingAddress}
                                         onChange={e => setShippingAddress(e.target.value)}
+                                        required
                                         placeholder="Örn: Organize Sanayi Bölgesi 2. Cadde..."
                                         style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', color: '#0f172a' }}
                                     />
@@ -883,6 +973,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                                             e.preventDefault();
                                                                             const barcode = e.target.value;
                                                                             const matched = products.find(p => {
+                                                                                if (p.Category === 'Hammadde') return false;
                                                                                 let barcodes = [];
                                                                                 try {
                                                                                     if (p.Barcode) barcodes = typeof p.Barcode === 'string' ? JSON.parse(p.Barcode) : p.Barcode;
@@ -910,7 +1001,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                                     style={{ flex: 1, minWidth: 0, padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', textOverflow: 'ellipsis' }}
                                                                 >
                                                                     <option value="">-- Ürün Seçiniz --</option>
-                                                                    {products.map(p => {
+                                                                    {products.filter(p => p.Category !== 'Hammadde').map(p => {
                                                                         const s = parseInt(p.StockQuantity || p.TotalStock || p.total_stock || p.Stock || p.quantity || 0);
                                                                         
                                                                         let barcodeStr = p.ProductCode || p.code;

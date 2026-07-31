@@ -14,17 +14,18 @@
  * ============================================================================
  */
 
-import { apiFetch } from '../../utils/api';
-/**
- * Dosya: StaffForm.jsx
- * Sayfa: Personel Ekleme / Düzenleme
- * Ne İşe Yarar: Personel bilgilerini ve yetkilerini belirlemeyi sağlayan form ekranı.
+/*
+ * ÖZET:
+ * Bu dosya (StaffForm.jsx), Sistem kullanıcılarının yetkilendirmesi, şifre sıfırlama ve personel giriş bilgilerini yönetir.
  */
+
+import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const StaffForm = ({ staff, onClose, currentUser }) => {
     const isEditing = !!staff;
 
+    // 1. Durum (State) Tanımlamaları
     const [formData, setFormData] = useState({
         username: staff?.username || '',
         name: staff?.name || '',
@@ -40,7 +41,9 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+        // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
     useEffect(() => {
+        // 3. Backend API İstekleri (Veri Çekme)
         const fetchPermissions = async () => {
             try {
                 const res = await apiFetch('http://localhost:3000/api/users/permissions');
@@ -63,6 +66,7 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
         if (!isEditing) fetchEmployees();
     }, [isEditing]);
 
+        // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
@@ -87,6 +91,7 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
         }
     };
 
+    // 4. Veri Kaydetme / Form Gönderim İşlemi
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -135,6 +140,7 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
         }
     };
 
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -193,6 +199,7 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
                 <div style={{ backgroundColor: '#f8fafc', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
                     <h3 style={{ fontSize: '16px', color: '#0f172a', marginTop: 0, marginBottom: '20px', borderBottom: '1px solid #cbd5e1', paddingBottom: '10px' }}>Özel Alt Yetkiler (İsteğe Bağlı)</h3>
                     
+                    {/* 6. Özel Alt Yetkiler (Checkbox Ağacı) Render İşlemi */}
                     {(() => {
                         const categories = {
                             'Genel Sistem': ['view_dashboard', 'view_activity_log'],

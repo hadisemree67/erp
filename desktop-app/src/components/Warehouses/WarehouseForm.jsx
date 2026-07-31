@@ -14,11 +14,18 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (WarehouseForm.jsx), Depo tanımları, raf koordinatları ve depo yerleşim düzeninin (Layout) görselleştirilmesini sağlar.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const WarehouseForm = ({ warehouse, onNavigate }) => {
     const isEditing = !!warehouse;
+
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
 
     const [formData, setFormData] = useState({
         name: '',
@@ -39,6 +46,8 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
     const [tempBarcode, setTempBarcode] = useState('');
     const [error, setError] = useState(null);
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         if (isEditing && warehouse) {
             setFormData({
@@ -56,13 +65,15 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
                     barcode: s.barcode || ''
                 })));
             } else if (warehouse.Shelves && warehouse.Shelves.length > 0) {
-                // Backward compatibility
+                // Geriye dönük uyumluluk
                 setShelves(warehouse.Shelves.map(s => ({ shelfCode: s, width: '', height: '', depth: '', barcode: '' })));
             } else {
                 setShelves([{ shelfCode: '', width: '', height: '', depth: '', barcode: '' }]);
             }
         }
     }, [isEditing, warehouse]);
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -148,6 +159,8 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
             setSubmitting(false);
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ padding: '24px', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', maxWidth: '800px', margin: '0 auto' }}>

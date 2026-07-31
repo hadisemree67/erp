@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (BulkEditEmployeeModal.jsx), Personel listesi, mesai (overtime) ve izin (leave) yönetim arayüzlerini içerir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState } from 'react';
 
 const BulkEditEmployeeModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [field, setField] = useState('salary');
     
     // Independent states to allow multiple updates
@@ -98,6 +104,8 @@ const BulkEditEmployeeModal = ({ selectedIds, onClose, onSuccess, currentUser })
             setLoading(false);
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>

@@ -14,13 +14,12 @@
  * ============================================================================
  */
 
-import { apiFetch } from '../../utils/api';
-/**
- * Dosya: ProductForm.jsx
- * Sayfa: Ürün Ekleme / Düzenleme Formu
- * Ne İşe Yarar: Yeni bir ürün eklemek veya mevcut ürünü güncellemek için kullanılan dinamik formdur.
- * Çoklu barkod girişi, dinamik marka/kategori arama-ekleme ve resim yükleme işlevlerini içerir.
+/*
+ * ÖZET:
+ * Bu dosya (ProductForm.jsx), Ürün katalogu, fason/satın alma detayları, barkod işlemleri ve toplu ürün güncelleme araçlarını içerir.
  */
+
+import { apiFetch } from '../../utils/api';
 import { useState, useEffect } from 'react';
 
 const ProductForm = ({ product, onClose, currentUser }) => {
@@ -29,7 +28,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
   const hasPerm = (key) => currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(key);
   const canManageFormula = hasPerm('formula_manage');
   
-  // Barcode parsing
+  // Barkod ayıklama (parsing)
   let initialBarcodes = [''];
   if (product?.Barcode) {
     if (Array.isArray(product.Barcode)) {
@@ -44,7 +43,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     }
   }
 
-  // Images parsing
+  // Görsel ayıklama (parsing)
   let initialImages = [];
   if (product?.ImagePath) {
     if (Array.isArray(product.ImagePath)) {
@@ -59,7 +58,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     }
   }
 
-  // Formula parsing
+  // Reçete ayıklama (parsing)
   let initialFormula = [];
   if (product?.Formula) {
       try {
@@ -71,10 +70,16 @@ const ProductForm = ({ product, onClose, currentUser }) => {
       }
   }
 
+  // 1. Durum (State) Tanımlamaları ve Hook'lar
+
   const [formData, setFormData] = useState({
     ProductName: product?.ProductName || '',
     Brand: product?.Brand || '',
     Category: product?.Category || '',
+    supply_type: product?.supply_type || 'MANUFACTURE',
+    unit_type: product?.unit_type || 'Adet',
+    package_capacity: product?.package_capacity || 1,
+    package_name: product?.package_name || 'Kutu',
     PurchasePrice: product?.PurchasePrice || 0,
     SalePrice: product?.SalePrice || 0,
     StockQuantity: product?.StockQuantity || 0,
@@ -108,9 +113,26 @@ const ProductForm = ({ product, onClose, currentUser }) => {
   const [materialsList, setMaterialsList] = useState([]);
   const [machineList, setMachineList] = useState([]);
   const [supplierList, setSupplierList] = useState([]);
-  const [contractFile, setContractFile] = useState(null);
+  
+  const [productSuppliers, setProductSuppliers] = useState(
+    product?.suppliers && product.suppliers.length > 0 
+      ? product.suppliers.map(s => ({
+          localId: Math.random().toString(36).substr(2, 9),
+          supplier_id: s.supplier_id || '',
+          unit_price: s.unit_price || '',
+          contract_start_date: s.contract_start_date ? s.contract_start_date.split('T')[0] : '',
+          contract_end_date: s.contract_end_date ? s.contract_end_date.split('T')[0] : '',
+          contract_file: s.contract_file || null,
+          remove_contract: false,
+          fileObj: null
+        }))
+      : [{ localId: Math.random().toString(36).substr(2, 9), supplier_id: '', unit_price: '', contract_start_date: '', contract_end_date: '', contract_file: null, remove_contract: false, fileObj: null }]
+  );
+  
+  // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
   
   useEffect(() => {
+    // 3. Backend API İstekleri (Veri Çekme)
     const fetchMaterialsAndMachines = async () => {
         try {
             const [matRes, machRes, suppRes] = await Promise.all([
@@ -137,7 +159,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     fetchMaterialsAndMachines();
   }, []);
 
-  // Barkod Modal States
+  // Barkod Modal State'leri
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState('');
   const [currentScanningIndex, setCurrentScanningIndex] = useState(null);
@@ -245,6 +267,8 @@ const ProductForm = ({ product, onClose, currentUser }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -303,7 +327,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
   const removeStep = (stepIndex) => {
     let newSteps = routingSteps.filter((_, i) => i !== stepIndex);
     if (newSteps.length === 0) newSteps.push({ step: 1, operation: '', machine_id: '', duration: '', materials: [] });
-    // Re-index steps
+    // Adımları yeniden indeksle
     newSteps = newSteps.map((s, i) => ({ ...s, step: i + 1 }));
     setRoutingSteps(newSteps);
   };
@@ -324,6 +348,31 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     const newSteps = [...routingSteps];
     newSteps[stepIndex].materials = newSteps[stepIndex].materials.filter((_, i) => i !== matIndex);
     setRoutingSteps(newSteps);
+  };
+
+  const handleProductSupplierChange = (index, field, value) => {
+    const newSuppliers = [...productSuppliers];
+    newSuppliers[index][field] = value;
+    setProductSuppliers(newSuppliers);
+  };
+
+  const handleProductSupplierFileChange = (index, file) => {
+    const newSuppliers = [...productSuppliers];
+    newSuppliers[index].fileObj = file;
+    newSuppliers[index].remove_contract = false;
+    setProductSuppliers(newSuppliers);
+  };
+
+  const addProductSupplier = () => {
+    setProductSuppliers([...productSuppliers, { localId: Math.random().toString(36).substr(2, 9), supplier_id: '', unit_price: '', contract_start_date: '', contract_end_date: '', contract_file: null, remove_contract: false, fileObj: null }]);
+  };
+
+  const removeProductSupplier = (index) => {
+    const newSuppliers = productSuppliers.filter((_, i) => i !== index);
+    if (newSuppliers.length === 0) {
+      newSuppliers.push({ localId: Math.random().toString(36).substr(2, 9), supplier_id: '', unit_price: '', contract_start_date: '', contract_end_date: '', contract_file: null, remove_contract: false, fileObj: null });
+    }
+    setProductSuppliers(newSuppliers);
   };
 
   const handleSubmit = async (e) => {
@@ -347,21 +396,21 @@ const ProductForm = ({ product, onClose, currentUser }) => {
       submitData.delete('ExpirationDate');
     }
     
-    // Add stacking fields using set to overwrite any value from forEach
+    // forEach'ten gelen herhangi bir değeri ezmek için yığın (stacking) alanlarını ekle
     submitData.set('is_stackable', formData.is_stackable ? 1 : 0);
     submitData.set('max_stack_limit', formData.max_stack_limit || 1);
 
-    // Filter out empty barcodes
+    // Boş barkodları filtrele
     const validBarcodes = barcodes.filter(b => b.trim() !== '');
     submitData.set('Barcode', JSON.stringify(validBarcodes));
 
-    // Combine existing images and new URL images
+    // Mevcut görselleri ve yeni URL görsellerini birleştir
     const validNewUrls = newImageUrls.filter(u => u.trim() !== '');
     const combinedExisting = [...existingImages, ...validNewUrls];
     submitData.set('existingImages', JSON.stringify(combinedExisting));
 
-    // Filter and save Routing/Formula JSON
-    // Clean empty steps and materials
+    // Reçete JSON'ını filtrele ve kaydet
+    // Boş adımları ve malzemeleri temizle
     const validSteps = routingSteps.filter(s => s.operation.trim() !== '' || s.machine_id !== '').map(s => ({
         ...s,
         machine_id: parseInt(s.machine_id) || null,
@@ -369,7 +418,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
         materials: s.materials.filter(m => m.material.trim() !== '')
     }));
     
-    // Auto-calculate total production time from steps
+    // Adımlardan toplam üretim süresini otomatik hesapla
     const totalTime = validSteps.reduce((sum, s) => sum + s.duration, 0);
     submitData.set('ProductionTime', totalTime);
     
@@ -381,8 +430,18 @@ const ProductForm = ({ product, onClose, currentUser }) => {
       });
     }
 
-    if (contractFile) {
-        submitData.append('contractFile', contractFile);
+    if (formData.supply_type === 'PURCHASE' || formData.supply_type === 'OUTSOURCED') {
+      const validSuppliers = productSuppliers.filter(s => s.supplier_id);
+      submitData.set('suppliers', JSON.stringify(validSuppliers));
+      
+      validSuppliers.forEach((s, index) => {
+        if (s.fileObj) {
+          submitData.append(`contractFile_${s.localId || index}`, s.fileObj);
+        }
+      });
+    } else {
+      submitData.delete('suppliers');
+      submitData.delete('supplier_id');
     }
 
     try {
@@ -407,6 +466,8 @@ const ProductForm = ({ product, onClose, currentUser }) => {
       setLoading(false);
     }
   };
+
+  // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
   return (
     <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -530,7 +591,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap' }}>Çap (cm) <span style={{color: '#94a3b8', fontWeight: 'normal', fontSize: '11px'}}>(Silindirik)</span></label>
               <input type="number" step="0.01" name="Diameter" value={formData.Diameter} onChange={handleChange} placeholder="Örn: 8" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
@@ -539,6 +600,11 @@ const ProductForm = ({ product, onClose, currentUser }) => {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ağırlık (kg/gr)</label>
               <input type="number" step="0.01" name="Weight" value={formData.Weight} onChange={handleChange} placeholder="Örn: 1.5" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ fontSize: '13px', fontWeight: '600', color: '#ef4444', marginBottom: '6px' }}>Kritik Stok Seviyesi</label>
+              <input type="number" step="1" min="0" name="critical_stock_level" value={formData.critical_stock_level} onChange={handleChange} placeholder="Örn: 100" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #fca5a5' }} />
             </div>
           </div>
 
@@ -555,8 +621,70 @@ const ProductForm = ({ product, onClose, currentUser }) => {
               </div>
             )}
           </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Tedarik Tipi *</label>
+            <select name="supply_type" value={formData.supply_type} onChange={handleChange} required style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
+              <option value="MANUFACTURE">Kendi Üretimimiz</option>
+              <option value="PURCHASE">Satın Alınan (Hazır / Ticari)</option>
+              <option value="OUTSOURCED">Fason Üretim (Dışarıda Yaptırılan)</option>
+            </select>
+          </div>
 
-
+          {(formData.supply_type === 'PURCHASE' || formData.supply_type === 'OUTSOURCED') && (
+            <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <label style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>
+                        {formData.supply_type === 'OUTSOURCED' ? 'Fason Üreticiler & Sözleşmeler' : 'Tedarikçi Firmalar & Sözleşmeler'}
+                    </label>
+                    <button type="button" onClick={addProductSupplier} style={{ fontSize: '12px', padding: '6px 12px', backgroundColor: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}>+ Tedarikçi Ekle</button>
+                </div>
+                
+                {productSuppliers.map((supplier, sIndex) => (
+                    <div key={supplier.localId || sIndex} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>Tedarikçi {sIndex + 1}</span>
+                            {productSuppliers.length > 1 && (
+                                <button type="button" onClick={() => removeProductSupplier(sIndex)} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>Sil ✕</button>
+                            )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Firma Seçimi *</label>
+                                <select value={supplier.supplier_id} onChange={(e) => handleProductSupplierChange(sIndex, 'supplier_id', e.target.value)} required style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '13px' }}>
+                                    <option value="">Seçiniz...</option>
+                                    {supplierList.map(s => (
+                                        <option key={s.Id} value={s.Id}>{s.SupplierName}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Birim Fiyat (₺)</label>
+                                <input type="number" step="0.01" value={supplier.unit_price} onChange={(e) => handleProductSupplierChange(sIndex, 'unit_price', e.target.value)} placeholder="0.00" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Başlangıç</label>
+                                <input type="date" value={supplier.contract_start_date} onChange={(e) => handleProductSupplierChange(sIndex, 'contract_start_date', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Bitiş</label>
+                                <input type="date" value={supplier.contract_end_date} onChange={(e) => handleProductSupplierChange(sIndex, 'contract_end_date', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gridColumn: '1 / -1' }}>
+                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Dosyası (PDF vb.)</label>
+                                {supplier.contract_file && !supplier.remove_contract && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', padding: '8px', backgroundColor: '#ecfdf5', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
+                                        <a href={supplier.contract_file.startsWith('http') ? supplier.contract_file : `http://localhost:3000${supplier.contract_file}`} target="_blank" rel="noreferrer" style={{ fontSize: '13px', color: '#059669', textDecoration: 'none', fontWeight: '500' }}>Mevcut Sözleşmeyi Görüntüle</a>
+                                        <button type="button" onClick={() => handleProductSupplierChange(sIndex, 'remove_contract', true)} style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Kaldır</button>
+                                    </div>
+                                )}
+                                <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => handleProductSupplierFileChange(sIndex, e.target.files[0])} style={{ padding: '6px', border: '1px dashed #94a3b8', borderRadius: '6px', fontSize: '12px' }} />
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '24px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -602,7 +730,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
             )}
         </div>
 
-        {canManageFormula && (
+        {canManageFormula && formData.supply_type !== 'PURCHASE' && (
           <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '24px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <div>

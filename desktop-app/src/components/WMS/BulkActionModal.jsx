@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (BulkActionModal.jsx), Mal kabul, stok giriş/çıkış, raf transferleri ve genel depo envanter işlemlerini (Warehouse Management System) yönetir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const BulkActionModal = ({ isOpen, onClose, selectedIds, currentUser, onActionSuccess }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [actionType, setActionType] = useState('ADD'); // ADD, REMOVE, ZERO_OUT, TRANSFER
     const [quantity, setQuantity] = useState('');
     const [description, setDescription] = useState('');
@@ -28,9 +34,11 @@ const BulkActionModal = ({ isOpen, onClose, selectedIds, currentUser, onActionSu
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         if (isOpen) {
-            // Reset states when opened
+            // Durumu sıfırlas when opened
             setActionType('ADD');
             setQuantity('');
             setDescription('');
@@ -39,6 +47,7 @@ const BulkActionModal = ({ isOpen, onClose, selectedIds, currentUser, onActionSu
             setError(null);
             
             // Fetch warehouses
+            // 3. Backend API İstekleri (Veri Çekme)
             const fetchWarehouses = async () => {
                 try {
                     const res = await apiFetch('http://localhost:3000/api/warehouses');
@@ -103,6 +112,8 @@ const BulkActionModal = ({ isOpen, onClose, selectedIds, currentUser, onActionSu
     };
 
     if (!isOpen) return null;
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>

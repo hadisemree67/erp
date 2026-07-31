@@ -1,22 +1,13 @@
-/**
- * ============================================================================
- * DOSYA ADI: orders.js
- * MODÜL / KATMAN: Arkayüz Rota Tanımları - Müşteri Siparişleri Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Gelen müşteri siparişlerinin (B2B / B2C) oluşturulması, listelenmesi, kalemlerinin (orderitems) yönetimi ve durum takibi (Beklemede, Hazırlanıyor vb.) işlevlerini yürütür.
- *   
- * YENİ EKLENEN ÖZELLİKLER (WMS ENTEGRASYONU):
- *   - FEFO (İlk Biten İlk Çıkar): Sipariş oluşturulduğunda stoklar rastgele değil, Son Kullanma Tarihi (SKT) en yakın olan partiden (batch) düşülür.
- *   - Kesin İade Takibi (deducted_batches): Sipariş oluşurken hangi raftan/partiden ne kadar ürün alındığı 'deducted_batches' isimli JSON sütununa kaydedilir.
- *   - Doğru İade Mantığı: Sipariş iptal edildiğinde veya silindiğinde, stoklar Ana Depo'ya değil, BİREBİR alındıkları orijinal raflarına (ve partilerine) aynı miktarda iade edilir.
- * 
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu modül, müşteri siparişlerinin (B2B/B2C) oluşturulması, listelenmesi ve kargo süreçlerinin 
+ * (paketleme, 3D kutu seçimi, WMS entegrasyonu ile stok düşümü) yönetildiği rotaları içerir.
  */
 
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 
 // GET /api/orders - Tüm siparişleri ve kalemlerini getir
 router.get('/', async (req, res) => {
@@ -104,7 +95,7 @@ router.post('/', async (req, res) => {
 
             // Mevcut stoku kontrol et
             const [stockRows] = await connection.query(`
-                SELECT p.ProductName, p.Barcode as ProductCode, COALESCE(SUM(b.quantity), 0) as currentStock
+                SELECT p.ProductName, p.Barcode as ProductCode, p.supply_type, p.Category, COALESCE(SUM(b.quantity), 0) as currentStock
                 FROM products p
                 LEFT JOIN wms_stock_balances b ON p.Id = b.product_id
                 WHERE p.Id = ?
@@ -118,18 +109,26 @@ router.post('/', async (req, res) => {
                 // STOK AŞILIYOR mu? (Örn: Sipariş 10 adet, stokta 4 adet var -> 6 adet eksik!)
                 if (qty > currentStock) {
                     const missingQty = qty - currentStock;
-                    const reason = `Müşteri Siparişi (${orderNumber}) için stok yetersizliğinden otomatik oluşturuldu. Sipariş Edilen: ${qty}, Mevcut Stok: ${currentStock}, Üretilmesi Gereken: ${missingQty} Adet.`;
+                    const reason = `Müşteri Siparişi (${orderNumber}) için stok yetersizliğinden otomatik oluşturuldu. Sipariş Edilen: ${qty}, Mevcut Stok: ${currentStock}, Eksik: ${missingQty} Adet.`;
 
-                    await connection.query(`
-                        INSERT INTO production_requests (product_id, requested_quantity, source, creator, reason, priority, status, created_at)
-                        VALUES (?, ?, 'Müşteri Siparişi', 'Sistem Otomasyonu', ?, 'Acil', 'Bekliyor', NOW())
-                    `, [productId, missingQty, reason]);
+                    if (pInfo.supply_type === 'MANUFACTURE') {
+                        await connection.query(`
+                            INSERT INTO production_requests (product_id, requested_quantity, source, creator, reason, priority, status, created_at)
+                            VALUES (?, ?, 'Müşteri Siparişi', 'Sistem Otomasyonu', ?, 'Acil', 'Bekliyor', NOW())
+                        `, [productId, missingQty, reason]);
+                    } else if (pInfo.supply_type === 'PURCHASE' || pInfo.supply_type === 'OUTSOURCED' || pInfo.Category === 'Hammadde') {
+                        await connection.query(`
+                            INSERT INTO purchase_requests (product_name, quantity, description, status)
+                            VALUES (?, ?, ?, 'Bekliyor')
+                        `, [pInfo.ProductName, missingQty, reason]);
+                    }
 
                     autoProductionRequests.push({
                         productName: pInfo.ProductName,
                         missingQty: missingQty,
                         currentStock: currentStock,
-                        orderedQty: qty
+                        orderedQty: qty,
+                        reqType: pInfo.supply_type === 'MANUFACTURE' ? 'Üretim' : 'Satın Alma'
                     });
                 }
             }
@@ -167,10 +166,17 @@ router.post('/', async (req, res) => {
 
         await connection.commit();
 
+        // Arka planda tüm kalemler için kritik stok kontrolünü tetikle
+        for (const item of items) {
+            if (item.productId) {
+                checkAndNotifyLowStock(item.productId).catch(err => console.error('Kritik stok kontrol hatası (orders):', err));
+            }
+        }
+
         let msg = `Sipariş (${orderNumber}) başarıyla oluşturuldu.`;
         if (autoProductionRequests.length > 0) {
-            const names = autoProductionRequests.map(r => `${r.productName} (${r.missingQty} Adet Üretim Talebi)`).join(', ');
-            msg += `\n⚠️ DİKKAT: Stok yetersizliği nedeniyle şu ürünler için otomatik ACİL Üretim Talebi açıldı:\n${names}`;
+            const names = autoProductionRequests.map(r => `${r.productName} (${r.missingQty} Adet ${r.reqType} Talebi)`).join(', ');
+            msg += `\n⚠️ DİKKAT: Stok yetersizliği nedeniyle otomatik talepler açıldı:\n${names}`;
         }
 
         res.json({
@@ -360,7 +366,7 @@ router.put('/:id/approve', async (req, res) => {
     try {
         const orderId = req.params.id;
         
-        // 1. Fetch order items with their product dimensions
+        // 1. Sipariş kalemlerini ürün boyutlarıyla birlikte getir
         const [items] = await db.query(`
             SELECT oi.Quantity, p.Width, p.Height, p.Depth, p.Weight
             FROM orderitems oi
@@ -384,14 +390,14 @@ router.put('/:id/approve', async (req, res) => {
             totalWeight += weight * qty;
         }
         
-        // 2. Fetch all active boxes
+        // 2. Tüm aktif kutuları getir
         const [boxes] = await db.query('SELECT * FROM packaging_boxes WHERE IsActive = 1');
         
         if (boxes.length === 0) {
             return res.status(400).json({ success: false, message: 'Sistemde aktif kutu tanımı bulunmuyor.' });
         }
         
-        // Calculate max volume for each box
+        // Her kutu için maksimum hacmi hesapla
         const processedBoxes = boxes.map(b => ({
             ...b,
             volume: parseFloat(b.Width) * parseFloat(b.Height) * parseFloat(b.Depth),
@@ -400,7 +406,7 @@ router.put('/:id/approve', async (req, res) => {
             emptyWeight: parseFloat(b.EmptyWeight)
         }));
         
-        // 3. Find optimal box combination using 3D Packing (Guillotine Split Heuristic)
+        // 3. 3D Paketleme (Giyotin Bölme Sezgiseli) kullanarak optimum kutu kombinasyonunu bul
         function packSingleBox(units, boxW, boxH, boxD, maxWeight) {
             let spaces = [{ w: boxW, h: boxH, d: boxD }];
             let currentWeight = 0;
@@ -506,7 +512,7 @@ router.put('/:id/approve', async (req, res) => {
             }
         }
         
-        // Final calculations
+        // Son hesaplamalar
         let finalBoxWeight = 0;
         let selectedBoxInfo = [];
         for(let box of bestCombo) {
@@ -516,10 +522,10 @@ router.put('/:id/approve', async (req, res) => {
         
         const overallTotalWeight = totalWeight + finalBoxWeight;
         
-        // 4. Generate Cargo Barcode
+        // 4. Kargo Barkodu Oluştur
         const cargoBarcode = 'CRG-' + orderId + '-' + Date.now().toString().slice(-4);
         
-        // 5. Update Order
+        // 5. Siparişi Güncelle
         await db.query(`
             UPDATE orders 
             SET OrderStatus = 'Onaylandı', CargoBarcode = ?, TotalWeight = ?, packaging_info = ?

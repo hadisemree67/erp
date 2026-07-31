@@ -14,6 +14,11 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (EmployeeForm.jsx), Personel listesi, mesai (overtime) ve izin (leave) yönetim arayüzlerini içerir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState } from 'react';
 
@@ -34,6 +39,8 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
         "Hukuk": ["Kurum Avukatı", "Hukuk Müşaviri", "Yasal Uyum Uzmanı"]
     };
 
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
+
     const [formData, setFormData] = useState({
         full_name: employee?.full_name || '',
         department: employee?.department || '',
@@ -53,6 +60,8 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleChange = (e) => {
         const { name, value, type, files } = e.target;
@@ -108,6 +117,8 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
             setLoading(false);
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>

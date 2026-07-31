@@ -14,6 +14,11 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (GlobalErrorBoundary.jsx), Uygulamanın ana çekirdeği; genel yönlendirme (routing), kenar çubuğu (Sidebar) ve hata yakalama (ErrorBoundary) yapılarını barındırır.
+ */
+
 import React from 'react';
 
 class GlobalErrorBoundary extends React.Component {
@@ -33,6 +38,7 @@ class GlobalErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      // 5. Arayüz (UI) Çizimi ve Render Edilmesi
       return (
         <div style={{ padding: '20px', backgroundColor: 'white', color: 'red', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, overflow: 'auto' }}>
           <h2>React Kritik Çökme!</h2>

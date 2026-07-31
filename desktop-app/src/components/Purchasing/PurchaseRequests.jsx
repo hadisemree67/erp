@@ -14,16 +14,22 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (PurchaseRequests.jsx), Satın alma talepleri, onay süreçleri ve satın alma siparişlerinin takibini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const PurchaseRequests = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [showManualForm, setShowManualForm] = useState(false);
     
-    // Manual Request Form State
+    // Manuel Talep Formu State'i
     const [formData, setFormData] = useState({
         product_name: '',
         quantity: '',
@@ -37,6 +43,8 @@ const PurchaseRequests = ({ currentUser }) => {
 
     const [materials, setMaterials] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchMaterialsAndSuppliers = async () => {
         try {
@@ -85,6 +93,8 @@ const PurchaseRequests = ({ currentUser }) => {
             console.error('Sessiz güncelleme hatası:', err);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchRequests();
@@ -220,6 +230,8 @@ const PurchaseRequests = ({ currentUser }) => {
         return name.charAt(0).toUpperCase() + name.slice(1);
     };
 
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
+
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -252,17 +264,21 @@ const PurchaseRequests = ({ currentUser }) => {
                                     const selectedMat = materials.find(m => m.ProductName === val);
                                     let locked = false;
                                     
-                                    if (selectedMat && selectedMat.supplier_id) {
-                                        if (selectedMat.contract_end_date) {
-                                            const endDate = new Date(selectedMat.contract_end_date);
+                                    const primarySupplier = selectedMat?.suppliers?.find(s => s.is_primary === 1) || selectedMat?.suppliers?.[0];
+                                    const supplierIdToUse = primarySupplier ? primarySupplier.supplier_id : selectedMat?.supplier_id;
+                                    const contractEndDateToUse = primarySupplier ? primarySupplier.contract_end_date : selectedMat?.contract_end_date;
+
+                                    if (selectedMat && supplierIdToUse) {
+                                        if (contractEndDateToUse) {
+                                            const endDate = new Date(contractEndDateToUse);
                                             const now = new Date();
-                                            // Ignore time for contract end date comparison
+                                            // Sözleşme bitiş tarihi kıyaslamasında saati yoksay
                                             now.setHours(0, 0, 0, 0);
                                             if (endDate >= now) {
                                                 locked = true;
                                             }
                                         }
-                                        setFormData({...formData, product_name: val, supplier_id: String(selectedMat.supplier_id)});
+                                        setFormData({...formData, product_name: val, supplier_id: String(supplierIdToUse)});
                                     } else {
                                         setFormData({...formData, product_name: val, supplier_id: ''});
                                     }

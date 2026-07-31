@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (GoodsReceipt.jsx), Mal kabul, stok giriş/çıkış, raf transferleri ve genel depo envanter işlemlerini (Warehouse Management System) yönetir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const GoodsReceipt = () => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [orders, setOrders] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [locations, setLocations] = useState([]);
@@ -34,6 +40,8 @@ const GoodsReceipt = () => {
         batch_number: '',
         expiration_date: ''
     });
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchData = async () => {
         setLoading(true);
@@ -73,6 +81,8 @@ const GoodsReceipt = () => {
             setLocations([]);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         if (!modal.isOpen || !modal.warehouse_id || !modal.order) {
@@ -217,6 +227,8 @@ const GoodsReceipt = () => {
         }
     };
 
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
+
     const handleWarehouseChange = (e) => {
         const whId = e.target.value;
         const remQty = Math.max(0, (parseFloat(modal.order?.quantity) || 0) - (parseFloat(modal.order?.received_quantity) || 0));
@@ -351,6 +363,8 @@ const GoodsReceipt = () => {
             alert('Ağ hatası oluştu.');
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div>

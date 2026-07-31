@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu script, ambalaj kutularının tedarikçi ve minimum stok seviyelerini 
+ * takip etmek için "packaging_boxes" tablosuna gerekli sütunları ekler.
+ */
+
 const db = require('./db');
 
 async function updateBoxDb() {

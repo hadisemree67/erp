@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (EmployeeOffboard.jsx), Personel listesi, mesai (overtime) ve izin (leave) yönetim arayüzlerini içerir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const EmployeeOffboard = ({ currentUser, onClose }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [activeTab, setActiveTab] = useState('new'); // 'new' or 'pending'
     const [employees, setEmployees] = useState([]);
     const [pendingRequests, setPendingRequests] = useState([]);
@@ -42,6 +48,8 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
         '46': { label: 'Kod 46-50 (Ahlak Kurallarına Aykırılık / Devamsızlık)', paysSeverance: false }
     };
 
+    // 3. Backend API İstekleri (Veri Çekme)
+
     const fetchEmployees = async () => {
         try {
             const res = await apiFetch('http://localhost:3000/api/employees');
@@ -54,6 +62,8 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
             console.error(err);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchEmployees();
@@ -161,6 +171,8 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
             }
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div>

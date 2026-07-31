@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (MachineList.jsx), Üretim talepleri, makineler, reçete (BOM) tanımları ve aktif üretim süreçlerini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const MachineList = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [machines, setMachines] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -43,6 +49,8 @@ const MachineList = ({ currentUser }) => {
     const [reportingMachine, setReportingMachine] = useState(null);
     const [issueDescription, setIssueDescription] = useState('');
     const [reportingLoading, setReportingLoading] = useState(false);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchMachines = async () => {
         setLoading(true);
@@ -71,10 +79,14 @@ const MachineList = ({ currentUser }) => {
         }
     };
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         fetchMachines();
         fetchCategories();
     }, []);
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleCategoryToggle = (catName) => {
         if (selectedCategories.includes(catName)) {
@@ -240,6 +252,8 @@ const MachineList = ({ currentUser }) => {
             return '-';
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
@@ -494,4 +508,3 @@ const MachineList = ({ currentUser }) => {
 };
 
 export default MachineList;
-

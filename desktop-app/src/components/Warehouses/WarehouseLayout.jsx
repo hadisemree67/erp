@@ -14,14 +14,20 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (WarehouseLayout.jsx), Depo tanımları, raf koordinatları ve depo yerleşim düzeninin (Layout) görselleştirilmesini sağlar.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const WarehouseLayout = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [warehouses, setWarehouses] = useState([]);
     const [selectedWarehouse, setSelectedWarehouse] = useState('');
     
-    // We get locations (shelves) from the selected warehouse's Shelves_Details
+    // Seçili deponun raf bilgilerini (Shelves_Details) alırız
     const [locations, setLocations] = useState([]);
     
     const [floors, setFloors] = useState([{ id: 1, name: 'Zemin Kat', rows: 10, cols: 10, items: [] }]);
@@ -63,7 +69,10 @@ const WarehouseLayout = ({ currentUser }) => {
     const [submittingStock, setSubmittingStock] = useState(false);
     const [labelInput, setLabelInput] = useState('');
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
+        // 3. Backend API İstekleri (Veri Çekme)
         const fetchProds = async () => {
             try {
                 const res = await apiFetch('http://localhost:3000/api/products');
@@ -161,6 +170,7 @@ const WarehouseLayout = ({ currentUser }) => {
     };
 
     // Yönlü Ekleme
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
     const handleAddDirection = () => {
         if (direction === 'top') {
             setRows(prev => prev + 1);
@@ -362,7 +372,7 @@ const WarehouseLayout = ({ currentUser }) => {
         } else if (modalData.type === 'bulk') {
             const isRow = modalData.targetType === 'row';
             const index = modalData.index;
-            // Clear existing items in that row/col
+            // O satır/sütundaki mevcut öğeleri temizle
             newItems = newItems.filter(i => isRow ? i.row !== index : i.col !== index);
             const limit = isRow ? cols : rows;
             for (let i = 0; i < limit; i++) {
@@ -628,9 +638,11 @@ const WarehouseLayout = ({ currentUser }) => {
             );
         }
 
-        // placed shelves
+        // Yerleştirilen raflar
         const placedShelfCodes = floors.flatMap(f => f.items.filter(i => i.type === 'shelf').map(i => i.name));
         const availableLocations = locations.filter(l => !placedShelfCodes.includes(l.shelfCode));
+
+        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
         return (
             <div className="layout-grid-container" style={{ marginTop: '20px', position: 'relative' }}>

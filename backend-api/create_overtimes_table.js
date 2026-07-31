@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu script, personel mesailerini tutmak için veritabanında "employee_overtimes" 
+ * tablosunu oluşturur.
+ */
+
 const db = require('./db');
 async function createTable() {
     try {

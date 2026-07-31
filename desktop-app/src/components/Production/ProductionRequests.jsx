@@ -14,22 +14,30 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (ProductionRequests.jsx), Üretim talepleri, makineler, reçete (BOM) tanımları ve aktif üretim süreçlerini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 
 const ProductionRequests = ({ currentUser, onNavigate }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [requests, setRequests] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [showManualForm, setShowManualForm] = useState(false);
     
-    // Manual Request Form State
+    // Manuel Talep Formu State'i
     const [formData, setFormData] = useState({
         productId: '',
         quantity: '',
         reason: '',
         priority: 'Normal'
     });
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchRequests = async () => {
         setLoading(true);
@@ -58,6 +66,8 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
             console.error('Products fetch error:', err);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchRequests();
@@ -142,6 +152,8 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
             alert('Durum güncellenemedi.');
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div>

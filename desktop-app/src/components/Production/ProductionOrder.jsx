@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (ProductionOrder.jsx), Üretim talepleri, makineler, reçete (BOM) tanımları ve aktif üretim süreçlerini içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const ProductionOrder = ({ currentUser, onNavigate }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [products, setProducts] = useState([]);
     const [users, setUsers] = useState([]);
     
@@ -55,6 +61,9 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
     const [limits, setLimits] = useState(null);
 
     
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
+    
     useEffect(() => {
         if (formData.product_id) {
             apiFetch(`http://localhost:3000/api/production/max-quantity/${formData.product_id}`)
@@ -79,6 +88,7 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
     }, [formData.product_id]);
 
     useEffect(() => {
+        // 3. Backend API İstekleri (Veri Çekme)
         const fetchInitialData = async () => {
             try {
                 const [pRes, uRes] = await Promise.all([
@@ -90,7 +100,7 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
                 const uData = await uRes.json();
 
                 if (Array.isArray(pData)) {
-                    setProducts(pData.filter(p => p.Formula && p.Formula.length > 5));
+                    setProducts(pData.filter(p => p.Formula && p.Formula.length > 5 && p.supply_type !== 'PURCHASE'));
                 }
                 if (uData.success) setUsers(uData.data);
             } catch (err) {
@@ -99,6 +109,8 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
         };
         fetchInitialData();
     }, []);
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleChange = (e) => {
         let val = e.target.value;
@@ -206,6 +218,8 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
             alert('Satın alma talebi gönderilirken hata oluştu.');
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>

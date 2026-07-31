@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu script, sistemde bulunan sipariş, kampanya, rapor, kategori ve üretim gibi 
+ * çeşitli işlemlere dair yetkileri topluca veritabanına ekler.
+ */
+
 const db = require('./db');
 
 async function updatePermissions() {

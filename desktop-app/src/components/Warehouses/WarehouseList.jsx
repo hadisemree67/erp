@@ -14,13 +14,21 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (WarehouseList.jsx), Depo tanımları, raf koordinatları ve depo yerleşim düzeninin (Layout) görselleştirilmesini sağlar.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const WarehouseList = ({ onNavigate, onEdit }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [warehouses, setWarehouses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchWarehouses = async () => {
         setLoading(true);
@@ -38,6 +46,8 @@ const WarehouseList = ({ onNavigate, onEdit }) => {
             setLoading(false);
         }
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchWarehouses();
@@ -62,6 +72,8 @@ const WarehouseList = ({ onNavigate, onEdit }) => {
             alert('Sunucu hatası.');
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ padding: '24px', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>

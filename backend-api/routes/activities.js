@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, sistemde gerçekleştirilen kullanıcı hareketlerini, log kayıtlarını 
+ * ve genel denetim (audit) izlerini sorgulamak/listelemek için API uç noktaları sağlar.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -23,7 +29,7 @@ const formatDatesForMySQL = (data) => {
     const formatted = { ...data };
     for (let key in formatted) {
         if (typeof formatted[key] === 'string' && formatted[key].match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
-            // Convert to YYYY-MM-DD HH:MM:SS
+            // Tarih bilgisini YYYY-MM-DD HH:MM:SS formatına dönüştürüyoruz
             formatted[key] = new Date(formatted[key]).toISOString().slice(0, 19).replace('T', ' ');
         }
     }

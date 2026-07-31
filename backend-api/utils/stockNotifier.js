@@ -14,17 +14,19 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, stok seviyesi kritik sınırın altına düşen ürünleri tespit edip 
+ * otomatik satın alma talebi açan veya e-posta gönderen stok uyarı sistemidir.
+ */
+
 const db = require('../db');
 const { sendLowStockEmail } = require('../services/emailService');
 
-/**
- * Checks if stock drops below critical level and triggers email if necessary.
- * Implements 80/20 order splitting and shelf capacity calculation.
- * @param {number} productId 
- */
+// Kritik stok seviyesinin altına düşen ürünleri yakalayıp sipariş oluşturur
 const checkAndNotifyLowStock = async (productId) => {
     try {
-        // Fetch current total stock and product details
+        // Ürünün depodaki güncel toplam miktarını çekiyoruz
         const [productRows] = await db.query(`
             SELECT p.*, 
                    COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), 0) AS currentStock
@@ -35,13 +37,108 @@ const checkAndNotifyLowStock = async (productId) => {
         if (productRows.length === 0) return;
         const product = productRows[0];
 
-        // Ensure we have critical stock level
+        // Kritik stok girilmemişse veya stok hala yeterliyse pas geç
         if (!product.critical_stock_level || product.critical_stock_level <= 0) return;
-
-        // Ensure current stock is at or below critical level
         if (product.currentStock > product.critical_stock_level) return;
 
-        // Prevent spamming: Check if there's already an active (Bekliyor) purchase request for this product
+        // Son 6 ayın satış verisine bakarak ne kadar sipariş edeceğimizi bulalım
+        let orderQty = 0;
+        const [salesData] = await db.query(`
+            SELECT COALESCE(SUM(oi.Quantity), 0) as total_sold
+            FROM orderitems oi
+            JOIN orders o ON oi.OrderId = o.Id
+            WHERE oi.ProductId = ? AND o.OrderDate >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+        `, [productId]);
+
+        const totalSold = parseInt(salesData[0]?.total_sold) || 0;
+        
+        // Eğer satışı varsa, bi 6 ay daha idare edecek kadar sipariş açıyoruz
+        if (totalSold > 0) {
+            orderQty = totalSold - product.currentStock;
+        }
+        
+        // Eğer ürün yeni eklendiyse (hiç satışı yoksa), saçma sapan rakamlar çıkmasın diye kritik stok * 3 sipariş veriyoruz
+        if (orderQty <= 0) {
+            let fallbackQty = (product.critical_stock_level || 50) * 3;
+            orderQty = fallbackQty;
+        }
+
+        // Ürünün minimum üretim miktarı varsa onu eziyoruz (bant boşuna çalışmasın diye)
+        const minProduction = parseFloat(product.minimum_production_quantity) || 0;
+        if (minProduction > 0 && orderQty < minProduction) {
+            orderQty = minProduction;
+        }
+
+        // Üretilen (Fason/Dahili) ürünse makine kapasitelerine bakmamız lazım
+        if (product.supply_type === 'MANUFACTURE') {
+            try {
+                const formula = JSON.parse(product.Formula || '[]');
+                let totalPerProductVolume = 0;
+                let usedMachineIds = new Set();
+                
+                // Reçeteyi gezip 1 ürün için toplam ne kadar harcıyoruz hesaplıyoruz
+                for (const step of formula) {
+                    if (step.machine_id) usedMachineIds.add(step.machine_id);
+                    
+                    for (const mat of (step.materials || [])) {
+                        let mQty = parseFloat(mat.quantity) || 0;
+                        let mUnit = (mat.unit || '').toLowerCase();
+                        // Hepsini KG / Litre bazına çeviriyoruz ki hesap kolay olsun
+                        if (mUnit === 'gr' || mUnit === 'ml') {
+                            totalPerProductVolume += (mQty / 1000);
+                        } else if (mUnit === 'kg' || mUnit === 'l' || mUnit === 'litre') {
+                            totalPerProductVolume += mQty;
+                        } else if (mUnit === 'tank') {
+                            totalPerProductVolume += (mQty * 1000); 
+                        }
+                    }
+                }
+                
+                // Kullanılan makinelerden min kapasitesi en yüksek olanı (en nazlısını) buluyoruz
+                if (usedMachineIds.size > 0 && totalPerProductVolume > 0) {
+                    const [machines] = await db.query('SELECT min_capacity FROM production_machines WHERE id IN (?)', [Array.from(usedMachineIds)]);
+                    
+                    let highestMinCapacity = 0;
+                    for (const m of machines) {
+                        const mMin = parseFloat(m.min_capacity) || 0;
+                        if (mMin > highestMinCapacity) highestMinCapacity = mMin;
+                    }
+                    
+                    if (highestMinCapacity > 0) {
+                        // Makineyi çalıştırmaya değecek kadar sipariş adedini buluyoruz
+                        const requiredPieces = Math.ceil(highestMinCapacity / totalPerProductVolume);
+                        if (orderQty < requiredPieces) {
+                            orderQty = requiredPieces;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Makine kapasite hesabında sorun çıktı:', err.message);
+            }
+
+            // Zaten bekleyen bir üretim talebi varsa yenisini açıp ortalığı karıştırmayalım
+            const [activeProdRequests] = await db.query(`
+                SELECT id FROM production_requests 
+                WHERE product_id = ? AND status IN ('Bekleyen', 'Üretimde')
+                LIMIT 1
+            `, [productId]);
+
+            if (activeProdRequests.length > 0) return; 
+
+            // Üretim talebini sisteme atıyoruz
+            await db.query(`
+                INSERT INTO production_requests (product_id, requested_quantity, source, reason, status, priority)
+                VALUES (?, ?, 'Sistem', 'Otomatik Kritik Stok Uyarıcısı', 'Bekleyen', 'Yüksek')
+            `, [productId, orderQty]);
+            return; 
+        }
+
+        // Satın alma veya Fason değilse işlem yapma (örn. Hammadde ise)
+        if (product.supply_type !== 'PURCHASE' && product.supply_type !== 'OUTSOURCED' && product.Category !== 'Hammadde') {
+            return; 
+        }
+
+        // Aynı üründen bekleyen satın alma varsa es geçiyoruz (çift sipariş olmasın)
         const [activeRequests] = await db.query(`
             SELECT id FROM purchase_requests 
             WHERE product_name = ? AND status IN ('Bekliyor', 'Fiyat Bekleniyor')
@@ -50,49 +147,7 @@ const checkAndNotifyLowStock = async (productId) => {
 
         if (activeRequests.length > 0) return;
 
-        // 1. Calculate Required Quantity based on empty volumetric space on all shelves where the product is currently stored
-        let orderQty = 0;
-        
-        const [balances] = await db.query('SELECT warehouse_id, shelf_code, SUM(quantity) as qty FROM wms_stock_balances WHERE product_id = ? AND quantity > 0 GROUP BY warehouse_id, shelf_code', [productId]);
-        
-        if (balances.length === 0) {
-            orderQty = product.critical_stock_level; // If not on any shelf, fallback to critical stock limit
-        } else {
-            for (const bal of balances) {
-                const [shelfData] = await db.query('SELECT max_volume FROM warehouse_shelves WHERE warehouse_id = ? AND shelf_code = ?', [bal.warehouse_id, bal.shelf_code]);
-                if (!shelfData || shelfData.length === 0) continue;
-                const maxVolume = parseFloat(shelfData[0]?.max_volume) || 0;
-                
-                // Calculate current filled volume of the entire shelf
-                const [filledRows] = await db.query('SELECT b.quantity, p.Volume, p.Width, p.Height, p.Depth, p.package_capacity FROM wms_stock_balances b JOIN products p ON b.product_id = p.Id WHERE b.warehouse_id = ? AND b.shelf_code = ?', [bal.warehouse_id, bal.shelf_code]);
-                
-                let currentFilled = 0;
-                for (const row of filledRows) {
-                    let rW = parseFloat(row.Width) || 0; let rH = parseFloat(row.Height) || 0; let rD = parseFloat(row.Depth) || 0;
-                    let vol = (rW > 0 && rH > 0 && rD > 0) ? (rW * rH * rD) : (parseFloat(row.Volume) || 0);
-                    let pCap = parseFloat(row.package_capacity) || 1;
-                    if (pCap <= 0) pCap = 1;
-                    currentFilled += Math.ceil(row.quantity / pCap) * vol;
-                }
-                
-                let emptyVolume = maxVolume - currentFilled;
-                if (emptyVolume < 0) emptyVolume = 0;
-                
-                // Calculate how many MORE items of THIS product can fit in the emptyVolume
-                let pW = parseFloat(product.Width) || 0; let pH = parseFloat(product.Height) || 0; let pD = parseFloat(product.Depth) || 0;
-                let containerVolume = (pW > 0 && pH > 0 && pD > 0) ? (pW * pH * pD) : (parseFloat(product.Volume) || 0);
-                
-                if (containerVolume > 0 && maxVolume >= containerVolume) {
-                    let maxAllowedByVolume = Math.floor(emptyVolume / containerVolume);
-                    let maxItems = maxAllowedByVolume * (parseFloat(product.package_capacity) || 1);
-                    orderQty += maxItems;
-                }
-            }
-        }
-        
-        if (orderQty <= 0) orderQty = product.critical_stock_level; // fallback if calculations yield 0
-
-        // 2. Fetch Suppliers for this product ordered by their addition
+        // Tedarikçileri çekiyoruz
         const [suppliers] = await db.query(`
             SELECT ps.*, s.SupplierName, s.Email 
             FROM product_suppliers ps
@@ -101,8 +156,8 @@ const checkAndNotifyLowStock = async (productId) => {
             ORDER BY ps.id ASC
         `, [productId]);
 
+        // Tedarikçisi yoksa boş bir kayıt açıyoruz sonradan bakarız diye
         if (suppliers.length === 0) {
-            // No suppliers, just create a general purchase request
             await db.query(`
                 INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
                 VALUES (?, ?, ?, 'Bekliyor', NULL)
@@ -110,39 +165,37 @@ const checkAndNotifyLowStock = async (productId) => {
             return;
         }
 
-        // 3. Apply 80-20 Rule
+        // %80 - %20 PAYLAŞIM KURALI (Riski dağıtmak için)
         if (suppliers.length === 1) {
-            // Only 1 supplier, 100% goes to them
+            // Tek tedarikçi varsa mecbur hepsini ona veriyoruz
             await db.query(`
                 INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
                 VALUES (?, ?, ?, 'Bekliyor', ?)
             `, [product.ProductName, orderQty, `Otomatik Kritik Stok (%100)`, suppliers[0].supplier_id]);
         } else {
-            // At least 2 suppliers. 80% to Supplier 1, 20% to Supplier 2
+            // Ana tedarikçiye %80, yedeğe %20 paslıyoruz
             const qty80 = Math.round(orderQty * 0.8) || 1;
             const qty20 = orderQty - qty80;
 
-            // Primary
+            // Ana tedarikçi
             await db.query(`
                 INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
                 VALUES (?, ?, ?, 'Bekliyor', ?)
             `, [product.ProductName, qty80, `Otomatik Kritik Stok (Ana Tedarikçi %80 Kota)`, suppliers[0].supplier_id]);
 
-            // Secondary
+            // Yedek tedarikçi
             if (qty20 > 0) {
                 await db.query(`
                     INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
                     VALUES (?, ?, ?, 'Bekliyor', ?)
-                `, [product.ProductName, qty20, `Otomatik Kritik Stok (Yedek Tedarikçi %20 Kota)`, suppliers[1].supplier_id]);
+                    `, [product.ProductName, qty20, `Otomatik Kritik Stok (Yedek Tedarikçi %20 Kota)`, suppliers[1].supplier_id]);
             }
 
-            // 4. Fallback for 3rd+ Suppliers (Email only)
+            // Diğer tedarikçilere de fiyat soralım ki piyasayı yoklayalım
             for (let i = 2; i < suppliers.length; i++) {
                 const sup = suppliers[i];
                 if (sup.Email) {
                     try {
-                        // Send quote request email
-                        // Normally we'd use a different template, but using existing one for now
                         await sendLowStockEmail(
                             sup.Email,
                             product.ProductName,
@@ -155,14 +208,14 @@ const checkAndNotifyLowStock = async (productId) => {
                             VALUES (?, ?, ?, 'Fiyat Bekleniyor', ?)
                         `, [product.ProductName, orderQty, `Fiyat Teklifi İstendi (3+ Yedek Tedarikçi)`, sup.supplier_id]);
                     } catch(e) {
-                        console.error('Failed to send email to 3rd+ supplier', e);
+                        console.error('Yedek tedarikçiye mail atarken sorun oldu:', e);
                     }
                 }
             }
         }
 
     } catch (error) {
-        console.error('Check and Notify Low Stock Error:', error);
+        console.error('Kritik stok kontrolünde hata:', error);
     }
 };
 

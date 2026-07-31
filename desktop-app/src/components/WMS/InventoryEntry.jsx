@@ -14,12 +14,19 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (InventoryEntry.jsx), Mal kabul, stok giriş/çıkış, raf transferleri ve genel depo envanter işlemlerini (Warehouse Management System) yönetir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null, onCancel, onSuccess }) => {
     const isEditProduct = !!editItem;
     const isAddStock = !!initialMaterialName && !editItem;
+
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
 
     const [products, setProducts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
@@ -50,6 +57,8 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
     const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
     const [scannedBarcode, setScannedBarcode] = useState('');
     const [currentScanningIndex, setCurrentScanningIndex] = useState(null);
+    
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
     
     const handleBarcodeChange = (index, value) => {
         const newBarcodes = [...barcodes];
@@ -136,6 +145,9 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
     const [error, setError] = useState(null);
 
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
+
     useEffect(() => {
         if (editItem) {
             const p = editItem.product || editItem;
@@ -165,6 +177,8 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
     const [success, setSuccess] = useState(false);
     const [shelfCapacities, setShelfCapacities] = useState({});
     const [allShelvesCapacity, setAllShelvesCapacity] = useState({});
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchProducts = async () => {
         try {
@@ -732,6 +746,8 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
     };
 
     const handleCreateMaterial = () => {};
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>

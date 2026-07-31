@@ -1,13 +1,20 @@
+/*
+ * ÖZET:
+ * Bu dosya (CourierDelivery.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
+ */
+
 import React, { useState } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const CourierDelivery = () => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [barcode, setBarcode] = useState('');
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [isSuccess, setIsSuccess] = useState(false);
 
+    // 1. Barkod İle Kargo Arama İşlemi
     const handleSearch = async (e) => {
         e.preventDefault();
         if (!barcode.trim()) return;
@@ -24,7 +31,7 @@ const CourierDelivery = () => {
             if (data.success) {
                 if (data.data.OrderStatus !== 'Hazırlandı') {
                     setStatusMessage(`Uyarı: Bu siparişin durumu "${data.data.OrderStatus}". Sadece "Hazırlandı" olanlar kargoya verilebilir.`);
-                    // We can still show it but disable button, or just block it. Let's show it.
+                    // Yine de gösterebiliriz ama butonu devre dışı bırakırız veya doğrudan engelleriz. Şimdilik gösterelim.
                 }
                 setOrder(data.data);
             } else {
@@ -38,6 +45,7 @@ const CourierDelivery = () => {
         }
     };
 
+    // 2. Siparişi "Kargoya Verildi" Olarak İşaretleme İşlemi
     const handleShip = async () => {
         if (!order) return;
         try {
@@ -62,6 +70,7 @@ const CourierDelivery = () => {
         }
     };
 
+        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ padding: '24px', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: `'Inter', sans-serif` }}>
             <div style={{ maxWidth: '700px', margin: '0 auto' }}>

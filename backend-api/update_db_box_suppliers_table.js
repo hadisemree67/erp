@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu script, kutu tedarikçileri ile yapılan anlaşmaları çoklu olarak tutabilmek için 
+ * "box_suppliers" tablosunu oluşturur ve eski tekli sütunları temizler.
+ */
+
 const db = require('./db');
 
 async function createBoxSuppliersTable() {
@@ -19,7 +25,7 @@ async function createBoxSuppliersTable() {
             )
         `);
 
-        // We can safely drop SupplierId and ContractNo from packaging_boxes since we migrated them out, but to avoid errors we'll just leave them or drop them safely.
+        // Eski verileri taşıdığımız için packaging_boxes tablosundaki SupplierId ve ContractNo sütunlarını güvenle silebiliriz.
         try {
             await db.query(`ALTER TABLE packaging_boxes DROP COLUMN SupplierId`);
             await db.query(`ALTER TABLE packaging_boxes DROP COLUMN ContractNo`);

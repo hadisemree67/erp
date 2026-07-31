@@ -1,12 +1,18 @@
+/*
+ * ÖZET:
+ * Bu dosya (OrderPacking.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
+ */
+
 import React, { useState, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const OrderPacking = () => {
+    // 1. Durum (State) Tanımlamaları
     const [barcode, setBarcode] = useState('');
     const [order, setOrder] = useState(null);
     const [loading, setLoading] = useState(false);
     
-    // For packing process
+    // Paketleme Süreci Durumları
     const [scannedProducts, setScannedProducts] = useState({});
     const [productBarcode, setProductBarcode] = useState('');
     const [statusColor, setStatusColor] = useState('white'); // 'white', 'green', 'red'
@@ -14,6 +20,7 @@ const OrderPacking = () => {
     
     const productInputRef = useRef(null);
 
+    // 2. Kargo Barkodu ile Sipariş Arama İşlemi
     const handleSearch = async (e) => {
         e.preventDefault();
         if (!barcode.trim()) return;
@@ -37,7 +44,7 @@ const OrderPacking = () => {
                 
                 setOrder(data.data);
                 
-                // Initialize scan counts
+                // Ürün okutma sayılarını sıfırla
                 const initialScans = {};
                 if (data.data.items) {
                     data.data.items.forEach(item => {
@@ -46,7 +53,7 @@ const OrderPacking = () => {
                 }
                 setScannedProducts(initialScans);
                 
-                // Focus on product scanner
+                // Barkod okuyucu girişine odaklan (Focus)
                 setTimeout(() => {
                     if (productInputRef.current) productInputRef.current.focus();
                 }, 100);
@@ -63,6 +70,7 @@ const OrderPacking = () => {
         }
     };
 
+        // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
     const handleProductScan = (e) => {
         e.preventDefault();
         const code = productBarcode.trim();
@@ -72,7 +80,7 @@ const OrderPacking = () => {
         const item = order.items.find(i => i.ProductCode === code);
         
         if (!item) {
-            setStatusColor('#fee2e2'); // red
+            setStatusColor('#fee2e2'); // kırmızı (hata)
             setStatusMessage(`HATA: "${code}" barkodlu ürün bu siparişte yok!`);
             setProductBarcode('');
             return;
@@ -88,11 +96,12 @@ const OrderPacking = () => {
         
         // Başarılı okuma
         setScannedProducts(prev => ({ ...prev, [code]: currentScanned + 1 }));
-        setStatusColor('#dcfce3'); // green
+        setStatusColor('#dcfce3'); // yeşil (başarılı)
         setStatusMessage(`Doğru Ürün! (${item.ProductName}) Kutuya At!`);
         setProductBarcode('');
     };
 
+    // 4. Siparişi Tamamlama İşlemi
     const handleComplete = async () => {
         // Kontrol et: eksik var mı?
         const isComplete = order.items.every(item => (scannedProducts[item.ProductCode] || 0) === item.Quantity);
@@ -127,6 +136,7 @@ const OrderPacking = () => {
 
     const isAllComplete = order && order.items && order.items.every(item => (scannedProducts[item.ProductCode] || 0) === item.Quantity);
 
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ padding: '24px', backgroundColor: statusColor !== 'white' ? statusColor : '#f8fafc', minHeight: '100vh', fontFamily: `'Inter', sans-serif`, transition: 'background-color 0.3s ease' }}>
             <div style={{ maxWidth: '900px', margin: '0 auto' }}>

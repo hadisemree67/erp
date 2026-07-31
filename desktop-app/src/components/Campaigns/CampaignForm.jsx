@@ -1,25 +1,6 @@
-/**
- * ============================================================================
- * DOSYA ADI: CampaignForm.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Kampanya Ekleme ve Düzenleme Formu
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Yeni kampanya eklemek veya mevcut kampanyayı düzenlemek için kullanılan
- *   gelişmiş, sadeleştirilmiş ve modernleştirilmiş kurumsal arayüzdür.
- *   Kullanıcının seçtiği "Kampanya Türü"ne göre ekrandaki koşul alanlarını
- *   dinamik olarak değiştirir. Sistemde kayıtlı ürünleri listeler, barkod
- *   okuyucu girdilerini dinleyerek spesifik ürünü veya hediye ürünü bağlar.
- *   Yatay kapak resminin yüklenmesini ve önizlenmesini sağlar.
- * 
- * TASARIM VE ESTETİK İLKELERİ:
- *   - Renk cümbüşünden uzak, koyu lacivert başlıklar (#0f172a), nane yeşili (#10b981) 
- *     ve temiz gri tonları (#f8fafc, #e2e8f0) ile sofistike kurumsal görünüm.
- *   - Her adım (1, 2, 3 vb.) kendine ait yuvarlatılmış, hafif gölgeli kartlar içinde.
- *   - Yüksek metin kontrastı ve göz yormayan minimalist düzen.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React (useState, useEffect), FormData, Fetch API (apiFetch), FileReader
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (CampaignForm.jsx), Kampanya listeleme, ekleme ve düzenleme işlemlerini yöneten bileşenleri içerir.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -28,6 +9,7 @@ import { apiFetch } from '../../utils/api';
 const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
     const isEdit = Boolean(campaign && campaign.id);
 
+        // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [formData, setFormData] = useState({
         title: campaign?.title || '',
         campaign_type: campaign?.campaign_type || 'buy_x_pay_y',
@@ -64,8 +46,11 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    // 2. Backend'den Veri Çekme (Fetch) İşlemi
     // Tüm kayıtlı ürünleri getir
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
     useEffect(() => {
+        // 3. Backend API İstekleri (Veri Çekme)
         const fetchProducts = async () => {
             try {
                 const res = await apiFetch('http://localhost:3000/api/products');
@@ -80,6 +65,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
         fetchProducts();
     }, []);
 
+        // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
     const handleChange = (e) => {
         const { name, value, type, files } = e.target;
         if (type === 'file') {
@@ -171,6 +157,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
         }
     };
 
+    // 4. Veri Kaydetme / Form Gönderim İşlemi
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -229,6 +216,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
         }
     };
 
+    // 5. Stil Tanımlamaları (UI Sabitleri)
     // Stil Sabitleri (Minimalist & Kurumsal Palet)
     const cardStyle = {
         backgroundColor: '#ffffff',
@@ -273,6 +261,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
         boxSizing: 'border-box'
     };
 
+        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ animation: 'fadeIn 0.25s ease', maxWidth: '860px', margin: '0 auto', paddingBottom: '40px', fontFamily: 'Inter, sans-serif' }}>
             {/* Üst Başlık Barı */}

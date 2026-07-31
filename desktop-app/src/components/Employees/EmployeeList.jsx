@@ -14,6 +14,11 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (EmployeeList.jsx), Personel listesi, mesai (overtime) ve izin (leave) yönetim arayüzlerini içerir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 import EmployeeForm from './EmployeeForm';
@@ -33,6 +38,7 @@ class ErrorBoundary extends React.Component {
     }
     render() {
         if (this.state.hasError) {
+            // 5. Arayüz (UI) Çizimi ve Render Edilmesi
             return (
                 <div style={{ padding: '20px', backgroundColor: 'white', color: 'red', borderRadius: '8px' }}>
                     <h2>Bir Hata Oluştu</h2>
@@ -49,6 +55,7 @@ class ErrorBoundary extends React.Component {
 }
 
 const EmployeeList = ({ currentUser, onNavigate }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -85,6 +92,8 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
         }
     };
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
             fetchEmployees(searchTerm);
@@ -109,6 +118,8 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
             alert('Sunucu bağlantı hatası.');
         }
     };
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleEdit = (employee) => {
         setEditingEmployee(employee);

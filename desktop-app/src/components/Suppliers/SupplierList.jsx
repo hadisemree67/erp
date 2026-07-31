@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (SupplierList.jsx), Tedarikçi firmaların, anlaşma tarihlerinin ve fason üretici detaylarının listelendiği bileşenleri içerir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const SupplierList = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -27,12 +33,17 @@ const SupplierList = ({ currentUser }) => {
         ContactPerson: '',
         Phone: '',
         Email: '',
-        Address: ''
+        Address: '',
+        supplier_type: 'Tedarikçi'
     });
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         fetchSuppliers();
     }, []);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchSuppliers = async () => {
         setLoading(true);
@@ -50,6 +61,8 @@ const SupplierList = ({ currentUser }) => {
             setLoading(false);
         }
     };
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleInputChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -76,7 +89,7 @@ const SupplierList = ({ currentUser }) => {
             if (data.success) {
                 setShowModal(false);
                 setEditingSupplier(null);
-                setFormData({ SupplierName: '', ContactPerson: '', Phone: '', Email: '', Address: '' });
+                setFormData({ SupplierName: '', ContactPerson: '', Phone: '', Email: '', Address: '', supplier_type: 'Tedarikçi' });
                 fetchSuppliers();
             } else {
                 alert(data.message || 'Bir hata oluştu.');
@@ -93,7 +106,8 @@ const SupplierList = ({ currentUser }) => {
             ContactPerson: supplier.ContactPerson || '',
             Phone: supplier.Phone || '',
             Email: supplier.Email || '',
-            Address: supplier.Address || ''
+            Address: supplier.Address || '',
+            supplier_type: supplier.supplier_type || 'Tedarikçi'
         });
         setShowModal(true);
     };
@@ -117,6 +131,8 @@ const SupplierList = ({ currentUser }) => {
         }
     };
 
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
+
     return (
         <div style={{ padding: '24px', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -124,7 +140,7 @@ const SupplierList = ({ currentUser }) => {
                 <button
                     onClick={() => {
                         setEditingSupplier(null);
-                        setFormData({ SupplierName: '', ContactPerson: '', Phone: '', Email: '', Address: '' });
+                        setFormData({ SupplierName: '', ContactPerson: '', Phone: '', Email: '', Address: '', supplier_type: 'Tedarikçi' });
                         setShowModal(true);
                     }}
                     style={{
@@ -163,7 +179,20 @@ const SupplierList = ({ currentUser }) => {
                         ) : (
                             suppliers.map(supplier => (
                                 <tr key={supplier.Id} className="hover-row" style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.15s' }}>
-                                    <td style={{ padding: '16px', color: '#1e293b', fontWeight: '500' }}>{supplier.SupplierName}</td>
+                                    <td style={{ padding: '16px', color: '#1e293b', fontWeight: '500' }}>
+                                        {supplier.SupplierName}
+                                        <span style={{ 
+                                            marginLeft: '8px', 
+                                            padding: '2px 8px', 
+                                            borderRadius: '12px', 
+                                            fontSize: '11px', 
+                                            fontWeight: '600', 
+                                            backgroundColor: supplier.supplier_type === 'Fason' ? '#ffedd5' : '#dbeafe', 
+                                            color: supplier.supplier_type === 'Fason' ? '#9a3412' : '#1e40af' 
+                                        }}>
+                                            {supplier.supplier_type || 'Tedarikçi'}
+                                        </span>
+                                    </td>
                                     <td style={{ padding: '16px', color: '#64748b' }}>{supplier.ContactPerson || '-'}</td>
                                     <td style={{ padding: '16px', color: '#64748b' }}>{supplier.Phone || '-'}</td>
                                     <td style={{ padding: '16px', color: '#64748b' }}>{supplier.Email || '-'}</td>
@@ -220,7 +249,21 @@ const SupplierList = ({ currentUser }) => {
                                     style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }}
                                 />
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: '#475569' }}>Firma Tipi</label>
+                                <select 
+                                    name="supplier_type" 
+                                    value={formData.supplier_type} 
+                                    onChange={handleInputChange}
+                                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', backgroundColor: 'white' }}
+                                >
+                                    <option value="Tedarikçi">Tedarikçi (Ticari Mal / Hammadde)</option>
+                                    <option value="Fason">Fason Üretici</option>
+                                </select>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                                 <div>
                                     <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500', color: '#475569' }}>Telefon</label>
                                     <input

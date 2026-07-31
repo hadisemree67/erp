@@ -14,26 +14,32 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, sistem içindeki otomatik bilgilendirmeleri, kritik stok uyarılarını, 
+ * satın alma onay bildirimlerini ve şifre sıfırlama e-postalarını göndermekten sorumlu e-posta servisidir.
+ */
+
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Create transporter using SMTP details from .env, or use ethereal for testing if not set
+// .env dosyasındaki SMTP detaylarını kullanarak taşıyıcı oluştur veya ayarlanmamışsa test için ethereal kullan
 const getTransporter = async () => {
-    require('dotenv').config(); // re-load env in case it changed
+    require('dotenv').config(); // değişmiş olma ihtimaline karşı env dosyasını yeniden yükle
     const host = process.env.SMTP_HOST || (process.env.SMTP_USER && process.env.SMTP_USER.includes('gmail.com') ? 'smtp.gmail.com' : null);
     
     if (host && process.env.SMTP_USER && process.env.SMTP_PASS) {
         return nodemailer.createTransport({
             host: host,
             port: parseInt(process.env.SMTP_PORT) || 587,
-            secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT == 465, // true for 465, false for other ports
+            secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT == 465, // 465 için true, diğer portlar için false
             auth: {
                 user: process.env.SMTP_USER,
                 pass: process.env.SMTP_PASS,
             },
         });
     } else {
-        // Fallback to testing account
+        // Test hesabına (Fallback) geri dön
         console.log("No SMTP settings found in .env, using Ethereal email for testing.");
         let testAccount = await nodemailer.createTestAccount();
         return nodemailer.createTransport({
@@ -51,7 +57,8 @@ const getTransporter = async () => {
 const sendLowStockEmail = async (supplier, product, requestToken) => {
     try {
         const transporter = await getTransporter();
-        const approvalLink = `http://localhost:3000/api/supplier-approval/${requestToken}`;
+        const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+        const approvalLink = `${baseUrl}/api/supplier-approval/${requestToken}`;
 
         const htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">

@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, şirket çalışanlarının özlük bilgileri, maaş bilgileri, departman atamaları, 
+ * izin talepleri ve işten ayrılma süreçlerini yöneten API rotalarını tanımlar.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -131,7 +137,7 @@ async function ensureEmployeeTables() {
             )
         `);
     } catch(err) {
-        console.error('Employee table init error:', err);
+        console.error('Personel tabloları başlatılırken hata:', err);
     }
 }
 ensureEmployeeTables();
@@ -579,7 +585,7 @@ router.post('/:id/leaves', async (req, res) => {
 // MESAI VE MAAŞ (OVERTIME & SALARIES)
 // ==========================================
 
-// Add overtime for one or multiple employees
+// Bir veya birden fazla personel için mesai ekle
 router.post('/overtimes', async (req, res) => {
     try {
         const { employee_ids, overtime_date, hours, month, year } = req.body;
@@ -597,7 +603,7 @@ router.post('/overtimes', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Geçersiz mesai saati.' });
         }
 
-        // Get employees to calculate hourly wages
+        // Saatlik ücretleri hesaplamak için personelleri getir
         const placeholders = employee_ids.map(() => '?').join(',');
         const [employees] = await db.query(`SELECT id, salary FROM employees WHERE id IN (${placeholders})`, employee_ids);
 
@@ -619,7 +625,7 @@ router.post('/overtimes', async (req, res) => {
     }
 });
 
-// Get salaries and overtimes for a specific month and year
+// Belirli bir ay ve yıl için maaşları ve mesaileri getir
 router.get('/salaries', async (req, res) => {
     try {
         const month = parseInt(req.query.month);

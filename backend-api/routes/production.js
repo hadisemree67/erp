@@ -14,17 +14,24 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, sistemdeki üretim ve imalat işlemlerini yönetir. Reçeteler, makine durumları, 
+ * üretim siparişleri, üretim adımları ve makinelerin bakım takibi burada yapılır.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { logActivity } = require('../utils/logger'); // assuming logger exists
 const { sendMachineMaintenanceReminderEmail, sendMachineBreakdownEmail } = require('../services/emailService');
+const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 
 // =======================
-// MACHINE MANAGEMENT
+// MAKİNE YÖNETİMİ
 // =======================
 
-// Get all machines
+// Tüm makineleri getir
 router.get('/machines', async (req, res) => {
     try {
         // Update status if busy_until has passed
@@ -198,10 +205,10 @@ router.delete('/machines/:id', async (req, res) => {
 
 
 // =======================
-// PRODUCTION ORDERS
+// ÜRETİM SİPARİŞLERİ
 // =======================
 
-// Find suitable machines
+// Uygun makineleri bul
 router.post('/orders/match', async (req, res) => {
     const { product_id, planned_quantity } = req.body;
     if (!product_id || !planned_quantity) return res.status(400).json({ success: false, message: 'Ürün ve miktar gerekli.' });
@@ -283,7 +290,7 @@ router.post('/orders/match', async (req, res) => {
     }
 });
 
-// Create a new production order
+// Yeni bir üretim siparişi oluştur
 router.post('/orders', async (req, res) => {
     const { product_id, planned_quantity, machine_id, assigned_user_id } = req.body;
     
@@ -460,7 +467,7 @@ router.post('/orders', async (req, res) => {
     }
 });
 
-// Get all production orders
+// Tüm üretim siparişlerini getir
 router.get('/orders', async (req, res) => {
     try {
         const [rows] = await db.query(`
@@ -479,7 +486,7 @@ router.get('/orders', async (req, res) => {
     }
 });
 
-// Delete an order
+// Siparişi sil
 router.delete('/orders/:id', async (req, res) => {
     try {
         const { id } = req.params;
@@ -501,7 +508,7 @@ router.delete('/orders/:id', async (req, res) => {
     }
 });
 
-// Archive an order
+// Siparişi arşivle
 router.post('/orders/:id/archive', async (req, res) => {
     const connection = await db.getConnection();
     try {
@@ -553,7 +560,7 @@ router.post('/orders/:id/archive', async (req, res) => {
     }
 });
 
-// Get order details (including materials to pick)
+// Sipariş detaylarını getir (toplanacak malzemeler dahil)
 router.get('/orders/:id', async (req, res) => {
     try {
         const [orderRows] = await db.query(`
@@ -591,7 +598,7 @@ router.get('/orders/:id', async (req, res) => {
     }
 });
 
-// Mark material as picked
+// Malzemeyi toplandı olarak işaretle
 router.post('/orders/:id/pick', async (req, res) => {
     const { material_id, actual_quantity } = req.body;
     try {
@@ -615,7 +622,7 @@ router.post('/orders/:id/pick', async (req, res) => {
     }
 });
 
-// Start production
+// Üretimi başlat
 router.post('/orders/:id/start', async (req, res) => {
     const connection = await db.getConnection();
     try {
@@ -654,7 +661,7 @@ router.post('/orders/:id/start', async (req, res) => {
     }
 });
 
-// Start a specific production step
+// Belirli bir üretim adımını başlat
 router.post('/orders/:id/steps/:step_id/start', async (req, res) => {
     const { id, step_id } = req.params;
     const connection = await db.getConnection();
@@ -718,7 +725,7 @@ router.post('/orders/:id/steps/:step_id/start', async (req, res) => {
     }
 });
 
-// Verify a material for a step
+// Bir adım için malzemeyi doğrula
 router.post('/orders/:id/steps/:step_id/verify-material', async (req, res) => {
     const { material_name } = req.body;
     try {
@@ -749,7 +756,7 @@ router.post('/orders/:id/steps/:step_id/verify-material', async (req, res) => {
     }
 });
 
-// Complete a specific production step
+// Belirli bir üretim adımını tamamla
 router.post('/orders/:id/steps/:step_id/complete', async (req, res) => {
     const { id, step_id } = req.params;
     const connection = await db.getConnection();
@@ -791,7 +798,7 @@ router.post('/orders/:id/steps/:step_id/complete', async (req, res) => {
     }
 });
 
-// Complete production
+// Üretimi tamamla
 router.post('/orders/:id/complete', async (req, res) => {
     const { actual_quantity, waste_reason, manager_explanation, is_manager_approval, delivered_to_user_id } = req.body;
     const connection = await db.getConnection();
@@ -1411,163 +1418,18 @@ router.put('/product-stock-rules/:productId', async (req, res) => {
 // Otomatik Stok Kontrolü ve Talep Oluşturma (Cron Job benzeri yapı)
 async function checkCriticalStocks() {
     try {
-        // Find products with low stock (<= 100) using real-time WMS stock balances
-        const query = `
-            SELECT 
-                p.Id, 
-                p.ProductName, 
-                COALESCE(SUM(wsb.quantity), 0) as StockQuantity, 
-                p.critical_stock_level, 
-                p.minimum_production_quantity,
-                p.max_stack_limit,
-                p.Formula,
-                p.Volume, p.Width, p.Height, p.Depth, p.package_capacity
-            FROM products p
-            LEFT JOIN wms_stock_balances wsb ON p.Id = wsb.product_id
-            WHERE p.Category != 'Hammadde'
-            GROUP BY p.Id, p.ProductName, p.critical_stock_level, p.minimum_production_quantity, p.max_stack_limit, p.Formula, p.Volume, p.Width, p.Height, p.Depth, p.package_capacity
-            HAVING StockQuantity <= 100
-        `;
-        const [lowStockProducts] = await db.query(query);
-
-        for (const p of lowStockProducts) {
-            // Priority logic based on user rules: <=20 Red, 21-100 Orange
-            const priority = p.StockQuantity <= 20 ? 'Acil' : 'Normal';
-            const reasonBase = priority === 'Acil' 
-                ? `Acil Üretim Gerekiyor (Mevcut Stok: ${p.StockQuantity})`
-                : `Stok Azalıyor. Üretim planlaması rica olunur (Mevcut: ${p.StockQuantity})`;
-
-            // Zaten devam eden veya bekleyen bir talep var mı diye kontrol et (Mükerrer açılmasın)
-            const [existing] = await db.query(
-                'SELECT id, priority FROM production_requests WHERE product_id = ? AND status NOT IN ("Tamamlandı", "İptal", "Reddedildi")',
-                [p.Id]
-            );
-
-            if (existing.length === 0) {
-                // 1. Hedef Miktar Hesaplama (Raftaki boş yer kadar)
-                const [shelfData] = await db.query(
-                    `SELECT 
-                        SUM(wsb.quantity) as currentQty,
-                        ws.max_volume
-                     FROM wms_stock_balances wsb
-                     LEFT JOIN warehouse_shelves ws ON ws.warehouse_id = wsb.warehouse_id AND ws.shelf_code = wsb.shelf_code
-                     WHERE wsb.product_id = ?
-                     GROUP BY wsb.shelf_code, ws.max_volume`,
-                    [p.Id]
-                );
-                
-                let maxEmpty = 0;
-                
-                if (shelfData.length > 0) {
-                    for (const shelf of shelfData) {
-                        // Calculate shelf capacity based on volume
-                        let sVol = parseFloat(shelf.max_volume) || 0;
-                        let pW = parseFloat(p.Width) || 0;
-                        let pH = parseFloat(p.Height) || 0;
-                        let pD = parseFloat(p.Depth) || 0;
-                        let containerVolume = parseFloat(p.Volume) || 0;
-                        if (pW > 0 && pH > 0 && pD > 0) containerVolume = pW * pH * pD;
-                        
-                        let shelfMaxCapacity = p.max_stack_limit || 1000;
-                        if (sVol > 0 && containerVolume > 0) {
-                            let maxByVol = Math.floor(sVol / containerVolume);
-                            let pkgCap = parseFloat(p.package_capacity) || 1;
-                            let calcCap = maxByVol * pkgCap;
-                            if (calcCap > 0) shelfMaxCapacity = calcCap;
-                        }
-
-                        const empty = shelfMaxCapacity - shelf.currentQty;
-                        if (empty > maxEmpty) maxEmpty = empty;
-                    }
-                }
-                
-                // Eğer ürün henüz hiçbir rafta yoksa veya hesaplanan boş alan 0/negatifse,
-                // o zaman standart raf hacmi (veya ürünün max_stack_limit değeri) kadar boş yer kabul edilir:
-                if (maxEmpty <= 0) {
-                    let containerVolume = parseFloat(p.Volume) || 0;
-                    if (containerVolume <= 0) {
-                        let pW = parseFloat(p.Width) || 0;
-                        let pH = parseFloat(p.Height) || 0;
-                        let pD = parseFloat(p.Depth) || 0;
-                        if (pW > 0 && pH > 0 && pD > 0) containerVolume = pW * pH * pD;
-                    }
-                    if (containerVolume > 0) {
-                        maxEmpty = Math.floor(250000 / containerVolume) * (parseFloat(p.package_capacity) || 1);
-                    } else {
-                        maxEmpty = p.max_stack_limit > 10 ? p.max_stack_limit : 500;
-                    }
-                }
-
-                // İstenen üretim miktarı tam olarak raftaki boş yer kadar olmalıdır (fazlası olmamalı)
-                let targetQty = Math.ceil(maxEmpty);
-
-                // 2. Darboğaz Makine Kapasitesi Bulma
-                let bottleneckCapacity = null;
-                if (p.Formula && p.Formula.length > 0) {
-                    try {
-                        let formulaParsed = typeof p.Formula === 'string' ? JSON.parse(p.Formula) : p.Formula;
-                        if (Array.isArray(formulaParsed) && formulaParsed.length > 0) {
-                            const machineIds = formulaParsed.map(step => step.machine_id).filter(id => id);
-                            if (machineIds.length > 0) {
-                                const [machines] = await db.query('SELECT max_capacity FROM production_machines WHERE id IN (?)', [machineIds]);
-                                for (const m of machines) {
-                                    if (m.max_capacity && (bottleneckCapacity === null || m.max_capacity < bottleneckCapacity)) {
-                                        bottleneckCapacity = m.max_capacity;
-                                    }
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Formula parse error:', e);
-                    }
-                }
-
-                // 3. Bölerek Talep Oluşturma
-                let quantitiesToRequest = [];
-                if (bottleneckCapacity !== null && bottleneckCapacity > 0 && targetQty > bottleneckCapacity) {
-                    let remaining = targetQty;
-                    while (remaining > 0) {
-                        if (remaining >= bottleneckCapacity) {
-                            quantitiesToRequest.push(bottleneckCapacity);
-                            remaining -= bottleneckCapacity;
-                        } else {
-                            quantitiesToRequest.push(remaining);
-                            remaining = 0;
-                        }
-                    }
-                } else {
-                    quantitiesToRequest.push(targetQty);
-                }
-
-                for (let i = 0; i < quantitiesToRequest.length; i++) {
-                    const qtyToRequest = quantitiesToRequest[i];
-                    const reason = quantitiesToRequest.length > 1 
-                        ? `${reasonBase} - Bölüm ${i+1}/${quantitiesToRequest.length} (Kapasiteye Bölündü)`
-                        : reasonBase;
-
-                    await db.query(
-                        'INSERT INTO production_requests (product_id, requested_quantity, source, creator, reason, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                        [p.Id, qtyToRequest, 'Otomatik', 'Sistem (MRP)', reason, 'Bekleyen', priority]
-                    );
-                }
-                console.log(`Otomatik Üretim Talebi oluşturuldu: ${p.ProductName} (${priority}) - ${quantitiesToRequest.length} parça`);
-            } else {
-                // If a Normal request exists but it just dropped to Acil, we should upgrade it
-                if (existing[0].priority === 'Normal' && priority === 'Acil') {
-                    for (const ex of existing) {
-                        if (ex.priority === 'Normal') {
-                            await db.query(
-                                'UPDATE production_requests SET priority = ?, reason = ? WHERE id = ?',
-                                ['Acil', reasonBase, ex.id]
-                            );
-                        }
-                    }
-                    console.log(`Otomatik Talep Güncellendi (Acil): ${p.ProductName}`);
-                }
+        // Find all active products and delegate checking to the central logic
+        const [products] = await db.query('SELECT Id FROM products WHERE Category != ?', ['Hammadde']);
+        
+        for (const p of products) {
+            try {
+                await checkAndNotifyLowStock(p.Id);
+            } catch (err) {
+                console.error(`Otomatik stok kontrolü hatası (Ürün ID: ${p.Id}):`, err);
             }
         }
     } catch (err) {
-        console.error('Otomatik stok kontrolü hatası:', err);
+        console.error('Otomatik stok kontrol ana döngü hatası:', err);
     }
 }
 

@@ -1,13 +1,6 @@
-/**
- * ============================================================================
- * DOSYA ADI: CustomerForm.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Müşteri Ekleme ve Düzenleme Formu
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   SQL'deki 'customers' tablosunda bulunan alanlara (CustomerName, Phone, Email, Address)
- *   uygun şekilde yeni müşteri / cari kayıt etmeyi veya mevcut veriyi düzenlemeyi sağlar.
- *   Tasarımı Ürün Ekleme (ProductForm) ile tam uyumlu, şık ve modern bir arayüze sahiptir.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (CustomerForm.jsx), Müşteri kayıtlarını, B2B/B2C ayrımını ve müşteri detaylarını yöneten bileşenleri içerir.
  */
 
 import React, { useState } from 'react';
@@ -16,6 +9,7 @@ import { apiFetch } from '../../utils/api';
 const CustomerForm = ({ customer, onClose, onNavigate }) => {
     const isEditing = !!customer;
 
+    // 1. Durum (State) Tanımlamaları
     const [formData, setFormData] = useState({
         CustomerName: customer?.CustomerName || '',
         Phone: customer?.Phone || '',
@@ -26,6 +20,7 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+        // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({
@@ -34,6 +29,7 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
         }));
     };
 
+    // 3. Veri Kaydetme / Backend API İsteği
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -67,6 +63,7 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
         }
     };
 
+        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>

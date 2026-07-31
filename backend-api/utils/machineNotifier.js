@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu modül, makinelerin bakım zamanlarını kontrol eden ve 
+ * zamanı yaklaşanlar için otomatik hatırlatma e-postaları gönderen arka plan aracıdır.
+ */
+
 const db = require('../db');
 const { sendMachineMaintenanceReminderEmail } = require('../services/emailService');
 

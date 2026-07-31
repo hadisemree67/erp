@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (WarehouseTransfer.jsx), Mal kabul, stok giriş/çıkış, raf transferleri ve genel depo envanter işlemlerini (Warehouse Management System) yönetir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const WarehouseTransfer = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [stocks, setStocks] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [shelves, setShelves] = useState([]);
@@ -31,10 +37,14 @@ const WarehouseTransfer = ({ currentUser }) => {
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState({ text: '', type: '' });
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         fetchStocks();
         fetchWarehouses();
     }, []);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchStocks = async () => {
         try {
@@ -59,6 +69,8 @@ const WarehouseTransfer = ({ currentUser }) => {
             console.error('Depolar getirilemedi:', error);
         }
     };
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleWarehouseChange = (e) => {
         const wId = e.target.value;
@@ -113,6 +125,8 @@ const WarehouseTransfer = ({ currentUser }) => {
     };
 
     const selectedStock = stocks.find(s => s.balance_id.toString() === selectedStockId);
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ padding: '24px', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>

@@ -1,15 +1,7 @@
-/**
- * ============================================================================
- * DOSYA ADI: reports.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Raporlar ve Analizler
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Depo doluluk oranları (cm³ bazında toplam ve depoya özel), kategori bazlı stok dağılımları,
- *   kritik seviye uyarıları ve en değerli ürünler gibi genel analiz verilerini sağlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, SQL Toplama ve Gruplama Sorguları
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu modül, depo doluluk oranları, kategori bazlı stok dağılımları, kritik seviye uyarıları 
+ * ve en değerli ürünler gibi genel analiz verilerini sağlayan API uç noktalarıdır.
  */
 
 const express = require('express');
@@ -41,7 +33,7 @@ router.get('/summary', async (req, res) => {
         const warehouseOccupancy = warehouses.map(w => {
             const whShelves = shelves.filter(s => s.warehouse_id === w.id);
             const maxVol = whShelves.reduce((sum, s) => sum + (parseFloat(s.max_volume) || 0), 0);
-            
+
             const whStocks = stockRows.filter(r => r.warehouse_id === w.id);
             const usedVol = whStocks.reduce((sum, r) => {
                 const qty = parseFloat(r.quantity) || 0;
@@ -159,6 +151,47 @@ router.get('/summary', async (req, res) => {
     } catch (error) {
         console.error('Raporlar özeti çekilirken hata:', error);
         res.status(500).json({ success: false, message: 'Rapor verileri getirilirken hata oluştu.' });
+    }
+});
+
+// GET: En Çok Satılan Ürünler (Dinamik Periyot)
+router.get('/top-selling', async (req, res) => {
+    try {
+        const period = req.query.period || 'this_month';
+        let dateCondition = "1=1";
+
+        if (period === 'this_month') {
+            dateCondition = "o.OrderDate >= DATE_FORMAT(NOW(), '%Y-%m-01')";
+        } else if (period === 'last_3_months') {
+            dateCondition = "o.OrderDate >= DATE_SUB(NOW(), INTERVAL 3 MONTH)";
+        } else if (period === 'last_6_months') {
+            dateCondition = "o.OrderDate >= DATE_SUB(NOW(), INTERVAL 6 MONTH)";
+        } else if (period === 'this_year') {
+            dateCondition = "o.OrderDate >= DATE_FORMAT(NOW(), '%Y-01-01')";
+        } else if (period === 'last_1_year') {
+            dateCondition = "o.OrderDate >= DATE_SUB(NOW(), INTERVAL 1 YEAR)";
+        }
+
+        const [rows] = await db.query(`
+            SELECT 
+                p.Id, 
+                p.ProductName, 
+                p.Category,
+                SUM(oi.Quantity) as total_sold,
+                SUM(oi.Quantity * oi.UnitPrice) as total_revenue
+            FROM orderitems oi
+            JOIN orders o ON oi.OrderId = o.Id
+            JOIN products p ON oi.ProductId = p.Id
+            WHERE o.OrderStatus NOT IN ('İptal Edildi') AND ${dateCondition}
+            GROUP BY p.Id, p.ProductName, p.Category
+            ORDER BY total_sold DESC
+            LIMIT 10
+        `);
+
+        res.json({ success: true, data: rows });
+    } catch (error) {
+        console.error('En çok satılan ürünler çekilirken hata:', error);
+        res.status(500).json({ success: false, message: 'Veri getirilirken hata oluştu.' });
     }
 });
 

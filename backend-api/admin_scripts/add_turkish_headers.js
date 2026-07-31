@@ -1,6 +1,15 @@
+/*
+ * ÖZET:
+ * Bu script, projedeki hem önyüz (frontend) hem de arkayüz (backend) dosyalarını tarayarak,
+ * her dosyanın en başına o modülün ne işe yaradığını anlatan detaylı ve standartlaştırılmış 
+ * Türkçe açıklama blokları (header) ekler. Otomatik bir dokümantasyon aracı olarak çalışır.
+ */
+
+// Dosya ve yol işlemleri için gerekli Node.js modülleri içeri aktarılıyor
 const fs = require('fs');
 const path = require('path');
 
+// Projedeki dosyaların görevlerini ve mimari notlarını içeren tanımlama objesi
 const fileDescriptions = {
     // === BACKEND: MIDDLEWARE ===
     "auth.js": {
@@ -335,6 +344,7 @@ const fileDescriptions = {
     }
 };
 
+// Dosya başına eklenecek standart Türkçe başlık şablonunu oluşturan fonksiyon
 function generateTurkishHeader(filename, info) {
     return `/**
  * ============================================================================
@@ -354,6 +364,7 @@ function generateTurkishHeader(filename, info) {
 `;
 }
 
+// Belirtilen dizindeki tüm klasör ve dosyaları özyinelemeli (recursive) olarak tarayan fonksiyon
 function processDirectory(dirPath) {
     if (!fs.existsSync(dirPath)) return;
     const items = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -371,6 +382,7 @@ function processDirectory(dirPath) {
     }
 }
 
+// Hedef dosyayı okuyup, eski açıklamayı silerek yerine yeni Türkçe başlığı ekleyen fonksiyon
 function annotateFile(filePath, fileName, info) {
     let content = fs.readFileSync(filePath, 'utf8');
 
@@ -382,6 +394,7 @@ function annotateFile(filePath, fileName, info) {
     console.log(`[OK] Açıklama eklendi: ${fileName}`);
 }
 
+// Proje dizin yolları belirleniyor ve dokümantasyon ekleme işlemi başlatılıyor
 const rootDir = path.resolve(__dirname, '..', '..');
 const backendDir = path.join(rootDir, 'backend-api');
 const frontendDir = path.join(rootDir, 'desktop-app', 'src');

@@ -14,19 +14,19 @@
  * ============================================================================
  */
 
-import { apiFetch } from '../../utils/api';
-/**
- * Dosya: ProductList.jsx
- * Sayfa: Ürün Listeleme Ekranı
- * Ne İşe Yarar: Veritabanındaki tüm ürünleri tablo halinde gösterir. Arama, filtreleme (beklemede)
- * ve ürün silme/düzenleme işlemlerinin tetiklendiği ana vitrin sayfasıdır.
+/*
+ * ÖZET:
+ * Bu dosya (ProductList.jsx), Ürün katalogu, fason/satın alma detayları, barkod işlemleri ve toplu ürün güncelleme araçlarını içerir.
  */
+
+import { apiFetch } from '../../utils/api';
 import { useState, useEffect } from 'react';
 import Barcode from 'react-barcode';
 import ProductForm from './ProductForm';
 import BulkEditModal from './BulkEditModal';
 
 const ProductList = ({ onNavigate, currentUser }) => {
+  // 1. Durum (State) Tanımlamaları ve Hook'lar
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -36,12 +36,14 @@ const ProductList = ({ onNavigate, currentUser }) => {
   const [selectedIds, setSelectedIds] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Barkod Okuyucu State
+  // Barkod Okuyucu State'i
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState('');
 
   const hasPerm = (key) => currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(key);
   const canSeeCosts = currentUser?.role === 'admin' || hasPerm('view_finance');
+
+  // 3. Backend API İstekleri (Veri Çekme)
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -60,6 +62,8 @@ const ProductList = ({ onNavigate, currentUser }) => {
       setLoading(false);
     }
   };
+
+  // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
   useEffect(() => {
     fetchProducts();
@@ -86,6 +90,8 @@ const ProductList = ({ onNavigate, currentUser }) => {
       alert('Sunucu hatası, ürün silinemedi.');
     }
   };
+
+  // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
   const handleEdit = (product) => {
     setEditingProduct(product);
@@ -197,6 +203,8 @@ const ProductList = ({ onNavigate, currentUser }) => {
              p.Category?.toLowerCase().includes(search) ||
              p.Brand?.toLowerCase().includes(search);
   });
+
+  // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
   return (
     <div>
@@ -352,7 +360,7 @@ const ProductList = ({ onNavigate, currentUser }) => {
                         return parseFloat(prodItem.PurchasePrice) || 0;
                     };
 
-                    if (product.Formula && product.Category !== 'Hammadde') {
+                    if (product.Formula && product.Category !== 'Hammadde' && product.supply_type === 'MANUFACTURE') {
                         const formulaStr = typeof product.Formula === 'string' ? product.Formula : JSON.stringify(product.Formula);
                         const formula = JSON.parse(formulaStr);
                         if (Array.isArray(formula)) {
@@ -380,7 +388,7 @@ const ProductList = ({ onNavigate, currentUser }) => {
                                 }
                             });
                         }
-                    } else if (product.Category === 'Hammadde') {
+                    } else if (product.Category === 'Hammadde' || product.supply_type === 'PURCHASE' || product.supply_type === 'OUTSOURCED') {
                         unitCost = getPrice(product);
                     }
                 } catch (e) {}
@@ -409,7 +417,12 @@ const ProductList = ({ onNavigate, currentUser }) => {
                             <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '10px', textAlign: 'center', border: '1px solid #e2e8f0' }}>Görsel Yok</div>
                         )}
                         <div>
-                            <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px' }}>{product.ProductName}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px' }}>{product.ProductName}</div>
+                                {product.supply_type === 'PURCHASE' && <span title="Ticari Ürün" style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#dcfce7', color: '#166534' }}>Hazır</span>}
+                                {product.supply_type === 'MANUFACTURE' && <span title="Kendi Üretimimiz" style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#dbeafe', color: '#1e40af' }}>Üretim</span>}
+                                {product.supply_type === 'OUTSOURCED' && <span title="Fason Dış Üretim" style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#ffedd5', color: '#9a3412' }}>Fason</span>}
+                            </div>
                             <div style={{ fontSize: '13px', color: '#475569', marginTop: '2px' }}>{product.Brand}</div>
                         </div>
                     </div>

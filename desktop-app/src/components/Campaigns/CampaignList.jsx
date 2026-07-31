@@ -1,22 +1,6 @@
-/**
- * ============================================================================
- * DOSYA ADI: CampaignList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Kampanya ve Promosyon Listesi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemde tanımlı olan tüm indirim ve promosyon kampanyalarını listeler.
- *   Yatay kapak resümlerini görsel olarak sunar, kampanya türüne göre
- *   sadeleştirilmiş ve modern kurumsal rozetler gösterir. Yeni kampanya
- *   ekleme butonunu barındırır, silme ve aktif-pasif işlemlerini yönetir.
- * 
- * TASARIM VE ESTETİK İLKELERİ:
- *   - Renk cümbüşü azaltılmış, koyu lacivert başlıklar (#0f172a) ve nane yeşili
- *     (#10b981) vurgularıyla minimalist, temiz ve profesyonel arayüz.
- *   - Yüksek kontrast, dengeli beyaz alanlar ve modern tipografi.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React (useState, useEffect), Fetch API Wrapper (apiFetch)
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (CampaignList.jsx), Kampanya listeleme, ekleme ve düzenleme işlemlerini yöneten bileşenleri içerir.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -24,16 +8,18 @@ import { apiFetch } from '../../utils/api';
 import CampaignForm from './CampaignForm';
 
 const CampaignList = ({ currentUser, onNavigate }) => {
+        // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [campaigns, setCampaigns] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('All');
     
-    // Modal states
+    // Modal (Açılır Pencere) Durumları
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCampaign, setEditingCampaign] = useState(null);
 
+        // 3. Backend API İstekleri (Veri Çekme)
     const fetchCampaigns = async () => {
         setLoading(true);
         setError(null);
@@ -52,15 +38,20 @@ const CampaignList = ({ currentUser, onNavigate }) => {
         }
     };
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         fetchCampaigns();
     }, [statusFilter]);
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
         fetchCampaigns();
     };
 
+    // 3. Kampanya Durumu (Aktif/Pasif) Güncelleme İşlemi
     const handleToggleStatus = async (camp) => {
         const campId = camp.id || camp.Id;
         const newStatus = camp.status === 'Aktif' ? 'Pasif' : 'Aktif';
@@ -82,6 +73,7 @@ const CampaignList = ({ currentUser, onNavigate }) => {
         }
     };
 
+    // 4. Kampanya Silme İşlemi
     const handleDelete = async (id, title) => {
         if (!window.confirm(`"${title}" kampanyasını silmek istediğinize emin misiniz?`)) return;
         try {
@@ -100,6 +92,7 @@ const CampaignList = ({ currentUser, onNavigate }) => {
         }
     };
 
+    // 5. Görsel ve Tasarım Sabitleri (Rozet Renkleri)
     // Minimalist ve Dengeli Renk Rozetleri
     const getCampaignTypeBadge = (type) => {
         switch (type) {
@@ -118,6 +111,7 @@ const CampaignList = ({ currentUser, onNavigate }) => {
         }
     };
 
+        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ animation: 'fadeIn 0.25s ease', fontFamily: 'Inter, sans-serif' }}>
             {/* Üst Başlık ve Aksiyon Barı */}

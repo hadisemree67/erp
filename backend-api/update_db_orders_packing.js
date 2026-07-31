@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu script, siparişlerin hangi kutuyla kargolanacağı ve kargo takip numarasını 
+ * tutmak için "orders" tablosuna ilgili sütunları ekler.
+ */
+
 const db = require('./db');
 
 async function updateOrdersTable() {

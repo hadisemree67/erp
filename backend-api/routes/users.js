@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, ERP sistemine giriş yapabilen kullanıcı hesaplarının yönetimi, rol atamaları, 
+ * şifre işlemleri ve sistem erişim izinlerinin yapılandırıldığı API rotalarıdır.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');

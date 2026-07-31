@@ -14,13 +14,19 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, satınalma talepleri, tedarikçi siparişleri, sipariş onay süreçleri 
+ * ve gelen malzemelerin depo kabul işlemlerini yürüten API rotalarıdır.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 
-// GET /api/purchasing/requests - List all purchase requests
+// GET /api/purchasing/requests - Tüm satın alma taleplerini listele
 router.get('/requests', async (req, res) => {
     try {
         const [rows] = await db.query(`
@@ -37,7 +43,7 @@ router.get('/requests', async (req, res) => {
     }
 });
 
-// POST /api/purchasing/requests - Create a new purchase request
+// POST /api/purchasing/requests - Yeni bir satın alma talebi oluştur
 router.post('/requests', async (req, res) => {
     const { employee_id, product_name, quantity, description, supplier_id } = req.body;
 
@@ -58,7 +64,7 @@ router.post('/requests', async (req, res) => {
     }
 });
 
-// PUT /api/purchasing/requests/:id/status - Update request status
+// PUT /api/purchasing/requests/:id/status - Talep durumunu güncelle
 router.put('/requests/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body; // 'Bekliyor', 'Onaylandı', 'Reddedildi'
@@ -85,7 +91,7 @@ router.put('/requests/:id/status', async (req, res) => {
     }
 });
 
-// POST /api/purchasing/requests/:id/send-order - Send email and create purchase order
+// POST /api/purchasing/requests/:id/send-order - E-posta gönder ve satın alma siparişi oluştur
 router.post('/requests/:id/send-order', async (req, res) => {
     const { id } = req.params;
     const { quantity, description, supplier_id, supplier_email, product_name } = req.body;
@@ -173,7 +179,7 @@ router.post('/requests/:id/send-order', async (req, res) => {
     }
 });
 
-// GET /api/purchasing/orders/action - Supplier action webhook
+// GET /api/purchasing/orders/action - Tedarikçi işlem webhook'u
 router.get('/orders/action', async (req, res) => {
     const { token, status } = req.query;
 
@@ -219,7 +225,7 @@ router.get('/orders/action', async (req, res) => {
     }
 });
 
-// GET /api/purchasing/orders - List all purchase orders
+// GET /api/purchasing/orders - Tüm satın alma siparişlerini listele
 router.get('/orders', async (req, res) => {
     try {
         const [rows] = await db.query(`
@@ -236,7 +242,7 @@ router.get('/orders', async (req, res) => {
     }
 });
 
-// PUT /api/purchasing/orders/:id/status - Update order status
+// PUT /api/purchasing/orders/:id/status - Sipariş durumunu güncelle
 router.put('/orders/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body; 
@@ -263,7 +269,7 @@ router.put('/orders/:id/status', async (req, res) => {
     }
 });
 
-// POST /api/purchasing/orders/:id/receive - Process goods receipt into warehouse
+// POST /api/purchasing/orders/:id/receive - Depoya mal kabul işlemini gerçekleştir
 router.post('/orders/:id/receive', async (req, res) => {
     const { id } = req.params;
     const { quantity, shelfAllocations, location_id, warehouse_id, shelf_code, batch_number, expiration_date, user_id } = req.body;
@@ -387,6 +393,23 @@ router.post('/orders/:id/receive', async (req, res) => {
                 SET received_quantity = ? 
                 WHERE id = ?
             `, [newTotalReceived, id]);
+        }
+
+        // 5. Finans Gider Kaydı (Otomatik)
+        if (order.unit_price && order.unit_price > 0 && totalReceived > 0) {
+            const totalCost = parseFloat(order.unit_price) * totalReceived;
+            let supplierName = 'Bilinmeyen Tedarikçi';
+            if (order.supplier_id) {
+                const [supRows] = await db.query('SELECT SupplierName FROM suppliers WHERE Id = ?', [order.supplier_id]);
+                if (supRows.length > 0) supplierName = supRows[0].SupplierName;
+            }
+            const desc = `${order.product_name} ürünü için ${supplierName} adlı tedarikçiden ${totalReceived} adet mal kabul yapıldı.`;
+            
+            await db.query(`
+                INSERT INTO finance_transactions 
+                (type, amount, category, description, transaction_date) 
+                VALUES ('GİDER', ?, 'Hammadde / Ürün Alımı', ?, CURDATE())
+            `, [totalCost, desc]);
         }
 
         await db.query('COMMIT'); // Commit transaction

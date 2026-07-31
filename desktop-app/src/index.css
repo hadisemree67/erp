@@ -1,8 +1,3 @@
-/*
- * Dosya: index.css
- * Kısım: Genel Stil Dosyası
- * Ne İşe Yarar: Uygulamanın temel tipografi, renk ve sıfırlama (reset) CSS kodlarını içerir.
- */
 :root {
   --bg-main: #2c3e50;
   --bg-card: rgba(30, 43, 56, 0.75);

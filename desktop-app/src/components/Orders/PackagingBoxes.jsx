@@ -1,27 +1,13 @@
-/**
- * ============================================================================
- * DOSYA ADI: PackagingBoxes.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Kutu/Ambalaj Yönetim Arayüzü
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemde tanımlı kutuların listelenmesi, yeni kutu tanımlanması, mevcut 
- *   kutuların düzenlenmesi ve stok/tedarik operasyonlarının (çoklu tedarikçi, 
- *   sözleşme dosyası ekleme) yürütüldüğü arayüzdür.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React (useState, useEffect), FormData Yapısı, Fetch API
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Arka plandaki /api/boxes API'si ile entegre çalışır.
- *   - Çoklu tedarikçi mantığı "suppliersData" dizisi (array) üzerinde döngüye 
- *     girerek form alanlarını dinamik olarak oluşturur.
- *   - Sözleşme dosyaları FormData üzerinden multipart/form-data ile gönderilir.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (PackagingBoxes.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
  */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const PackagingBoxes = () => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [boxes, setBoxes] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -38,10 +24,14 @@ const PackagingBoxes = () => {
     });
     const [suppliersData, setSuppliersData] = useState([]);
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         fetchBoxes();
         fetchSuppliers();
     }, []);
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchSuppliers = async () => {
         try {
@@ -66,6 +56,8 @@ const PackagingBoxes = () => {
             console.error('Error fetching boxes:', error);
         }
     };
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -198,6 +190,8 @@ const PackagingBoxes = () => {
         setSuppliersData(initialSuppliersData);
         setIsModalOpen(true);
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div style={{ padding: '24px', backgroundColor: '#f8fafc', minHeight: '100vh', fontFamily: `'Inter', sans-serif` }}>

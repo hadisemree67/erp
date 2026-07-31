@@ -1,27 +1,23 @@
-/**
- * ============================================================================
- * DOSYA ADI: CustomerList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Müşteri Listesi ve CRM Rehberi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Veritabanındaki (SQL) müşteri ve cari kartlarını şık, kenarlıksız, modern
- *   bir tablo yapısında listeler. Arama/filtreleme imkanı sunar ve yeni müşteri
- *   ekleme veya mevcut müşteriyi düzenleme formuna yönlendirir.
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu dosya (CustomerList.jsx), Müşteri kayıtlarını, B2B/B2C ayrımını ve müşteri detaylarını yöneten bileşenleri içerir.
  */
 
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
+    // 1. Durum (State) Tanımlamaları
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
+        // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
     useEffect(() => {
         fetchCustomers();
     }, []);
 
+        // 3. Backend API İstekleri (Veri Çekme)
     const fetchCustomers = async () => {
         setLoading(true);
         try {
@@ -39,6 +35,7 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
         }
     };
 
+    // 4. Müşteri Silme İşlemi
     const handleDelete = async (id, name) => {
         if (!window.confirm(`"${name}" isimli müşteriyi silmek istediğinize emin misiniz?`)) return;
 
@@ -57,6 +54,7 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
         }
     };
 
+        // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
     const handleEditClick = (customer) => {
         if (onEdit) onEdit(customer);
         if (onNavigate) onNavigate('musteri-ekle');
@@ -73,6 +71,7 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
         (c.Email && c.Email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
+        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>

@@ -1,24 +1,46 @@
+/*
+ * ÖZET:
+ * Bu dosya (Reports.jsx), Satış, üretim ve envanter verilerine dair kapsamlı analiz raporları ve grafikleri sunar.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
 function Reports({ currentUser }) {
+  // 1. Durum (State) Tanımlamaları ve Hook'lar
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reportData, setReportData] = useState(null);
-  const [activeTab, setActiveTab] = useState('degerli'); // 'degerli', 'kritik'
+  const [topSellingData, setTopSellingData] = useState([]);
+  const [activeTab, setActiveTab] = useState('degerli'); // 'degerli', 'kritik', 'satanlar'
+  const [activePeriod, setActivePeriod] = useState('this_month'); // 'this_month', vb.
 
   useEffect(() => {
     fetchReports();
-  }, []);
+    
+    const intervalId = setInterval(() => {
+        fetchReports();
+    }, 60000);
+
+    return () => clearInterval(intervalId);
+  }, [activePeriod]);
+
+  // 3. Backend API İstekleri (Veri Çekme)
 
   const fetchReports = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await apiFetch('http://localhost:3000/api/reports/summary');
-      if (response.ok) {
-        const data = await response.json();
+      const [summaryRes, topSellingRes] = await Promise.all([
+        apiFetch('http://localhost:3000/api/reports/summary'),
+        apiFetch(`http://localhost:3000/api/reports/top-selling?period=${activePeriod}`)
+      ]);
+      
+      if (summaryRes.ok && topSellingRes.ok) {
+        const data = await summaryRes.json();
+        const tsData = await topSellingRes.json();
         setReportData(data);
+        setTopSellingData(tsData.data || []);
       } else {
         setError('Rapor verileri alınamadı.');
       }
@@ -44,7 +66,8 @@ function Reports({ currentUser }) {
     return Number(val || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
   };
 
-  if (loading) {
+  if (loading && !reportData) {
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
       <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '14px', fontFamily: 'Inter, sans-serif' }}>
         Veriler yükleniyor...
@@ -78,12 +101,12 @@ function Reports({ currentUser }) {
             Hacimsel depo doluluk oranları, kategori bazlı stok dağılımları ve envanter durumu
           </p>
         </div>
-        <button 
-          onClick={fetchReports} 
-          style={{ padding: '8px 14px', backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#334155', cursor: 'pointer', fontWeight: '500', fontSize: '13px', transition: 'all 0.2s' }}
-        >
-          Verileri Yenile
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '12px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '8px', height: '8px', backgroundColor: '#10b981', borderRadius: '50%', display: 'inline-block', animation: 'pulse 2s infinite' }}></span>
+                Canlı Veri (Otomatik Yenilenir)
+            </span>
+        </div>
       </div>
 
       {/* KPI Kartları - Kurumsal & Minimalist */}
@@ -252,14 +275,34 @@ function Reports({ currentUser }) {
           </div>
         </div>
 
-        {/* Sağ Kolon: En Değerli Ürünler & Kritik Stoklar */}
+        {/* Sağ Kolon: En Değerli Ürünler, Kritik Stoklar & En Çok Satanlar */}
         <div style={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '20px' }}>
           
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
-            <h3 style={{ margin: 0, fontSize: '15px', color: '#0f172a', fontWeight: '600' }}>
-              {activeTab === 'degerli' ? 'En Yüksek Değerli Ürünler' : 'Kritik Stok Uyarıları'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', color: '#0f172a', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {activeTab === 'degerli' ? 'En Yüksek Değerli Ürünler' : activeTab === 'kritik' ? 'Kritik Stok Uyarıları' : 'En Çok Satan Ürünler'}
+              {activeTab === 'satanlar' && (
+                <select 
+                    style={{ padding: '2px 24px 2px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', color: '#334155', fontSize: '12px', outline: 'none', cursor: 'pointer', appearance: 'none', WebkitAppearance: 'none', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center', backgroundSize: '10px', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%2364748b\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'%3E%3C/path%3E%3C/svg%3E")' }}
+                    value={activePeriod}
+                    onChange={(e) => setActivePeriod(e.target.value)}
+                    title="Dönem Seçimi"
+                >
+                    <option value="this_month">Bu Ay</option>
+                    <option value="last_3_months">Son 3 Ay (Çeyrek)</option>
+                    <option value="last_6_months">Son 6 Ay</option>
+                    <option value="this_year">Bu Yıl</option>
+                    <option value="last_1_year">Son 1 Yıl</option>
+                </select>
+              )}
             </h3>
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => setActiveTab('satanlar')}
+                style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', backgroundColor: activeTab === 'satanlar' ? '#0ea5e9' : '#f1f5f9', color: activeTab === 'satanlar' ? '#ffffff' : '#64748b', fontWeight: '500', fontSize: '12px', cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                Çok Satanlar
+              </button>
               <button 
                 onClick={() => setActiveTab('degerli')}
                 style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', backgroundColor: activeTab === 'degerli' ? '#0f172a' : '#f1f5f9', color: activeTab === 'degerli' ? '#ffffff' : '#64748b', fontWeight: '500', fontSize: '12px', cursor: 'pointer', transition: 'all 0.2s' }}
@@ -275,7 +318,35 @@ function Reports({ currentUser }) {
             </div>
           </div>
 
-          {activeTab === 'degerli' ? (
+          {activeTab === 'satanlar' ? (
+            <div>
+              {(!topSellingData || topSellingData.length === 0) ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px' }}>
+                  Son 6 ayda satış verisi bulunamadı.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {topSellingData.map((p, idx) => (
+                    <div key={p.Id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: '#ffffff', borderRadius: '8px', border: '1px solid #e0f2fe' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: '500', color: '#1e293b', fontSize: '13px' }}>{p.ProductName}</div>
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{p.Category || 'Kategori Yok'}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: '600', color: '#0284c7', fontSize: '14px' }}>{p.total_sold} Adet</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>{formatCurrency(p.total_revenue)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'degerli' ? (
             <div>
               {topValuationProducts.length === 0 ? (
                 <p style={{ color: '#64748b', fontSize: '13px', textAlign: 'center', padding: '20px' }}>Veri bulunamadı.</p>

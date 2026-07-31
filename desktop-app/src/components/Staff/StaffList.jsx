@@ -14,18 +14,20 @@
  * ============================================================================
  */
 
-import { apiFetch } from '../../utils/api';
-/**
- * Dosya: StaffList.jsx
- * Sayfa: Personel Listeleme
- * Ne İşe Yarar: Kayıtlı personelleri listeler.
+/*
+ * ÖZET:
+ * Bu dosya (StaffList.jsx), Sistem kullanıcılarının yetkilendirmesi, şifre sıfırlama ve personel giriş bilgilerini yönetir.
  */
+
+import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const StaffList = ({ onEdit, onAdd, currentUser }) => {
+    // 1. Durum (State) Tanımlamaları
     const [staff, setStaff] = useState([]);
     const [loading, setLoading] = useState(true);
 
+        // 3. Backend API İstekleri (Veri Çekme)
     const fetchStaff = async () => {
         try {
             const res = await apiFetch('http://localhost:3000/api/users');
@@ -38,10 +40,12 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
         }
     };
 
+        // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
     useEffect(() => {
         fetchStaff();
     }, []);
 
+    // 4. Rol İsimlendirme Sabitleri
     const roleNameMap = {
         admin: 'Sistem Yöneticisi',
         hr: 'İnsan Kaynakları',
@@ -52,6 +56,7 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
         manager: 'Alt Yönetici'
     };
 
+    // 5. Personel Hesabını Silme İşlemi
     const handleDelete = async (id) => {
         if (!window.confirm('Bu personeli silmek istediğinize emin misiniz?')) return;
         
@@ -73,6 +78,7 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
         }
     };
 
+        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>

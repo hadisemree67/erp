@@ -1,10 +1,16 @@
+/*
+ * ÖZET:
+ * Bu script, kutu stok takibi için "packaging_boxes" tablosuna stok miktarı sütunu ekler 
+ * ve manuel stok giriş çıkış kayıtları için "box_stock_entries" tablosunu oluşturur.
+ */
+
 const db = require('./db');
 
 async function updateDb() {
     try {
         console.log('Veritabanı güncelleniyor: Kutu Stok Özellikleri');
 
-        // 1. Add StockQuantity to packaging_boxes
+        // 1. packaging_boxes tablosuna StockQuantity sütununu ekle
         console.log('packaging_boxes tablosuna StockQuantity sütunu ekleniyor...');
         try {
             await db.query(`ALTER TABLE packaging_boxes ADD COLUMN StockQuantity INT DEFAULT 0;`);
@@ -17,7 +23,7 @@ async function updateDb() {
             }
         }
 
-        // 2. Create box_stock_entries table
+        // 2. box_stock_entries tablosunu oluştur
         console.log('box_stock_entries tablosu oluşturuluyor...');
         await db.query(`
             CREATE TABLE IF NOT EXISTS box_stock_entries (

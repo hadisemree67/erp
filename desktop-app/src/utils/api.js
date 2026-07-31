@@ -14,6 +14,11 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (api.js), Proje genelinde kullanılan API istekleri (fetch) ve tarih/sayı formatlama gibi yardımcı fonksiyonları barındırır.
+ */
+
 export const apiFetch = async (url, options = {}) => {
     if (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         url = url.replace('localhost:3000', `${window.location.hostname}:3000`).replace('127.0.0.1:3000', `${window.location.hostname}:3000`);

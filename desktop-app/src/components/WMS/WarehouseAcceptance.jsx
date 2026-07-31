@@ -14,11 +14,17 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (WarehouseAcceptance.jsx), Mal kabul, stok giriş/çıkış, raf transferleri ve genel depo envanter işlemlerini (Warehouse Management System) yönetir.
+ */
+
 import React, { useState, useEffect } from 'react';
 import './WarehouseAcceptance.css';
 import { apiFetch } from '../../utils/api';
 
 const WarehouseAcceptance = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -35,6 +41,8 @@ const WarehouseAcceptance = ({ currentUser }) => {
     const [defectOrder, setDefectOrder] = useState(null);
     const [defectQty, setDefectQty] = useState('');
     const [defectReason, setDefectReason] = useState('');
+
+    // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchOrders = async () => {
         setLoading(true);
@@ -65,6 +73,8 @@ const WarehouseAcceptance = ({ currentUser }) => {
     };
 
     const [warehouseCapacities, setWarehouseCapacities] = useState({});
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         if (!entryOrder) {
@@ -179,6 +189,8 @@ const WarehouseAcceptance = ({ currentUser }) => {
         const selectedWh = warehouses.find(w => w.id.toString() === whId.toString());
         return selectedWh && selectedWh.Shelves ? selectedWh.Shelves : [];
     };
+
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
     const handleAllocationChange = (index, field, value) => {
         const newAllocs = [...allocations];
@@ -304,6 +316,8 @@ const WarehouseAcceptance = ({ currentUser }) => {
             alert('Sunucu hatası.');
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div className="depo-kabulleri-container">

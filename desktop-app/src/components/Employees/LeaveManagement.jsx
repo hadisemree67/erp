@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (LeaveManagement.jsx), Personel listesi, mesai (overtime) ve izin (leave) yönetim arayüzlerini içerir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const LeaveManagement = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -58,6 +64,8 @@ const LeaveManagement = ({ currentUser }) => {
 
         return count;
     };
+
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
         if (formData.start_date && formData.end_date) {
@@ -114,6 +122,8 @@ const LeaveManagement = ({ currentUser }) => {
         }
     };
 
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
+
     const handleSelectEmployee = (emp) => {
         setSelectedEmployee(emp);
         fetchLeaveData(emp.id);
@@ -158,6 +168,8 @@ const LeaveManagement = ({ currentUser }) => {
             setSubmitting(false);
         }
     };
+
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
         <div>

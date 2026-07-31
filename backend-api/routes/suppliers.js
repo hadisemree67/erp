@@ -14,6 +14,12 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu modül, malzeme ve hizmet satın alınan dış tedarikçi firmaların iletişim bilgileri, 
+ * bakiye durumları ve profillerinin yönetildiği API uç noktalarını barındırır.
+ */
+
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -31,7 +37,7 @@ router.get('/', async (req, res) => {
 
 // Yeni tedarikçi ekle
 router.post('/', async (req, res) => {
-    const { SupplierName, ContactPerson, Phone, Email, Address } = req.body;
+    const { SupplierName, ContactPerson, Phone, Email, Address, supplier_type } = req.body;
 
     if (!SupplierName) {
         return res.status(400).json({ success: false, message: 'Tedarikçi adı zorunludur.' });
@@ -39,8 +45,8 @@ router.post('/', async (req, res) => {
 
     try {
         const [result] = await db.query(
-            'INSERT INTO suppliers (SupplierName, ContactPerson, Phone, Email, Address) VALUES (?, ?, ?, ?, ?)',
-            [SupplierName, ContactPerson || null, Phone || null, Email || null, Address || null]
+            'INSERT INTO suppliers (SupplierName, ContactPerson, Phone, Email, Address, supplier_type) VALUES (?, ?, ?, ?, ?, ?)',
+            [SupplierName, ContactPerson || null, Phone || null, Email || null, Address || null, supplier_type || 'Tedarikçi']
         );
         res.status(201).json({ success: true, message: 'Tedarikçi başarıyla eklendi.', data: { id: result.insertId } });
     } catch (error) {
@@ -52,7 +58,7 @@ router.post('/', async (req, res) => {
 // Tedarikçi güncelle
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { SupplierName, ContactPerson, Phone, Email, Address } = req.body;
+    const { SupplierName, ContactPerson, Phone, Email, Address, supplier_type } = req.body;
 
     if (!SupplierName) {
         return res.status(400).json({ success: false, message: 'Tedarikçi adı zorunludur.' });
@@ -60,8 +66,8 @@ router.put('/:id', async (req, res) => {
 
     try {
         const [result] = await db.query(
-            'UPDATE suppliers SET SupplierName = ?, ContactPerson = ?, Phone = ?, Email = ?, Address = ? WHERE Id = ?',
-            [SupplierName, ContactPerson || null, Phone || null, Email || null, Address || null, id]
+            'UPDATE suppliers SET SupplierName = ?, ContactPerson = ?, Phone = ?, Email = ?, Address = ?, supplier_type = ? WHERE Id = ?',
+            [SupplierName, ContactPerson || null, Phone || null, Email || null, Address || null, supplier_type || 'Tedarikçi', id]
         );
 
         if (result.affectedRows === 0) {

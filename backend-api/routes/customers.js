@@ -1,15 +1,7 @@
-/**
- * ============================================================================
- * DOSYA ADI: customers.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Müşteri İlişkileri ve CRM Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemdeki müşterilerin (B2B / B2C cari firmaların veya şahısların) listelenmesi,
- *   yeni müşteri eklenmesi, bilgilerinin güncellenmesi ve silinmesi işlemlerini yürüten API uç noktalarıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Veritabanı Sorguları (SQL), Veri Doğrulama (Validation)
- * ============================================================================
+/*
+ * ÖZET:
+ * Bu modül, sistemdeki müşterilerin (B2B/B2C cari firmalar veya şahıslar) listelenmesi, 
+ * eklenmesi, güncellenmesi ve silinmesi işlemlerini yürüten API uç noktalarıdır.
  */
 
 const express = require('express');

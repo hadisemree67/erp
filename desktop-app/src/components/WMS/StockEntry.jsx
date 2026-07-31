@@ -14,10 +14,16 @@
  * ============================================================================
  */
 
+/*
+ * ÖZET:
+ * Bu dosya (StockEntry.jsx), Mal kabul, stok giriş/çıkış, raf transferleri ve genel depo envanter işlemlerini (Warehouse Management System) yönetir.
+ */
+
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 
 const StockEntry = ({ currentUser }) => {
+    // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [products, setProducts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
     const [shelves, setShelves] = useState([]);
@@ -42,8 +48,11 @@ const StockEntry = ({ currentUser }) => {
     const [shelfSearchBarcode, setShelfSearchBarcode] = useState('');
     const [scanningModal, setScanningModal] = useState({ open: false, type: null }); // type: 'product' | 'warehouse' | 'shelf'
 
+    // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
+
     useEffect(() => {
         // Fetch products and warehouses on mount
+        // 3. Backend API İstekleri (Veri Çekme)
         const fetchData = async () => {
             try {
                 const [prodRes, whRes] = await Promise.all([
@@ -206,6 +215,8 @@ const StockEntry = ({ currentUser }) => {
         }
     }, [formData.productId, products]);
 
+    // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
+
     const handleAllocationChange = (index, field, value) => {
         const newAllocations = [...formData.shelfAllocations];
         newAllocations[index][field] = value;
@@ -329,6 +340,8 @@ const StockEntry = ({ currentUser }) => {
         }
     };
 
+    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
+
     return (
         <div style={{ padding: '24px', maxWidth: '800px', margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -362,7 +375,7 @@ const StockEntry = ({ currentUser }) => {
                                 value={formData.productId} 
                                 onChange={handleChange} 
                                 required 
-                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
+                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px', width: '100%', boxSizing: 'border-box' }}
                             >
                                 <option value="">-- Ürün Ara veya Seç --</option>
                                 {products.map(p => (
@@ -391,7 +404,7 @@ const StockEntry = ({ currentUser }) => {
                                 value={formData.warehouseId} 
                                 onChange={handleChange} 
                                 required 
-                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
+                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px', width: '100%', boxSizing: 'border-box' }}
                             >
                                 <option value="">-- Depo Seç --</option>
                                 {warehouses.map(w => (
@@ -478,12 +491,16 @@ const StockEntry = ({ currentUser }) => {
                                                         if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
                                                         else if (!cap.hasSameCorridor) tags.push('Risk Dağıtımı (Farklı Koridor)');
                                                         tags.push(`%${cap.efficiency} Verim`);
-                                                        text = `⭐ ${s} (Önerilen - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'}, ${tags.join(', ')})`;
+                                                        
+                                                        let alertTxt = cap.hasOtherProducts ? ' - ⚠️ BAŞKA ÜRÜN VAR!' : '';
+                                                        text = `⭐ ${s} (Önerilen - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'}, ${tags.join(', ')})${alertTxt}`;
                                                     } else if (cap) {
                                                         const tags = [`%${cap.efficiency} Verim`];
                                                         if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
+                                                        
+                                                        let alertTxt = cap.hasOtherProducts ? ' - ⚠️ BAŞKA ÜRÜN VAR!' : '';
                                                         if (!isFull) {
-                                                            text += ` - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'} (${tags.join(', ')})`;
+                                                            text += ` - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'} (${tags.join(', ')})${alertTxt}`;
                                                         }
                                                     }
 

@@ -1,3 +1,9 @@
+/*
+ * ÖZET:
+ * Bu script, stok yönetimi, kutu ayarları ve envanter görüntüleme gibi 
+ * yeni yetki tanımlarını "permissions" tablosuna ekler.
+ */
+
 const db = require('./db');
 
 async function updatePermissions() {
