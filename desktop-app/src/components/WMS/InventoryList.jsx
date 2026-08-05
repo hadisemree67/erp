@@ -526,6 +526,15 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                     }
                 }
 
+                const uniqueShelves = [];
+                group.batches.forEach(b => {
+                    const key = `${b.warehouse_name}-${b.shelf_code}`;
+                    if (!uniqueShelves.find(s => s.key === key)) {
+                        uniqueShelves.push({ key, cap: b.shelf_max_capacity || 0 });
+                    }
+                });
+                const totalCap = uniqueShelves.reduce((sum, s) => sum + s.cap, 0);
+
                 return (
                     <tr key={group.groupKey} className="hover-row" onClick={() => setSelectedGroup(group)} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.15s', cursor: 'pointer', backgroundColor: 'white' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'white'}>
                         <td style={{ padding: '16px' }}>
@@ -579,14 +588,6 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                                         return `${qty} ${u}`;
                                     };
 
-                                    const uniqueShelves = [];
-                                    group.batches.forEach(b => {
-                                        const key = `${b.warehouse_name}-${b.shelf_code}`;
-                                        if (!uniqueShelves.find(s => s.key === key)) {
-                                            uniqueShelves.push({ key, cap: b.shelf_max_capacity || 0 });
-                                        }
-                                    });
-                                    const totalCap = uniqueShelves.reduce((sum, s) => sum + s.cap, 0);
                                     return group.product?.unit_type && group.product.unit_type !== 'Adet' && group.product?.package_capacity > 0 ? (
                                         <span style={{ fontSize: '13px', color: '#0369a1' }}>
                                             {formatDualStr(group.total_quantity, totalCap, group.product.unit_type)} <br/>
@@ -603,7 +604,9 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                             </div>
                             {sktBadge}
                             <div style={{ marginTop: '8px' }}>
-                                {group.total_quantity <= 20 ? (
+                                {totalCap > 0 && group.total_quantity > totalCap ? (
+                                    <span style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-block' }}>⚠️ Maks. Stok Aşıldı</span>
+                                ) : group.total_quantity <= 20 ? (
                                     <span style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-block' }}>🔴 Kritik Stok</span>
                                 ) : group.total_quantity <= 100 ? (
                                     <span style={{ backgroundColor: '#ffedd5', color: '#ea580c', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-block' }}>🟠 Azalan Stok</span>

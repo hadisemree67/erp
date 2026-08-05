@@ -6,31 +6,65 @@
 
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const prisma = require('../prisma');
+const { toFrontendStatus, toPrismaStatus } = require('../utils/enumMapper');
+const authMiddleware = require('../middleware/auth');
+const { logActivity } = require('../utils/logger');
 const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 
 // GET /api/orders - Tüm siparişleri ve kalemlerini getir
 router.get('/', async (req, res) => {
     try {
-        const [orders] = await db.query(`
-            SELECT o.*, c.CustomerName, c.Email as CustomerEmail, c.Phone as CustomerPhone
-            FROM orders o
-            LEFT JOIN customers c ON o.CustomerId = c.Id
-            ORDER BY o.Id DESC
-        `);
+        const orders = await prisma.orders.findMany({
+            include: {
+                customers: true,
+                shippers: true,
+                users_orders_PickerIdTousers: true,
+                users_orders_PackerIdTousers: true,
+                users_orders_ShipUserIdTousers: true,
+                orderitems: {
+                    include: {
+                        products: true
+                    }
+                }
+            },
+            orderBy: { Id: 'desc' }
+        });
+        
+        const productIds = new Set();
+        orders.forEach(o => o.orderitems.forEach(oi => productIds.add(oi.ProductId)));
+        
+        const stockBalances = await prisma.wms_stock_balances.groupBy({
+            by: ['product_id'],
+            _sum: { quantity: true },
+            where: { product_id: { in: Array.from(productIds) } }
+        });
+        
+        const stockMap = {};
+        stockBalances.forEach(sb => {
+            stockMap[sb.product_id] = sb._sum.quantity || 0;
+        });
 
-        for (let order of orders) {
-            const [items] = await db.query(`
-                SELECT oi.*, p.ProductName, p.Barcode as ProductCode, p.unit_type as Unit,
-                       COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), 0) as CurrentStock
-                FROM orderitems oi
-                LEFT JOIN products p ON oi.ProductId = p.Id
-                WHERE oi.OrderId = ?
-            `, [order.Id]);
-            order.items = items;
-        }
+        const formattedOrders = orders.map(o => ({
+            ...o,
+            OrderStatus: toFrontendStatus(o.OrderStatus),
+            CustomerName: o.customers?.CustomerName,
+            CustomerEmail: o.customers?.Email,
+            CustomerPhone: o.customers?.Phone,
+            CargoCompanyName: o.shippers?.CompanyName,
+            PickerName: o.users_orders_PickerIdTousers?.name,
+            PackerName: o.users_orders_PackerIdTousers?.name,
+            ShipUserName: o.users_orders_ShipUserIdTousers?.name,
+            items: o.orderitems.map(oi => ({
+                ...oi,
+                ProductName: oi.products?.ProductName,
+                ProductCode: oi.products?.Barcode,
+                Unit: oi.products?.unit_type,
+                CurrentStock: stockMap[oi.ProductId] || 0
+            }))
+        }));
 
-        res.json({ success: true, data: orders });
+        res.json({ success: true, data: formattedOrders });
     } catch (err) {
         console.error('Siparişler çekilirken hata:', err);
         res.status(500).json({ success: false, message: 'Siparişler yüklenemedi.' });
@@ -38,21 +72,16 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/orders - Yeni manuel sipariş oluştur ve stok kontrolü / otomatik üretim talebi yap
-router.post('/', async (req, res) => {
-    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount } = req.body;
+router.post('/', authMiddleware, async (req, res) => {
+    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount, shipperId } = req.body;
 
     if (!customerId || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, message: 'Müşteri ve en az bir sipariş kalemi gereklidir.' });
     }
 
-    const connection = await db.getConnection();
     try {
-        await connection.beginTransaction();
-
-        // 1. Sipariş Numarası oluştur
         const orderNumber = `SIP-${Date.now().toString().slice(-6)}`;
-
-        // 2. Toplam tutarı hesapla
+        
         let totalAmount = 0;
         for (const item of items) {
             const qty = parseFloat(item.quantity) || 0;
@@ -62,111 +91,147 @@ router.post('/', async (req, res) => {
         const finalDiscount = parseFloat(discountAmount) || 0;
         totalAmount = Math.max(0, totalAmount - finalDiscount);
 
-        // 3. Siparişi kaydet
-        const [orderRes] = await connection.query(`
-            INSERT INTO orders (CustomerId, OrderNumber, OrderStatus, TotalAmount, ShippingAddress, OrderDate, PaymentMethod, CampaignId, CampaignName, DiscountAmount)
-            VALUES (?, ?, 'Beklemede', ?, ?, NOW(), ?, ?, ?, ?)
-        `, [customerId, orderNumber, totalAmount, shippingAddress || '', paymentMethod || 'Nakit', campaignId || null, campaignName || null, discountAmount || 0]);
-
-        const orderId = orderRes.insertId;
-
-        // 3.5. Finans Gelir İşlemi Oluştur (Müşteri Siparişi)
-        await connection.query(`
-            INSERT INTO finance_transactions (bank_account_id, type, amount, category, description, transaction_date)
-            VALUES (NULL, 'GELİR', ?, 'Müşteri Siparişi', ?, NOW())
-        `, [totalAmount, `Sipariş Geliri (${orderNumber}) - Ödeme: ${paymentMethod || 'Nakit'}`]);
-
         const autoProductionRequests = [];
         let orderDeductions = [];
 
-        // 4. Kalemleri kaydet ve stok kontrolü / otomatik üretim talebi oluştur
-        for (const item of items) {
-            const productId = parseInt(item.productId);
-            const qty = parseInt(item.quantity) || 0;
-            const price = parseFloat(item.unitPrice) || 0;
+        const orderResult = await prisma.$transaction(async (tx) => {
+            const order = await tx.orders.create({
+                data: {
+                    CustomerId: Number(customerId),
+                    OrderNumber: orderNumber,
+                    OrderStatus: toPrismaStatus('Beklemede'),
+                    TotalAmount: totalAmount,
+                    ShippingAddress: shippingAddress || '',
+                    OrderDate: new Date(),
+                    PaymentMethod: paymentMethod || 'Nakit',
+                    CampaignId: campaignId ? Number(campaignId) : null,
+                    CampaignName: campaignName || null,
+                    DiscountAmount: finalDiscount,
+                    ShipperId: shipperId ? Number(shipperId) : null
+                }
+            });
 
-            if (!productId || qty <= 0) continue;
+            await tx.finance_transactions.create({
+                data: {
+                    type: 'GEL_R',
+                    amount: totalAmount,
+                    category: 'Müşteri Siparişi',
+                    description: `Sipariş Geliri (${orderNumber}) - Ödeme: ${paymentMethod || 'Nakit'}`,
+                    transaction_date: new Date()
+                }
+            });
 
-            // Kalemi ekle
-            await connection.query(`
-                INSERT INTO orderitems (OrderId, ProductId, Quantity, UnitPrice)
-                VALUES (?, ?, ?, ?)
-            `, [orderId, productId, qty, price]);
+            for (const item of items) {
+                const productId = Number(item.productId);
+                const qty = Number(item.quantity) || 0;
+                const price = parseFloat(item.unitPrice) || 0;
 
-            // Mevcut stoku kontrol et
-            const [stockRows] = await connection.query(`
-                SELECT p.ProductName, p.Barcode as ProductCode, p.supply_type, p.Category, COALESCE(SUM(b.quantity), 0) as currentStock
-                FROM products p
-                LEFT JOIN wms_stock_balances b ON p.Id = b.product_id
-                WHERE p.Id = ?
-                GROUP BY p.Id
-            `, [productId]);
+                if (!productId || qty <= 0) continue;
 
-            if (stockRows.length > 0) {
-                const pInfo = stockRows[0];
-                const currentStock = parseInt(pInfo.currentStock) || 0;
-
-                // STOK AŞILIYOR mu? (Örn: Sipariş 10 adet, stokta 4 adet var -> 6 adet eksik!)
-                if (qty > currentStock) {
-                    const missingQty = qty - currentStock;
-                    const reason = `Müşteri Siparişi (${orderNumber}) için stok yetersizliğinden otomatik oluşturuldu. Sipariş Edilen: ${qty}, Mevcut Stok: ${currentStock}, Eksik: ${missingQty} Adet.`;
-
-                    if (pInfo.supply_type === 'MANUFACTURE') {
-                        await connection.query(`
-                            INSERT INTO production_requests (product_id, requested_quantity, source, creator, reason, priority, status, created_at)
-                            VALUES (?, ?, 'Müşteri Siparişi', 'Sistem Otomasyonu', ?, 'Acil', 'Bekliyor', NOW())
-                        `, [productId, missingQty, reason]);
-                    } else if (pInfo.supply_type === 'PURCHASE' || pInfo.supply_type === 'OUTSOURCED' || pInfo.Category === 'Hammadde') {
-                        await connection.query(`
-                            INSERT INTO purchase_requests (product_name, quantity, description, status)
-                            VALUES (?, ?, ?, 'Bekliyor')
-                        `, [pInfo.ProductName, missingQty, reason]);
+                await tx.orderitems.create({
+                    data: {
+                        OrderId: order.Id,
+                        ProductId: productId,
+                        Quantity: qty,
+                        UnitPrice: price
                     }
+                });
 
-                    autoProductionRequests.push({
-                        productName: pInfo.ProductName,
-                        missingQty: missingQty,
-                        currentStock: currentStock,
-                        orderedQty: qty,
-                        reqType: pInfo.supply_type === 'MANUFACTURE' ? 'Üretim' : 'Satın Alma'
+                const productInfo = await tx.products.findUnique({
+                    where: { Id: productId }
+                });
+
+                if (productInfo) {
+                    const currentStockAggr = await tx.wms_stock_balances.aggregate({
+                        _sum: { quantity: true },
+                        where: { product_id: productId }
                     });
+                    const currentStock = Number(currentStockAggr._sum.quantity) || 0;
+
+                    if (qty > currentStock) {
+                        const missingQty = qty - currentStock;
+                        const reason = `Müşteri Siparişi (${orderNumber}) için stok yetersizliğinden otomatik oluşturuldu. Sipariş Edilen: ${qty}, Mevcut Stok: ${currentStock}, Eksik: ${missingQty} Adet.`;
+
+                        if (productInfo.supply_type === 'MANUFACTURE') {
+                            await tx.production_requests.create({
+                                data: {
+                                    product_id: productId,
+                                    requested_quantity: missingQty,
+                                    source: 'Müşteri Siparişi',
+                                    creator: 'Sistem Otomasyonu',
+                                    reason: reason,
+                                    priority: 'Acil',
+                                    status: 'Bekliyor',
+                                    created_at: new Date()
+                                }
+                            });
+                        } else if (productInfo.supply_type === 'PURCHASE' || productInfo.supply_type === 'OUTSOURCED' || productInfo.Category === 'Hammadde') {
+                            await tx.purchase_requests.create({
+                                data: {
+                                    product_name: productInfo.ProductName,
+                                    quantity: missingQty,
+                                    description: reason,
+                                    status: 'Bekliyor'
+                                }
+                            });
+                        }
+
+                        autoProductionRequests.push({
+                            productName: productInfo.ProductName,
+                            missingQty: missingQty,
+                            currentStock: currentStock,
+                            orderedQty: qty,
+                            reqType: productInfo.supply_type === 'MANUFACTURE' ? 'Üretim' : 'Satın Alma'
+                        });
+                    }
+                }
+
+                let remainingToDeduct = qty;
+                const batches = await tx.wms_stock_balances.findMany({
+                    where: { product_id: productId, quantity: { gt: 0 } },
+                    orderBy: [
+                        { expiration_date: { sort: 'asc', nulls: 'last' } },
+                        { id: 'asc' }
+                    ]
+                });
+
+                for (const batch of batches) {
+                    if (remainingToDeduct <= 0) break;
+                    let deduct = Math.min(Number(batch.quantity), remainingToDeduct);
+                    
+                    await tx.wms_stock_balances.update({
+                        where: { id: batch.id },
+                        data: { quantity: { decrement: deduct } }
+                    });
+                    
+                    remainingToDeduct -= deduct;
+                    orderDeductions.push({ batchId: batch.id, quantity: deduct });
+                }
+
+                if (remainingToDeduct > 0) {
+                    const negResult = await tx.wms_stock_balances.create({
+                        data: {
+                            product_id: productId,
+                            quantity: -remainingToDeduct,
+                            batch_number: orderNumber
+                        }
+                    });
+                    orderDeductions.push({ batchId: negResult.id, quantity: remainingToDeduct, isNegative: true });
                 }
             }
 
-            // Anında Stoktan Düş (Beklemede olsa bile) - FEFO'ya göre
-            let remainingToDeduct = qty;
-            const [batches] = await connection.query(`
-                SELECT id, quantity 
-                FROM wms_stock_balances 
-                WHERE product_id = ? AND quantity > 0 
-                ORDER BY ISNULL(expiration_date), expiration_date ASC, id ASC
-            `, [productId]);
-
-            for (const batch of batches) {
-                if (remainingToDeduct <= 0) break;
-                let deduct = Math.min(batch.quantity, remainingToDeduct);
-                await connection.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [deduct, batch.id]);
-                remainingToDeduct -= deduct;
-                orderDeductions.push({ batchId: batch.id, quantity: deduct });
+            if (orderDeductions.length > 0) {
+                await tx.orders.update({
+                    where: { Id: order.Id },
+                    data: { deducted_batches: JSON.stringify(orderDeductions) }
+                });
             }
 
-            // Eğer hala düşülecek miktar varsa (stok eksiye düşüyorsa), eksi bakiye satırı ekle
-            if (remainingToDeduct > 0) {
-                const [negResult] = await connection.query(`
-                    INSERT INTO wms_stock_balances (product_id, quantity, batch_number) 
-                    VALUES (?, ?, ?)
-                `, [productId, -remainingToDeduct, orderNumber]);
-                orderDeductions.push({ batchId: negResult.insertId, quantity: remainingToDeduct, isNegative: true });
-            }
-        }
+            return order.Id;
+        });
 
-        if (orderDeductions.length > 0) {
-            await connection.query('UPDATE orders SET deducted_batches = ? WHERE Id = ?', [JSON.stringify(orderDeductions), orderId]);
-        }
+        await logActivity(req.user?.id, 'INSERT', 'orders', orderResult, `Yeni sipariş oluşturuldu: ${orderNumber}`);
 
-        await connection.commit();
-
-        // Arka planda tüm kalemler için kritik stok kontrolünü tetikle
         for (const item of items) {
             if (item.productId) {
                 checkAndNotifyLowStock(item.productId).catch(err => console.error('Kritik stok kontrol hatası (orders):', err));
@@ -182,197 +247,223 @@ router.post('/', async (req, res) => {
         res.json({
             success: true,
             message: msg,
-            orderId: orderId,
+            orderId: orderResult,
             autoProductionRequests: autoProductionRequests
         });
 
     } catch (err) {
-        await connection.rollback();
         console.error('Sipariş oluşturma hatası:', err);
         res.status(500).json({ success: false, message: 'Sipariş oluşturulurken bir hata meydana geldi: ' + err.message });
-    } finally {
-        connection.release();
     }
 });
 
 // PUT /api/orders/:id/status - Sipariş durumu güncelle
-router.put('/:id/status', async (req, res) => {
+router.put('/:id/status', authMiddleware, async (req, res) => {
     const { status } = req.body;
-    const connection = await db.getConnection();
+    const orderId = Number(req.params.id);
     
     try {
-        await connection.beginTransaction();
+        await prisma.$transaction(async (tx) => {
+            const currOrder = await tx.orders.findUnique({
+                where: { Id: orderId }
+            });
+            
+            if (!currOrder) throw new Error('Sipariş bulunamadı.');
+            const oldStatus = toFrontendStatus(currOrder.OrderStatus);
 
-        const [currOrder] = await connection.query('SELECT OrderStatus FROM orders WHERE Id = ?', [req.params.id]);
-        if (currOrder.length === 0) throw new Error('Sipariş bulunamadı.');
-        const oldStatus = currOrder[0].OrderStatus;
-
-        if (status === oldStatus) {
-            await connection.rollback();
-            return res.json({ success: true, message: 'Durum aynı.' });
-        }
-
-        // 1. STOK YETERLİLİK KONTROLÜ (Beklemede -> Hazırlanıyor)
-        if (status === 'Hazırlanıyor' && oldStatus === 'Beklemede') {
-            // Stok daha önce Beklemede aşamasında eksi olarak yansıtılmıştı.
-            // Eğer wms_stock_balances toplamı 0'dan küçükse, bu ürünün fiziksel olarak eksik olduğu anlamına gelir.
-            const [items] = await connection.query(`
-                SELECT oi.ProductId, oi.Quantity, p.ProductName,
-                       COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), 0) as currentStock
-                FROM orderitems oi
-                JOIN products p ON oi.ProductId = p.Id
-                WHERE oi.OrderId = ?
-            `, [req.params.id]);
-
-            let outOfStockItems = [];
-            for (const item of items) {
-                if (item.currentStock < 0) {
-                    outOfStockItems.push(`${item.ProductName} (Eksik: ${Math.abs(item.currentStock)})`);
-                }
+            if (status === oldStatus) {
+                return; // Nothing to do
             }
 
-            if (outOfStockItems.length > 0) {
-                await connection.rollback();
-                return res.status(400).json({
-                    success: false, 
-                    message: 'Siparişteki bazı ürünler stokta yeterli miktarda bulunmuyor (veya üretim aşamasında)!\nBu yüzden sipariş "Hazırlanıyor" aşamasına alınamaz.\n\nYetersiz Ürünler:\n- ' + outOfStockItems.join('\n- ')
+            if (status === 'Hazırlanıyor' && oldStatus === 'Beklemede') {
+                const items = await tx.orderitems.findMany({
+                    where: { OrderId: orderId },
+                    include: { products: true }
                 });
-            }
-            // Zaten oluşturulurken stoktan düştüğümüz için burada tekrar düşmüyoruz.
-        }
 
-        if ((status === 'İptal' || status === 'İptal Edildi') && oldStatus !== 'İptal' && oldStatus !== 'İptal Edildi') {
-            const [orderRows] = await connection.query('SELECT deducted_batches FROM orders WHERE Id = ?', [req.params.id]);
-            let deductedBatches = null;
-            try { if (orderRows[0] && orderRows[0].deducted_batches) deductedBatches = JSON.parse(orderRows[0].deducted_batches); } catch(e){ console.warn('JSON Parse Error (deducted_batches):', e.message); }
-
-            if (deductedBatches && Array.isArray(deductedBatches)) {
-                // Yeni Sistem: Kesin İade
-                for (const d of deductedBatches) {
-                    await connection.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [d.quantity, d.batchId]);
-                }
-            } else {
-                // Eski Sistem (Geriye Dönük Uyumluluk)
-                const [items] = await connection.query('SELECT ProductId, Quantity FROM orderitems WHERE OrderId = ?', [req.params.id]);
+                let outOfStockItems = [];
                 for (const item of items) {
-                    const qty = parseInt(item.Quantity);
-                    
-                    const [negatives] = await connection.query(`
-                        SELECT id, quantity 
-                        FROM wms_stock_balances 
-                        WHERE product_id = ? AND quantity < 0 
-                        ORDER BY id ASC
-                    `, [item.ProductId]);
-
-                    let remainingToAdd = qty;
-
-                    for (const neg of negatives) {
-                        if (remainingToAdd <= 0) break;
-                        let toAdd = Math.min(Math.abs(neg.quantity), remainingToAdd);
-                        await connection.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [toAdd, neg.id]);
-                        remainingToAdd -= toAdd;
-                    }
-
-                    if (remainingToAdd > 0) {
-                        const [exist] = await connection.query('SELECT id FROM wms_stock_balances WHERE product_id = ? AND quantity >= 0 LIMIT 1', [item.ProductId]);
-                        if (exist.length > 0) {
-                            await connection.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [remainingToAdd, exist[0].id]);
-                        } else {
-                            await connection.query('INSERT INTO wms_stock_balances (product_id, quantity) VALUES (?, ?)', [item.ProductId, remainingToAdd]);
-                        }
+                    const currentStockAggr = await tx.wms_stock_balances.aggregate({
+                        _sum: { quantity: true },
+                        where: { product_id: item.ProductId }
+                    });
+                    const currentStock = Number(currentStockAggr._sum.quantity) || 0;
+                    if (currentStock < 0) {
+                        outOfStockItems.push(`${item.products?.ProductName} (Eksik: ${Math.abs(currentStock)})`);
                     }
                 }
+
+                if (outOfStockItems.length > 0) {
+                    throw new Error('Siparişteki bazı ürünler stokta yeterli miktarda bulunmuyor (veya üretim aşamasında)!\nBu yüzden sipariş "Hazırlanıyor" aşamasına alınamaz.\n\nYetersiz Ürünler:\n- ' + outOfStockItems.join('\n- '));
+                }
             }
-        }
 
-        await connection.query('UPDATE orders SET OrderStatus = ? WHERE Id = ?', [status, req.params.id]);
-        await connection.commit();
-        res.json({ success: true, message: 'Sipariş durumu güncellendi.' });
-    } catch (err) {
-        await connection.rollback();
-        console.error('Durum güncelleme hatası:', err);
-        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
-    } finally {
-        connection.release();
-    }
-});
+            if ((status === 'İptal' || status === 'İptal Edildi') && oldStatus !== 'İptal' && oldStatus !== 'İptal Edildi') {
+                let deductedBatches = null;
+                try { if (currOrder.deducted_batches) deductedBatches = JSON.parse(currOrder.deducted_batches); } catch(e){ console.warn('JSON Parse Error:', e.message); }
 
-// DELETE /api/orders/:id - Siparişi ve kalemlerini sil
-router.delete('/:id', async (req, res) => {
-    const connection = await db.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        const [currOrder] = await connection.query('SELECT OrderStatus, deducted_batches FROM orders WHERE Id = ?', [req.params.id]);
-        if (currOrder.length > 0) {
-            const oldStatus = currOrder[0].OrderStatus;
-            // Eğer sipariş daha önce İptal EDİLMEDİYSE, stoka iade işlemini yap
-            if (oldStatus !== 'İptal' && oldStatus !== 'İptal Edildi') {
-                const deductedBatches = currOrder[0].deducted_batches ? JSON.parse(currOrder[0].deducted_batches) : null;
-                
                 if (deductedBatches && Array.isArray(deductedBatches)) {
                     for (const d of deductedBatches) {
-                        await connection.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [d.quantity, d.batchId]);
+                        await tx.wms_stock_balances.update({
+                            where: { id: d.batchId },
+                            data: { quantity: { increment: d.quantity } }
+                        });
                     }
                 } else {
-                    const [items] = await connection.query('SELECT ProductId, Quantity FROM orderitems WHERE OrderId = ?', [req.params.id]);
+                    const items = await tx.orderitems.findMany({
+                        where: { OrderId: orderId }
+                    });
+                    
                     for (const item of items) {
-                        const qty = parseInt(item.Quantity);
+                        const qty = Number(item.Quantity);
                         
-                        const [negatives] = await connection.query(`
-                            SELECT id, quantity 
-                            FROM wms_stock_balances 
-                            WHERE product_id = ? AND quantity < 0 
-                            ORDER BY id ASC
-                        `, [item.ProductId]);
+                        const negatives = await tx.wms_stock_balances.findMany({
+                            where: { product_id: item.ProductId, quantity: { lt: 0 } },
+                            orderBy: { id: 'asc' }
+                        });
 
                         let remainingToAdd = qty;
 
                         for (const neg of negatives) {
                             if (remainingToAdd <= 0) break;
-                            let toAdd = Math.min(Math.abs(neg.quantity), remainingToAdd);
-                            await connection.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [toAdd, neg.id]);
+                            let toAdd = Math.min(Math.abs(Number(neg.quantity)), remainingToAdd);
+                            await tx.wms_stock_balances.update({
+                                where: { id: neg.id },
+                                data: { quantity: { increment: toAdd } }
+                            });
                             remainingToAdd -= toAdd;
                         }
 
                         if (remainingToAdd > 0) {
-                            const [exist] = await connection.query('SELECT id FROM wms_stock_balances WHERE product_id = ? AND quantity >= 0 LIMIT 1', [item.ProductId]);
-                            if (exist.length > 0) {
-                                await connection.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [remainingToAdd, exist[0].id]);
+                            const exist = await tx.wms_stock_balances.findFirst({
+                                where: { product_id: item.ProductId, quantity: { gte: 0 } }
+                            });
+                            if (exist) {
+                                await tx.wms_stock_balances.update({
+                                    where: { id: exist.id },
+                                    data: { quantity: { increment: remainingToAdd } }
+                                });
                             } else {
-                                await connection.query('INSERT INTO wms_stock_balances (product_id, quantity) VALUES (?, ?)', [item.ProductId, remainingToAdd]);
+                                await tx.wms_stock_balances.create({
+                                    data: { product_id: item.ProductId, quantity: remainingToAdd }
+                                });
                             }
                         }
                     }
                 }
             }
-        }
 
-        await connection.query('DELETE FROM orderitems WHERE OrderId = ?', [req.params.id]);
-        await connection.query('DELETE FROM orders WHERE Id = ?', [req.params.id]);
-        await connection.commit();
+            if (status === 'Onaylandı' && oldStatus === 'Hazırlanıyor') {
+                await tx.orders.update({
+                    where: { Id: orderId },
+                    data: { OrderStatus: toPrismaStatus(status), PickerId: null }
+                });
+            } else {
+                await tx.orders.update({
+                    where: { Id: orderId },
+                    data: { OrderStatus: toPrismaStatus(status) }
+                });
+            }
+        });
+
+        await logActivity(req.user?.id, 'UPDATE', 'orders', orderId, `Sipariş durumu güncellendi: ${status}`);
+        res.json({ success: true, message: 'Sipariş durumu güncellendi.' });
+    } catch (err) {
+        console.error('Durum güncelleme hatası:', err);
+        if (err.message && err.message.includes('yeterli miktarda bulunmuyor')) {
+             return res.status(400).json({ success: false, message: err.message });
+        }
+        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
+    }
+});
+
+// DELETE /api/orders/:id - Siparişi ve kalemlerini sil
+router.delete('/:id', authMiddleware, async (req, res) => {
+    const orderId = Number(req.params.id);
+    
+    try {
+        await prisma.$transaction(async (tx) => {
+            const currOrder = await tx.orders.findUnique({
+                where: { Id: orderId }
+            });
+            
+            if (currOrder) {
+                const oldStatus = toFrontendStatus(currOrder.OrderStatus);
+                if (oldStatus !== 'İptal' && oldStatus !== 'İptal Edildi') {
+                    let deductedBatches = null;
+                    try { if (currOrder.deducted_batches) deductedBatches = JSON.parse(currOrder.deducted_batches); } catch(e){}
+
+                    if (deductedBatches && Array.isArray(deductedBatches)) {
+                        for (const d of deductedBatches) {
+                            await tx.wms_stock_balances.update({
+                                where: { id: d.batchId },
+                                data: { quantity: { increment: d.quantity } }
+                            });
+                        }
+                    } else {
+                        const items = await tx.orderitems.findMany({
+                            where: { OrderId: orderId }
+                        });
+                        for (const item of items) {
+                            const qty = Number(item.Quantity);
+                            const negatives = await tx.wms_stock_balances.findMany({
+                                where: { product_id: item.ProductId, quantity: { lt: 0 } },
+                                orderBy: { id: 'asc' }
+                            });
+
+                            let remainingToAdd = qty;
+
+                            for (const neg of negatives) {
+                                if (remainingToAdd <= 0) break;
+                                let toAdd = Math.min(Math.abs(Number(neg.quantity)), remainingToAdd);
+                                await tx.wms_stock_balances.update({
+                                    where: { id: neg.id },
+                                    data: { quantity: { increment: toAdd } }
+                                });
+                                remainingToAdd -= toAdd;
+                            }
+
+                            if (remainingToAdd > 0) {
+                                const exist = await tx.wms_stock_balances.findFirst({
+                                    where: { product_id: item.ProductId, quantity: { gte: 0 } }
+                                });
+                                if (exist) {
+                                    await tx.wms_stock_balances.update({
+                                        where: { id: exist.id },
+                                        data: { quantity: { increment: remainingToAdd } }
+                                    });
+                                } else {
+                                    await tx.wms_stock_balances.create({
+                                        data: { product_id: item.ProductId, quantity: remainingToAdd }
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            await tx.orderitems.deleteMany({ where: { OrderId: orderId } });
+            await tx.orders.delete({ where: { Id: orderId } });
+        });
+
+        await logActivity(req.user?.id, 'DELETE', 'orders', orderId, `Sipariş silindi ve stoklar iade edildi.`);
         res.json({ success: true, message: 'Sipariş başarıyla silindi ve stoklar iade edildi.' });
     } catch (err) {
-        await connection.rollback();
         console.error('Sipariş silme hatası:', err);
         res.status(500).json({ success: false, message: 'Sunucu hatası.' });
-    } finally {
-        connection.release();
     }
 });
 
 // PUT /api/orders/:id/approve - Siparişi Onayla ve Kutu/Kargo Ata
-router.put('/:id/approve', async (req, res) => {
+router.put('/:id/approve', authMiddleware, async (req, res) => {
     try {
-        const orderId = req.params.id;
+        const orderId = Number(req.params.id);
         
-        // 1. Sipariş kalemlerini ürün boyutlarıyla birlikte getir
-        const [items] = await db.query(`
-            SELECT oi.Quantity, p.Width, p.Height, p.Depth, p.Weight
-            FROM orderitems oi
-            JOIN products p ON oi.ProductId = p.Id
-            WHERE oi.OrderId = ?
-        `, [orderId]);
+        const items = await prisma.orderitems.findMany({
+            where: { OrderId: orderId },
+            include: { products: true }
+        });
         
         if (items.length === 0) return res.status(400).json({ success: false, message: 'Siparişte ürün yok.' });
         
@@ -380,24 +471,24 @@ router.put('/:id/approve', async (req, res) => {
         let totalWeight = 0;
         
         for (const item of items) {
-            const w = parseFloat(item.Width) || 10; // Default 10cm if not set
-            const h = parseFloat(item.Height) || 10;
-            const d = parseFloat(item.Depth) || 10;
-            const weight = parseFloat(item.Weight) || 0.5; // Default 0.5kg
-            const qty = parseInt(item.Quantity) || 1;
+            const w = parseFloat(item.products?.Width) || 10;
+            const h = parseFloat(item.products?.Height) || 10;
+            const d = parseFloat(item.products?.Depth) || 10;
+            const weight = parseFloat(item.products?.Weight) || 0.5;
+            const qty = Number(item.Quantity) || 1;
             
             totalVolume += (w * h * d) * qty;
             totalWeight += weight * qty;
         }
         
-        // 2. Tüm aktif kutuları getir
-        const [boxes] = await db.query('SELECT * FROM packaging_boxes WHERE IsActive = 1');
+        const boxes = await prisma.packaging_boxes.findMany({
+            where: { IsActive: true }
+        });
         
         if (boxes.length === 0) {
             return res.status(400).json({ success: false, message: 'Sistemde aktif kutu tanımı bulunmuyor.' });
         }
         
-        // Her kutu için maksimum hacmi hesapla
         const processedBoxes = boxes.map(b => ({
             ...b,
             volume: parseFloat(b.Width) * parseFloat(b.Height) * parseFloat(b.Depth),
@@ -406,7 +497,6 @@ router.put('/:id/approve', async (req, res) => {
             emptyWeight: parseFloat(b.EmptyWeight)
         }));
         
-        // 3. 3D Paketleme (Giyotin Bölme Sezgiseli) kullanarak optimum kutu kombinasyonunu bul
         function packSingleBox(units, boxW, boxH, boxD, maxWeight) {
             let spaces = [{ w: boxW, h: boxH, d: boxD }];
             let currentWeight = 0;
@@ -428,7 +518,6 @@ router.put('/:id/approve', async (req, res) => {
                     { w: unit.d, h: unit.h, d: unit.w }
                 ];
                 
-                // Sort spaces by volume ascending to find tightest fit
                 spaces.sort((a, b) => (a.w * a.h * a.d) - (b.w * b.h * b.d));
                 
                 for (let i = 0; i < spaces.length; i++) {
@@ -459,13 +548,13 @@ router.put('/:id/approve', async (req, res) => {
 
         let units = [];
         for (const item of items) {
-            for (let i = 0; i < (parseInt(item.Quantity) || 1); i++) {
+            for (let i = 0; i < (Number(item.Quantity) || 1); i++) {
                 units.push({
-                    w: parseFloat(item.Width) || 10,
-                    h: parseFloat(item.Height) || 10,
-                    d: parseFloat(item.Depth) || 10,
-                    weight: parseFloat(item.Weight) || 0.5,
-                    volume: (parseFloat(item.Width) || 10) * (parseFloat(item.Height) || 10) * (parseFloat(item.Depth) || 10)
+                    w: parseFloat(item.products?.Width) || 10,
+                    h: parseFloat(item.products?.Height) || 10,
+                    d: parseFloat(item.products?.Depth) || 10,
+                    weight: parseFloat(item.products?.Weight) || 0.5,
+                    volume: (parseFloat(item.products?.Width) || 10) * (parseFloat(item.products?.Height) || 10) * (parseFloat(item.products?.Depth) || 10)
                 });
             }
         }
@@ -478,7 +567,6 @@ router.put('/:id/approve', async (req, res) => {
             let packedInSingleBox = false;
             
             for (const box of sortedBoxes) {
-                // Apply padding: 2.5cm each side (total 5cm w, 5cm d), 3cm top (total 3cm h)
                 const netW = box.Width - 5;
                 const netD = box.Depth - 5;
                 const netH = box.Height - 3;
@@ -502,9 +590,8 @@ router.put('/:id/approve', async (req, res) => {
                 
                 const remainingUnits = packSingleBox(units, netW, netH, netD, largestBox.maxWeight);
                 if (remainingUnits.length === units.length) {
-                    // Extremely large item, doesn't fit even largest box net space.
                     bestCombo.push(largestBox);
-                    units.shift(); // Force skip 1 item to prevent infinite loop
+                    units.shift();
                 } else {
                     bestCombo.push(largestBox);
                     units = remainingUnits;
@@ -512,7 +599,6 @@ router.put('/:id/approve', async (req, res) => {
             }
         }
         
-        // Son hesaplamalar
         let finalBoxWeight = 0;
         let selectedBoxInfo = [];
         for(let box of bestCombo) {
@@ -521,17 +607,19 @@ router.put('/:id/approve', async (req, res) => {
         }
         
         const overallTotalWeight = totalWeight + finalBoxWeight;
-        
-        // 4. Kargo Barkodu Oluştur
         const cargoBarcode = 'CRG-' + orderId + '-' + Date.now().toString().slice(-4);
         
-        // 5. Siparişi Güncelle
-        await db.query(`
-            UPDATE orders 
-            SET OrderStatus = 'Onaylandı', CargoBarcode = ?, TotalWeight = ?, packaging_info = ?
-            WHERE Id = ?
-        `, [cargoBarcode, overallTotalWeight, JSON.stringify(selectedBoxInfo), orderId]);
+        await prisma.orders.update({
+            where: { Id: orderId },
+            data: {
+                OrderStatus: toPrismaStatus('Onaylandı'),
+                CargoBarcode: cargoBarcode,
+                TotalWeight: overallTotalWeight,
+                packaging_info: JSON.stringify(selectedBoxInfo)
+            }
+        });
         
+        await logActivity(req.user?.id, 'UPDATE', 'orders', orderId, `Sipariş onaylandı ve kargo ataması yapıldı: ${cargoBarcode}`);
         res.json({ success: true, message: 'Sipariş onaylandı ve kargo ataması yapıldı.', cargoBarcode, boxes: selectedBoxInfo });
         
     } catch (err) {
@@ -540,60 +628,58 @@ router.put('/:id/approve', async (req, res) => {
     }
 });
 
-// GET /api/orders/by-cargo/:barcode - Kargo barkoduna göre sipariş getir (Paketleme / Kurye için)
-router.get('/by-cargo/:barcode', async (req, res) => {
+// GET /api/orders/by-cargo/:barcode - Kargo barkoduna göre sipariş getir
+router.get('/by-cargo/:barcode', authMiddleware, async (req, res) => {
     try {
-        const [orders] = await db.query(`
-            SELECT o.*, c.CustomerName, c.Email as CustomerEmail, c.Phone as CustomerPhone, c.Address as CustomerAddress
-            FROM orders o
-            LEFT JOIN customers c ON o.CustomerId = c.Id
-            WHERE o.CargoBarcode = ?
-        `, [req.params.barcode]);
+        const order = await prisma.orders.findFirst({
+            where: { CargoBarcode: req.params.barcode },
+            include: {
+                customers: true,
+                orderitems: {
+                    include: { products: true }
+                }
+            }
+        });
         
-        if (orders.length === 0) {
+        if (!order) {
             return res.status(404).json({ success: false, message: 'Bu barkoda ait sipariş bulunamadı.' });
         }
         
-        const order = orders[0];
+        const formattedOrder = {
+            ...order,
+            CustomerName: order.customers?.CustomerName,
+            CustomerEmail: order.customers?.Email,
+            CustomerPhone: order.customers?.Phone,
+            CustomerAddress: order.customers?.Address,
+            items: order.orderitems.map(oi => ({
+                ...oi,
+                ProductName: oi.products?.ProductName,
+                ProductCode: oi.products?.Barcode
+            }))
+        };
         
-        // Ürün kalemlerini getir
-        const [items] = await db.query(`
-            SELECT oi.*, p.ProductName, p.Barcode as ProductCode 
-            FROM orderitems oi
-            LEFT JOIN products p ON oi.ProductId = p.Id
-            WHERE oi.OrderId = ?
-        `, [order.Id]);
-        
-        order.items = items;
-        
-        res.json({ success: true, data: order });
+        res.json({ success: true, data: formattedOrder });
     } catch (err) {
         console.error('Barkod ile arama hatası:', err);
         res.status(500).json({ success: false, message: 'Sunucu hatası.' });
     }
 });
 
-// PUT /api/orders/:id/status - Siparişin statüsünü güncelle
-router.put('/:id/status', async (req, res) => {
-    const { status } = req.body;
-    try {
-        await db.query('UPDATE orders SET OrderStatus = ? WHERE Id = ?', [status, req.params.id]);
-        res.json({ success: true, message: `Sipariş durumu ${status} olarak güncellendi.` });
-    } catch (err) {
-        console.error('Statü güncelleme hatası:', err);
-        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
-    }
-});
 
-// PUT /api/orders/:id/pack - Siparişi paketle (Kutu seç ve kargoya ver)
-router.put('/:id/pack', async (req, res) => {
+// PUT /api/orders/:id/pack - Siparişi paketle
+router.put('/:id/pack', authMiddleware, async (req, res) => {
     const { BoxId, TrackingNumber } = req.body;
     try {
-        await db.query(`
-            UPDATE orders 
-            SET BoxId = ?, TrackingNumber = ?, OrderStatus = 'Kargoya Verildi', CargoStatus = 'Transfer Merkezine Gidiyor' 
-            WHERE Id = ?
-        `, [BoxId || null, TrackingNumber || null, req.params.id]);
+        await prisma.orders.update({
+            where: { Id: Number(req.params.id) },
+            data: {
+                BoxId: BoxId ? Number(BoxId) : null,
+                TrackingNumber: TrackingNumber || null,
+                OrderStatus: toPrismaStatus('Kargoya Verildi'),
+                CargoStatus: 'Transfer Merkezine Gidiyor'
+            }
+        });
+        await logActivity(req.user?.id, 'UPDATE', 'orders', req.params.id, `Sipariş paketlendi ve kargoya verildi. Takip: ${TrackingNumber}`);
         res.json({ success: true, message: 'Paketleme tamamlandı, sipariş kargoya verildi.' });
     } catch (err) {
         console.error('Paketleme hatası:', err);
@@ -603,7 +689,6 @@ router.put('/:id/pack', async (req, res) => {
 
 // POST /api/orders/webhook/kargo - Kargo firmasından gelen durum güncellemelerini alır
 router.post('/webhook/kargo', async (req, res) => {
-    // Örnek Webhook Payload: { trackingNumber: 'CRG-123', status: 'DELIVERED', subStatus: 'Teslim Edildi' }
     const { trackingNumber, status, subStatus } = req.body;
     
     if (!trackingNumber) {
@@ -612,17 +697,15 @@ router.post('/webhook/kargo', async (req, res) => {
     
     try {
         if (status === 'DELIVERED' || status === 'Teslim Edildi') {
-            await db.query(`
-                UPDATE orders 
-                SET OrderStatus = 'Teslim Edildi', CargoStatus = 'Teslim Edildi' 
-                WHERE TrackingNumber = ?
-            `, [trackingNumber]);
+            await prisma.orders.updateMany({
+                where: { TrackingNumber: trackingNumber },
+                data: { OrderStatus: toPrismaStatus('Teslim Edildi'), CargoStatus: 'Teslim Edildi' }
+            });
         } else {
-            await db.query(`
-                UPDATE orders 
-                SET CargoStatus = ? 
-                WHERE TrackingNumber = ?
-            `, [subStatus || status, trackingNumber]);
+            await prisma.orders.updateMany({
+                where: { TrackingNumber: trackingNumber },
+                data: { CargoStatus: subStatus || status }
+            });
         }
         
         res.json({ success: true, message: 'Kargo durumu güncellendi.' });

@@ -21,6 +21,7 @@
 
 import { apiFetch } from '../../utils/api';
 import { useState, useEffect } from 'react';
+import Barcode from 'react-barcode';
 
 const ProductForm = ({ product, onClose, currentUser }) => {
   const isEditing = !!product;
@@ -486,26 +487,55 @@ const ProductForm = ({ product, onClose, currentUser }) => {
                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Barkodlar <span style={{color: '#94a3b8', fontWeight: 'normal'}}>(Okutun veya yazın)</span></label>
                 <button type="button" onClick={addBarcodeField} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>+</button>
             </div>
-            {barcodes.map((barcode, index) => (
-                <div key={index} style={{ display: 'flex', marginBottom: '8px', position: 'relative', alignItems: 'center' }}>
-                    <div 
-                        style={{ position: 'absolute', left: '10px', color: '#94a3b8', display: 'flex', alignItems: 'center', cursor: 'pointer', zIndex: 10 }}
-                        onClick={() => {
-                            setCurrentScanningIndex(index);
-                            setScannedBarcode('');
-                            setIsBarcodeModalOpen(true);
-                            setTimeout(() => document.getElementById('barcode-form-input')?.focus(), 100);
-                        }}
-                        title="Barkod okutmak için tıklayın"
-                    >
-                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
-                    </div>
-                    <input type="text" value={barcode} onChange={(e) => handleBarcodeChange(index, e.target.value)} placeholder={`Barkod ${index + 1} okutun veya yazın`} style={{ flex: 1, padding: '10px 10px 10px 36px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                    {barcodes.length > 1 && (
-                        <button type="button" onClick={() => removeBarcodeField(index)} style={{ marginLeft: '8px', padding: '0 10px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '40px' }}>×</button>
-                    )}
-                </div>
-            ))}
+                            {barcodes.map((barcode, index) => (
+                                <div key={index} style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px' }}>
+                                    <div style={{ display: 'flex', position: 'relative', alignItems: 'center' }}>
+                                        <div 
+                                            style={{ position: 'absolute', left: '10px', color: '#94a3b8', display: 'flex', alignItems: 'center', cursor: 'pointer', zIndex: 10 }}
+                                            onClick={() => {
+                                                setCurrentScanningIndex(index);
+                                                setScannedBarcode('');
+                                                setIsBarcodeModalOpen(true);
+                                                setTimeout(() => document.getElementById('barcode-form-input')?.focus(), 100);
+                                            }}
+                                            title="Barkod okutmak için tıklayın"
+                                        >
+                                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
+                                        </div>
+                                        <input type="text" value={barcode} onChange={(e) => handleBarcodeChange(index, e.target.value)} placeholder={`Barkod ${index + 1} okutun veya yazın`} style={{ flex: 1, padding: '10px 10px 10px 36px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                        
+                                        <button 
+                                            type="button" 
+                                            onClick={() => {
+                                                let newCode = '869'; // Türkiye GS1
+                                                for (let i = 0; i < 9; i++) {
+                                                    newCode += Math.floor(Math.random() * 10).toString();
+                                                }
+                                                let sum = 0;
+                                                for (let i = 0; i < 12; i++) {
+                                                    sum += parseInt(newCode[i]) * (i % 2 === 0 ? 1 : 3);
+                                                }
+                                                const checkSum = (10 - (sum % 10)) % 10;
+                                                handleBarcodeChange(index, newCode + checkSum);
+                                            }} 
+                                            style={{ marginLeft: '8px', padding: '0 12px', background: '#eef2ff', color: '#4f46e5', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '38px', fontWeight: '600', fontSize: '13px' }}
+                                        >
+                                            Oluştur
+                                        </button>
+
+                                        {barcodes.length > 1 && (
+                                            <button type="button" onClick={() => removeBarcodeField(index)} style={{ marginLeft: '8px', padding: '0 10px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '38px' }}>×</button>
+                                        )}
+                                    </div>
+
+                                    {/* Eğer barkod varsa resmini göster */}
+                                    {barcode && barcode.trim().length > 0 && (
+                                        <div style={{ marginTop: '8px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px' }}>
+                                            <Barcode value={barcode} format={barcode.length === 13 ? "EAN13" : "CODE128"} width={1.8} height={50} fontSize={14} background="#ffffff" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>

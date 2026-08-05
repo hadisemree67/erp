@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: emailService.js
- * MODÜL / KATMAN: Arkayüz Servisi (Service) - E-Posta Bildirim Sistemi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistem içindeki otomatik bilgilendirmeleri, kritik stok uyarılarını, satın alma onay bildirimlerini ve kullanıcı şifre sıfırlama e-postalarını göndermekten sorumlu servis katmanıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Nodemailer / SMTP Entegrasyonu, Asenkron İletişim
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Rotalar (Routes) ve arka plan görevleri tarafından tetiklenerek dış dünyaya e-posta iletir.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, sistem içindeki otomatik bilgilendirmeleri, kritik stok uyarılarını, 
@@ -27,7 +11,7 @@ require('dotenv').config();
 const getTransporter = async () => {
     require('dotenv').config(); // değişmiş olma ihtimaline karşı env dosyasını yeniden yükle
     const host = process.env.SMTP_HOST || (process.env.SMTP_USER && process.env.SMTP_USER.includes('gmail.com') ? 'smtp.gmail.com' : null);
-    
+
     if (host && process.env.SMTP_USER && process.env.SMTP_PASS) {
         return nodemailer.createTransport({
             host: host,
@@ -100,7 +84,7 @@ const sendLowStockEmail = async (supplier, product, requestToken) => {
         if (!process.env.SMTP_HOST) {
             console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
         }
-        
+
         return true;
     } catch (error) {
         console.error("Error sending email:", error);
@@ -211,7 +195,7 @@ const sendMachineBreakdownEmail = async (machine, issueDescription, reporterName
 const sendLowBoxStockEmail = async (supplier, box) => {
     try {
         if (!supplier.Email) return false;
-        
+
         const transporter = await getTransporter();
 
         const htmlContent = `
@@ -250,7 +234,7 @@ const sendLowBoxStockEmail = async (supplier, box) => {
         if (!process.env.SMTP_HOST) {
             console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
         }
-        
+
         return true;
     } catch (error) {
         console.error("Error sending box email:", error);

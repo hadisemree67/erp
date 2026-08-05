@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: production.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Üretim ve İmalat Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Üretim siparişleri, reçeteler (BOM - Malzeme İhtiyaç Listesi), üretim hatları, makine listeleri ve üretim aşamalarının takibini gerçekleştiren API uç noktalarını barındırır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, İlişkisel Veritabanı Sorguları, İş Mantığı Yönetimi
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki ProductionList, ProductionOrder, MachineList ve ProductionRequests bileşenlerinin veritabanı ile etkileşimini sağlar.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, sistemdeki üretim ve imalat işlemlerini yönetir. Reçeteler, makine durumları, 
@@ -23,6 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const authMiddleware = require('../middleware/auth');
 const { logActivity } = require('../utils/logger'); // assuming logger exists
 const { sendMachineMaintenanceReminderEmail, sendMachineBreakdownEmail } = require('../services/emailService');
 const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
@@ -32,11 +17,11 @@ const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 // =======================
 
 // Tüm makineleri getir
-router.get('/machines', async (req, res) => {
+router.get('/machines', authMiddleware, async (req, res) => {
     try {
         // Update status if busy_until has passed
         await db.query(`UPDATE production_machines SET status = 'Boş', busy_until = NULL WHERE status = 'Dolu' AND busy_until < NOW()`);
-        
+
         const [rows] = await db.query('SELECT * FROM production_machines ORDER BY id DESC');
 
         // Otomatik Bakım Hatırlatma E-postası Kontrolü (Son 7 gün kalanlar)
@@ -65,13 +50,13 @@ router.get('/machines', async (req, res) => {
 });
 
 // Add a machine
-router.post('/machines', async (req, res) => {
+router.post('/machines', authMiddleware, async (req, res) => {
     const { name, last_maintenance, machine_code, max_capacity, min_capacity, allowed_categories, prep_time_minutes, alternative_machine_id, supplier_name, supplier_email, supplier_phone, maintenance_period_months } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Makine adı zorunludur.' });
-    
+
     try {
         const catsJson = allowed_categories ? JSON.stringify(allowed_categories) : null;
-        
+
         // Next maintenance hesabı
         let next_maintenance = null;
         const period = parseInt(maintenance_period_months) || 12;
@@ -85,11 +70,11 @@ router.post('/machines', async (req, res) => {
             INSERT INTO production_machines (name, last_maintenance, status, machine_code, max_capacity, min_capacity, allowed_categories, prep_time_minutes, alternative_machine_id, supplier_name, supplier_email, supplier_phone, maintenance_period_months, next_maintenance, maintenance_reminder_sent) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         `, [
-            name, last_maintenance || null, 'Boş', 
-            machine_code || null, 
-            max_capacity || null, 
-            min_capacity || null, 
-            catsJson, 
+            name, last_maintenance || null, 'Boş',
+            machine_code || null,
+            max_capacity || null,
+            min_capacity || null,
+            catsJson,
             prep_time_minutes || 0,
             alternative_machine_id || null,
             supplier_name || null,
@@ -98,6 +83,7 @@ router.post('/machines', async (req, res) => {
             period,
             next_maintenance
         ]);
+        await logActivity(req.user?.id, 'INSERT', 'production_machines', result.insertId, `Yeni makine eklendi: ${name}`);
         res.json({ success: true, message: 'Makine başarıyla eklendi.', data: { id: result.insertId, name } });
     } catch (err) {
         console.error('Error adding machine:', err);
@@ -106,10 +92,12 @@ router.post('/machines', async (req, res) => {
 });
 
 // Update machine status manually (optional)
-router.put('/machines/:id/status', async (req, res) => {
+router.put('/machines/:id/status', authMiddleware, async (req, res) => {
     const { status } = req.body;
     try {
-        await db.query('UPDATE production_machines SET status = ? WHERE id = ?', [status, req.params.id]);
+        const [result] = await db.query('UPDATE production_machines SET status = ? WHERE id = ?', [status, req.params.id]);
+        if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Makine bulunamadı.' });
+        await logActivity(req.user?.id, 'UPDATE', 'production_machines', req.params.id, `Makine durumu "${status}" olarak güncellendi.`);
         res.json({ success: true, message: 'Makine durumu güncellendi.' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Sunucu hatası.' });
@@ -117,14 +105,14 @@ router.put('/machines/:id/status', async (req, res) => {
 });
 
 // Edit a machine
-router.put('/machines/:id', async (req, res) => {
+router.put('/machines/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { name, last_maintenance, machine_code, max_capacity, min_capacity, allowed_categories, prep_time_minutes, alternative_machine_id, supplier_name, supplier_email, supplier_phone, maintenance_period_months } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Makine adı zorunludur.' });
-    
+
     try {
         const catsJson = allowed_categories ? JSON.stringify(allowed_categories) : null;
-        
+
         // Next maintenance hesabı
         let next_maintenance = null;
         const period = parseInt(maintenance_period_months) || 12;
@@ -134,16 +122,16 @@ router.put('/machines/:id', async (req, res) => {
             next_maintenance = d.toISOString().split('T')[0];
         }
 
-        await db.query(`
+        const [result] = await db.query(`
             UPDATE production_machines 
             SET name = ?, last_maintenance = ?, machine_code = ?, max_capacity = ?, min_capacity = ?, allowed_categories = ?, prep_time_minutes = ?, alternative_machine_id = ?, supplier_name = ?, supplier_email = ?, supplier_phone = ?, maintenance_period_months = ?, next_maintenance = ?, maintenance_reminder_sent = 0
             WHERE id = ?
         `, [
-            name, last_maintenance || null, 
-            machine_code || null, 
-            max_capacity || null, 
-            min_capacity || null, 
-            catsJson, 
+            name, last_maintenance || null,
+            machine_code || null,
+            max_capacity || null,
+            min_capacity || null,
+            catsJson,
             prep_time_minutes || 0,
             alternative_machine_id || null,
             supplier_name || null,
@@ -153,6 +141,8 @@ router.put('/machines/:id', async (req, res) => {
             next_maintenance,
             id
         ]);
+        if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Makine bulunamadı.' });
+        await logActivity(req.user?.id, 'UPDATE', 'production_machines', id, `Makine bilgileri güncellendi: ${name}`);
         res.json({ success: true, message: 'Makine başarıyla güncellendi.' });
     } catch (err) {
         console.error('Error updating machine:', err);
@@ -161,29 +151,30 @@ router.put('/machines/:id', async (req, res) => {
 });
 
 // Report machine issue / breakdown
-router.post('/machines/:id/report-issue', async (req, res) => {
+router.post('/machines/:id/report-issue', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { issue_description, reporter_name } = req.body;
     try {
         const [rows] = await db.query('SELECT * FROM production_machines WHERE id = ?', [id]);
         if (rows.length === 0) return res.status(404).json({ success: false, message: 'Makine bulunamadı.' });
-        
+
         const machine = rows[0];
-        
+
         // Durumu Arızalı yap
         await db.query('UPDATE production_machines SET status = ? WHERE id = ?', ['Arızalı', id]);
-        
+        await logActivity(req.user?.id, 'UPDATE', 'production_machines', id, `Makine arıza bildirimi yapıldı. Bildiren: ${reporter_name}`);
+
         // E-posta gönder
         let emailSent = false;
         if (machine.supplier_email) {
             emailSent = await sendMachineBreakdownEmail(machine, issue_description, reporter_name);
         }
-        
-        res.json({ 
-            success: true, 
-            message: emailSent 
-                ? 'Arıza bildirim e-postası bakımcıya/satıcıya iletildi ve makine durumu "Arızalı" olarak güncellendi.' 
-                : 'Makine durumu "Arızalı" olarak güncellendi. (Makine için kayıtlı e-posta adresi bulunamadığından veya mail sunucusu ayarlanmadığından e-posta gönderilemedi).' 
+
+        res.json({
+            success: true,
+            message: emailSent
+                ? 'Arıza bildirim e-postası bakımcıya/satıcıya iletildi ve makine durumu "Arızalı" olarak güncellendi.'
+                : 'Makine durumu "Arızalı" olarak güncellendi. (Makine için kayıtlı e-posta adresi bulunamadığından veya mail sunucusu ayarlanmadığından e-posta gönderilemedi).'
         });
     } catch (err) {
         console.error('Error reporting machine issue:', err);
@@ -192,10 +183,12 @@ router.post('/machines/:id/report-issue', async (req, res) => {
 });
 
 // Delete a machine
-router.delete('/machines/:id', async (req, res) => {
+router.delete('/machines/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
-        await db.query('DELETE FROM production_machines WHERE id = ?', [id]);
+        const [result] = await db.query('DELETE FROM production_machines WHERE id = ?', [id]);
+        if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Makine bulunamadı.' });
+        await logActivity(req.user?.id, 'DELETE', 'production_machines', id, `Makine silindi.`);
         res.json({ success: true, message: 'Makine silindi.' });
     } catch (err) {
         console.error('Error deleting machine:', err);
@@ -209,7 +202,7 @@ router.delete('/machines/:id', async (req, res) => {
 // =======================
 
 // Uygun makineleri bul
-router.post('/orders/match', async (req, res) => {
+router.post('/orders/match', authMiddleware, async (req, res) => {
     const { product_id, planned_quantity } = req.body;
     if (!product_id || !planned_quantity) return res.status(400).json({ success: false, message: 'Ürün ve miktar gerekli.' });
 
@@ -217,7 +210,7 @@ router.post('/orders/match', async (req, res) => {
         // 1. Get product category and formula
         const [prodRows] = await db.query('SELECT Category, Formula FROM products WHERE Id = ?', [product_id]);
         if (prodRows.length === 0) return res.status(404).json({ success: false, message: 'Ürün bulunamadı.' });
-        
+
         const category = prodRows[0].Category;
         const qty = parseFloat(planned_quantity);
 
@@ -231,7 +224,7 @@ router.post('/orders/match', async (req, res) => {
             for (const mat of (step.materials || [])) {
                 let mQty = parseFloat(mat.quantity) || 0;
                 let mUnit = (mat.unit || '').toLowerCase();
-                
+
                 // Sadece ağırlık/hacim birimlerini makine kapasitesine dahil et (adet, koli vs. hariç)
                 if (mUnit === 'gr' || mUnit === 'ml') {
                     totalPerProductVolume += (mQty / 1000);
@@ -263,7 +256,7 @@ router.post('/orders/match', async (req, res) => {
                     if (Array.isArray(cats) && cats.length > 0) {
                         if (!cats.includes(category)) return false;
                     }
-                } catch(e) { console.warn('JSON Parse Error (allowed_categories):', e.message); }
+                } catch (e) { console.warn('JSON Parse Error (allowed_categories):', e.message); }
             }
             return true;
         });
@@ -284,16 +277,16 @@ router.post('/orders/match', async (req, res) => {
         const recommended = matched[0];
 
         res.json({ success: true, recommended, allMatches: matched });
-    } catch(err) {
+    } catch (err) {
         console.error('Match error:', err);
         res.status(500).json({ success: false, message: 'Sunucu hatası' });
     }
 });
 
 // Yeni bir üretim siparişi oluştur
-router.post('/orders', async (req, res) => {
+router.post('/orders', authMiddleware, async (req, res) => {
     const { product_id, planned_quantity, machine_id, assigned_user_id } = req.body;
-    
+
     if (!product_id || !planned_quantity || !machine_id) {
         return res.status(400).json({ success: false, message: 'Gerekli alanlar eksik.' });
     }
@@ -306,7 +299,7 @@ router.post('/orders', async (req, res) => {
         const [productRows] = await connection.query('SELECT Formula, ProductName FROM products WHERE Id = ?', [product_id]);
         if (productRows.length === 0) throw new Error('Ürün bulunamadı.');
         const product = productRows[0];
-        
+
         let formula = [];
         try {
             if (product.Formula) formula = JSON.parse(product.Formula);
@@ -356,10 +349,10 @@ router.post('/orders', async (req, res) => {
             if (fromUnit !== toUnit && fromUnit !== '') {
                 const isFromSmall = (fromUnit === 'gr' || fromUnit === 'ml');
                 const isToLarge = (toUnit === 'kg' || toUnit === 'kilogram' || toUnit === 'l' || toUnit === 'litre');
-                
+
                 const isFromLarge = (fromUnit === 'kg' || fromUnit === 'kilogram' || fromUnit === 'l' || fromUnit === 'litre');
                 const isToSmall = (toUnit === 'gr' || toUnit === 'ml');
-                
+
                 if (isFromSmall && isToLarge) {
                     reqQty = reqQtyRaw / 1000;
                 } else if (isFromLarge && isToSmall) {
@@ -404,7 +397,7 @@ router.post('/orders', async (req, res) => {
         // 4. Create the production order
         // Machine ID is now step-specific, but we might need a default machine or null. We'll use the first step's machine_id.
         const firstStepMachineId = formula[0]?.machine_id || machine_id;
-        
+
         const [orderResult] = await connection.query(`
             INSERT INTO production_orders (product_id, machine_id, assigned_user_id, planned_quantity, waste_percentage, status)
             VALUES (?, ?, ?, ?, ?, 'Bekliyor')
@@ -415,7 +408,7 @@ router.post('/orders', async (req, res) => {
         // 5. Insert Production Order Steps
         // Check if formula is V3 (has steps) or V2 (old format with just materials)
         const isV3 = formula.length > 0 && formula[0].step !== undefined;
-        
+
         if (isV3) {
             for (const step of formula) {
                 await connection.query(`
@@ -444,18 +437,19 @@ router.post('/orders', async (req, res) => {
             let remainingToPick = mat.required_quantity;
             for (let loc of locRows) {
                 if (remainingToPick <= 0) break;
-                
+
                 const pickQty = Math.min(loc.quantity, remainingToPick);
-                
+
                 await connection.query(`
                     INSERT INTO production_materials (production_order_id, material_product_id, required_quantity, location_id, warehouse_id, shelf_code)
                     VALUES (?, ?, ?, ?, ?, ?)
                 `, [orderId, mat.product_id, pickQty, loc.id, loc.warehouse_id, loc.shelf_code]);
-                
+
                 remainingToPick -= pickQty;
             }
         }
 
+        await logActivity(req.user?.id, 'INSERT', 'production_orders', orderId, `Yeni üretim emri oluşturuldu. (Hedef Miktar: ${targetQuantity})`);
         await connection.commit();
         res.json({ success: true, message: 'Üretim emri oluşturuldu, toplama aşamasına geçilebilir.', orderId });
     } catch (err) {
@@ -468,7 +462,7 @@ router.post('/orders', async (req, res) => {
 });
 
 // Tüm üretim siparişlerini getir
-router.get('/orders', async (req, res) => {
+router.get('/orders', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT po.*, p.ProductName as product_name, m.name as machine_name, u.name as user_name, p.Formula as product_formula
@@ -487,20 +481,21 @@ router.get('/orders', async (req, res) => {
 });
 
 // Siparişi sil
-router.delete('/orders/:id', async (req, res) => {
+router.delete('/orders/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const [rows] = await db.query('SELECT status FROM production_orders WHERE id = ?', [id]);
-        
+
         if (rows.length === 0) {
             return res.status(404).json({ success: false, message: 'Sipariş bulunamadı.' });
         }
-        
+
         if (rows[0].status === 'Üretimde' || rows[0].status === 'Tamamlandı') {
             return res.status(400).json({ success: false, message: 'Üretimde veya tamamlanmış sipariş iptal edilemez.' });
         }
-        
+
         await db.query('DELETE FROM production_orders WHERE id = ?', [id]);
+        await logActivity(req.user?.id, 'DELETE', 'production_orders', id, `Üretim emri iptal edildi/silindi.`);
         res.json({ success: true, message: 'Sipariş başarıyla iptal edildi ve silindi.' });
     } catch (err) {
         console.error('Error deleting order:', err);
@@ -509,7 +504,7 @@ router.delete('/orders/:id', async (req, res) => {
 });
 
 // Siparişi arşivle
-router.post('/orders/:id/archive', async (req, res) => {
+router.post('/orders/:id/archive', authMiddleware, async (req, res) => {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -561,7 +556,7 @@ router.post('/orders/:id/archive', async (req, res) => {
 });
 
 // Sipariş detaylarını getir (toplanacak malzemeler dahil)
-router.get('/orders/:id', async (req, res) => {
+router.get('/orders/:id', authMiddleware, async (req, res) => {
     try {
         const [orderRows] = await db.query(`
             SELECT po.*, p.ProductName as product_name, m.name as machine_name, u.name as user_name, p.Formula as product_formula
@@ -599,22 +594,25 @@ router.get('/orders/:id', async (req, res) => {
 });
 
 // Malzemeyi toplandı olarak işaretle
-router.post('/orders/:id/pick', async (req, res) => {
+router.post('/orders/:id/pick', authMiddleware, async (req, res) => {
     const { material_id, actual_quantity } = req.body;
     try {
         let actQty = null;
         if (actual_quantity !== undefined && actual_quantity !== null) {
             actQty = parseFloat(actual_quantity);
         }
-        await db.query(`UPDATE production_materials SET is_picked = 1, picked_at = NOW(), actual_quantity = ? WHERE id = ? AND production_order_id = ?`, [actQty, material_id, req.params.id]);
-        
+        const [result] = await db.query(`UPDATE production_materials SET is_picked = 1, picked_at = NOW(), actual_quantity = ? WHERE id = ? AND production_order_id = ?`, [actQty, material_id, req.params.id]);
+        if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Malzeme bulunamadı.' });
+
+        await logActivity(req.user?.id, 'UPDATE', 'production_materials', material_id, `Üretim emri için malzeme toplandı (Emir #${req.params.id}).`);
+
         // Check if all picked
         const [notPicked] = await db.query(`SELECT id FROM production_materials WHERE production_order_id = ? AND is_picked = 0`, [req.params.id]);
         if (notPicked.length === 0) {
             // Update order status if it was 'Bekliyor'
             await db.query(`UPDATE production_orders SET status = 'Toplanıyor' WHERE id = ? AND status = 'Bekliyor'`, [req.params.id]);
         }
-        
+
         res.json({ success: true, message: 'Toplandı işaretlendi.' });
     } catch (err) {
         console.error('Error marking material as picked:', err);
@@ -623,11 +621,11 @@ router.post('/orders/:id/pick', async (req, res) => {
 });
 
 // Üretimi başlat
-router.post('/orders/:id/start', async (req, res) => {
+router.post('/orders/:id/start', authMiddleware, async (req, res) => {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
-        
+
         const [order] = await connection.query(`
             SELECT po.machine_id, po.status, po.product_id, pm.prep_time_minutes, p.ProductionTime 
             FROM production_orders po
@@ -651,6 +649,8 @@ router.post('/orders/:id/start', async (req, res) => {
             WHERE id = ?
         `, [req.params.id]);
 
+        await logActivity(req.user?.id, 'UPDATE', 'production_orders', req.params.id, `Üretim başlatıldı.`);
+
         await connection.commit();
         res.json({ success: true, message: 'Üretim başladı, birinci adım işletilebilir.' });
     } catch (err) {
@@ -662,7 +662,7 @@ router.post('/orders/:id/start', async (req, res) => {
 });
 
 // Belirli bir üretim adımını başlat
-router.post('/orders/:id/steps/:step_id/start', async (req, res) => {
+router.post('/orders/:id/steps/:step_id/start', authMiddleware, async (req, res) => {
     const { id, step_id } = req.params;
     const connection = await db.getConnection();
     try {
@@ -692,7 +692,7 @@ router.post('/orders/:id/steps/:step_id/start', async (req, res) => {
                 const [altMachineRows] = await connection.query(`SELECT status FROM production_machines WHERE id = ?`, [step.alternative_machine_id]);
                 if (altMachineRows.length > 0 && altMachineRows[0].status === 'Boş') {
                     targetMachineId = step.alternative_machine_id;
-                    
+
                     // Update step to use alternative machine
                     await connection.query(`UPDATE production_order_steps SET machine_id = ? WHERE id = ?`, [targetMachineId, step_id]);
                 } else {
@@ -715,6 +715,8 @@ router.post('/orders/:id/steps/:step_id/start', async (req, res) => {
             WHERE id = ?
         `, [step_id]);
 
+        await logActivity(req.user?.id, 'UPDATE', 'production_order_steps', step_id, `Üretim adımı #${step_id} başlatıldı (Emir #${id}).`);
+
         await connection.commit();
         res.json({ success: true, message: 'Adım başladı.' });
     } catch (err) {
@@ -726,12 +728,12 @@ router.post('/orders/:id/steps/:step_id/start', async (req, res) => {
 });
 
 // Bir adım için malzemeyi doğrula
-router.post('/orders/:id/steps/:step_id/verify-material', async (req, res) => {
+router.post('/orders/:id/steps/:step_id/verify-material', authMiddleware, async (req, res) => {
     const { material_name } = req.body;
     try {
         const [rows] = await db.query('SELECT verified_materials FROM production_order_steps WHERE id = ? AND production_order_id = ?', [req.params.step_id, req.params.id]);
         if (rows.length === 0) return res.status(404).json({ success: false, message: 'Adım bulunamadı.' });
-        
+
         let verified = [];
         try {
             const vm = rows[0].verified_materials;
@@ -740,24 +742,25 @@ router.post('/orders/:id/steps/:step_id/verify-material', async (req, res) => {
             } else if (Array.isArray(vm)) {
                 verified = vm;
             }
-        } catch(e) { console.warn('JSON Parse Error (verified_materials):', e.message); }
-        
+        } catch (e) { console.warn('JSON Parse Error (verified_materials):', e.message); }
+
         if (!Array.isArray(verified)) verified = [];
         if (!verified.includes(material_name)) {
             verified.push(material_name);
         }
 
         await db.query('UPDATE production_order_steps SET verified_materials = ? WHERE id = ?', [JSON.stringify(verified), req.params.step_id]);
-        
+        await logActivity(req.user?.id, 'UPDATE', 'production_order_steps', req.params.step_id, `Malzeme doğrulandı: ${material_name} (Emir #${req.params.id}).`);
+
         res.json({ success: true, verified_materials: verified });
-    } catch(err) {
+    } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Sunucu hatası' });
     }
 });
 
 // Belirli bir üretim adımını tamamla
-router.post('/orders/:id/steps/:step_id/complete', async (req, res) => {
+router.post('/orders/:id/steps/:step_id/complete', authMiddleware, async (req, res) => {
     const { id, step_id } = req.params;
     const connection = await db.getConnection();
     try {
@@ -788,6 +791,8 @@ router.post('/orders/:id/steps/:step_id/complete', async (req, res) => {
             WHERE id = ?
         `, [step_id]);
 
+        await logActivity(req.user?.id, 'UPDATE', 'production_order_steps', step_id, `Üretim adımı #${step_id} tamamlandı (Emir #${id}).`);
+
         await connection.commit();
         res.json({ success: true, message: 'Adım tamamlandı.' });
     } catch (err) {
@@ -799,7 +804,7 @@ router.post('/orders/:id/steps/:step_id/complete', async (req, res) => {
 });
 
 // Üretimi tamamla
-router.post('/orders/:id/complete', async (req, res) => {
+router.post('/orders/:id/complete', authMiddleware, async (req, res) => {
     const { actual_quantity, waste_reason, manager_explanation, is_manager_approval, delivered_to_user_id } = req.body;
     const connection = await db.getConnection();
     try {
@@ -839,6 +844,7 @@ router.post('/orders/:id/complete', async (req, res) => {
                     SET status = 'Onay Bekliyor', actual_quantity = ?, waste_percentage = ?, waste_reason = ? 
                     WHERE id = ?
                 `, [actual, waste_pct, waste_reason || null, order.id]);
+                await logActivity(req.user?.id, 'UPDATE', 'production_orders', order.id, `Üretim Fire Onayına Gönderildi (Fire: %${waste_pct.toFixed(2)}).`);
                 await connection.commit();
                 return res.json({ success: true, requireManager: true, message: 'Fire oranı %30 üzeri! Yönetici onayı bekleniyor.' });
             }
@@ -850,7 +856,7 @@ router.post('/orders/:id/complete', async (req, res) => {
         }
 
         // If we reach here, it's either <5%, or 5-30% with reason, or manager approved >30%.
-        
+
         // Fetch warehouse manager name
         let warehouseManagerName = 'Bilinmiyor';
         if (delivered_to_user_id) {
@@ -865,7 +871,7 @@ router.post('/orders/:id/complete', async (req, res) => {
 
         // 1. Deduct raw materials from stock_balances
         const [materials] = await connection.query(`SELECT * FROM production_materials WHERE production_order_id = ?`, [order.id]);
-        
+
         for (let mat of materials) {
             let deductQty = mat.required_quantity;
             if (mat.actual_quantity !== null && mat.actual_quantity !== undefined) {
@@ -902,6 +908,8 @@ router.post('/orders/:id/complete', async (req, res) => {
         // Release machine
         await connection.query(`UPDATE production_machines SET status = 'Boş', busy_until = NULL WHERE id = ?`, [order.machine_id]);
 
+        await logActivity(req.user?.id, 'UPDATE', 'production_orders', order.id, `Üretim tamamlandı. Gerçekleşen Miktar: ${actual}, Depo Onayına Gönderildi.`);
+
         await connection.commit();
         res.json({ success: true, message: 'Üretim tamamlandı, depo onayına gönderildi.' });
     } catch (err) {
@@ -914,7 +922,7 @@ router.post('/orders/:id/complete', async (req, res) => {
 });
 
 // Users with Üretim role
-router.get('/users', async (req, res) => {
+router.get('/users', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT id, name FROM users WHERE role = 'Üretim' OR role = 'admin'`);
         res.json({ success: true, data: rows });
@@ -925,7 +933,7 @@ router.get('/users', async (req, res) => {
 });
 
 // Users with Depo role
-router.get('/warehouse-users', async (req, res) => {
+router.get('/warehouse-users', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT id, name FROM users WHERE role = 'Depo' OR role = 'admin'`);
         res.json({ success: true, data: rows });
@@ -938,7 +946,7 @@ router.get('/warehouse-users', async (req, res) => {
 // ----------------- DEPO KABUL İŞLEMLERİ -----------------
 
 // Fetch orders waiting for warehouse acceptance
-router.get('/warehouse-acceptances', async (req, res) => {
+router.get('/warehouse-acceptances', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT 
@@ -963,7 +971,7 @@ router.get('/warehouse-acceptances', async (req, res) => {
 });
 
 // Mark order as accepted by warehouse manager
-router.post('/orders/:id/accept-delivery', async (req, res) => {
+router.post('/orders/:id/accept-delivery', authMiddleware, async (req, res) => {
     try {
         const [result] = await db.query(`
             UPDATE production_orders 
@@ -973,6 +981,7 @@ router.post('/orders/:id/accept-delivery', async (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(400).json({ success: false, message: 'İşlem yapılamadı. Belki de zaten kabul edilmiştir.' });
         }
+        await logActivity(req.user?.id, 'UPDATE', 'production_orders', req.params.id, `Üretim siparişi depo tarafından kabul edildi.`);
         res.json({ success: true, message: 'Teslim alındı olarak işaretlendi.' });
     } catch (err) {
         console.error('Accept delivery error:', err);
@@ -981,7 +990,7 @@ router.post('/orders/:id/accept-delivery', async (req, res) => {
 });
 
 // Report defect / discrepancy and accept valid amount
-router.post('/orders/:id/report-defect', async (req, res) => {
+router.post('/orders/:id/report-defect', authMiddleware, async (req, res) => {
     const { received_quantity, reason } = req.body;
     const connection = await db.getConnection();
     try {
@@ -1034,7 +1043,7 @@ router.post('/orders/:id/report-defect', async (req, res) => {
 });
 
 // Finalize stock entry by warehouse manager
-router.post('/orders/:id/warehouse-stock-entry', async (req, res) => {
+router.post('/orders/:id/warehouse-stock-entry', authMiddleware, async (req, res) => {
     const { shelfAllocations, batch_number, expiration_date } = req.body;
     const connection = await db.getConnection();
     try {
@@ -1072,9 +1081,9 @@ router.post('/orders/:id/warehouse-stock-entry', async (req, res) => {
             // Volumetric check matching warehouses.js
             if (productVolume > 0 && shelfCode) {
                 const [shelfData] = await connection.query('SELECT max_volume FROM warehouse_shelves WHERE warehouse_id = ? AND shelf_code = ?', [warehouseId, shelfCode]);
-                
+
                 if (shelfData.length === 0) {
-                     throw new Error(`Geçersiz raf kodu seçildi: ${shelfCode}`);
+                    throw new Error(`Geçersiz raf kodu seçildi: ${shelfCode}`);
                 }
 
                 const maxVolume = parseFloat(shelfData[0]?.max_volume) || 0;
@@ -1085,7 +1094,7 @@ router.post('/orders/:id/warehouse-stock-entry', async (req, res) => {
                         [warehouseId, shelfCode]
                     );
                     const currentFilled = parseFloat(filledData[0].filled) || 0;
-                    
+
                     const emptyVolume = Math.max(maxVolume - currentFilled, 0);
                     const finalMax = Math.floor(emptyVolume / productVolume);
 
@@ -1129,6 +1138,8 @@ router.post('/orders/:id/warehouse-stock-entry', async (req, res) => {
         // 5. Update Order Status
         await connection.query(`UPDATE production_orders SET status = 'Tamamlandı' WHERE id = ?`, [order.id]);
 
+        await logActivity(req.user?.id, 'UPDATE', 'production_orders', order.id, 'Üretim sonucu oluşan stoklar depoya başarıyla yerleştirildi.');
+
         await connection.commit();
         res.json({ success: true, message: 'Stok girişi başarıyla tamamlandı.' });
     } catch (err) {
@@ -1142,7 +1153,7 @@ router.post('/orders/:id/warehouse-stock-entry', async (req, res) => {
 
 
 // Get max producible quantity based on stock
-router.get('/max-quantity/:productId', async (req, res) => {
+router.get('/max-quantity/:productId', authMiddleware, async (req, res) => {
     try {
         const { productId } = req.params;
         const [prodRows] = await db.query('SELECT Formula, ProductName, Category FROM products WHERE Id = ?', [productId]);
@@ -1152,7 +1163,7 @@ router.get('/max-quantity/:productId', async (req, res) => {
         let formula = [];
         try {
             if (product.Formula) formula = JSON.parse(product.Formula);
-        } catch(e) { console.warn('JSON Parse Error (Formula packing):', e.message); }
+        } catch (e) { console.warn('JSON Parse Error (Formula packing):', e.message); }
 
         if (!formula || formula.length === 0) return res.json({ success: false, message: 'Reçete yok.' });
 
@@ -1169,7 +1180,7 @@ router.get('/max-quantity/:productId', async (req, res) => {
         let maxProducible = Infinity;
 
         for (const [materialName, matData] of Object.entries(aggregatedMaterials)) {
-            const reqQtyRaw = matData.quantity; 
+            const reqQtyRaw = matData.quantity;
             if (reqQtyRaw <= 0) continue;
 
             const [pRows] = await db.query('SELECT Id, unit_type FROM products WHERE ProductName = ? LIMIT 1', [materialName]);
@@ -1208,11 +1219,11 @@ router.get('/max-quantity/:productId', async (req, res) => {
         // Find max machine capacity
         const category = product.Category;
         let totalPerProductVolume = 0;
-        
+
         for (const [matName, matData] of Object.entries(aggregatedMaterials)) {
             let mQty = matData.quantity;
             let mUnit = (matData.unit || '').toLowerCase();
-            
+
             if (mUnit === 'gr' || mUnit === 'ml') {
                 totalPerProductVolume += (mQty / 1000);
             } else if (mUnit === 'kg' || mUnit === 'l' || mUnit === 'litre') {
@@ -1248,7 +1259,7 @@ router.get('/max-quantity/:productId', async (req, res) => {
                                     limitCapacity = cap;
                                 }
                             }
-                        } catch(e) { console.warn('JSON Parse Error (packaging_info):', e.message); }
+                        } catch (e) { console.warn('JSON Parse Error (packaging_info):', e.message); }
                     }
                 }
             }
@@ -1276,10 +1287,10 @@ router.get('/max-quantity/:productId', async (req, res) => {
 
         const finalMax = Math.min(maxProducible, maxMachineCount);
 
-        res.json({ 
-            success: true, 
-            maxQuantity: finalMax, 
-            stockLimit: maxProducible, 
+        res.json({
+            success: true,
+            maxQuantity: finalMax,
+            stockLimit: maxProducible,
             machineLimit: maxMachineCount === Infinity ? null : maxMachineCount,
             minMachineLimit: minMachineCount
         });
@@ -1296,7 +1307,7 @@ router.get('/max-quantity/:productId', async (req, res) => {
 // ==========================================
 
 // Get all production requests
-router.get('/requests', async (req, res) => {
+router.get('/requests', authMiddleware, async (req, res) => {
     try {
         const query = `
             SELECT pr.*, p.ProductName, p.Barcode 
@@ -1313,16 +1324,16 @@ router.get('/requests', async (req, res) => {
 });
 
 // Create manual production request
-router.post('/requests', async (req, res) => {
+router.post('/requests', authMiddleware, async (req, res) => {
     const { productId, quantity, reason, creator } = req.body;
     if (!productId || !quantity || !reason || !creator) {
         return res.status(400).json({ success: false, message: 'Eksik bilgi gönderildi.' });
     }
-    
+
     try {
         const [productData] = await db.query('SELECT Formula FROM products WHERE Id = ?', [productId]);
         let bottleneckCapacity = null;
-        
+
         if (productData.length > 0 && productData[0].Formula) {
             try {
                 let formulaParsed = typeof productData[0].Formula === 'string' ? JSON.parse(productData[0].Formula) : productData[0].Formula;
@@ -1361,8 +1372,8 @@ router.post('/requests', async (req, res) => {
 
         for (let i = 0; i < quantitiesToRequest.length; i++) {
             const qtyToRequest = quantitiesToRequest[i];
-            const finalReason = quantitiesToRequest.length > 1 
-                ? `${reason} - Bölüm ${i+1}/${quantitiesToRequest.length} (Manuel Talep, Kapasiteye Bölündü)`
+            const finalReason = quantitiesToRequest.length > 1
+                ? `${reason} - Bölüm ${i + 1}/${quantitiesToRequest.length} (Manuel Talep, Kapasiteye Bölündü)`
                 : reason;
 
             await db.query(
@@ -1370,6 +1381,8 @@ router.post('/requests', async (req, res) => {
                 [productId, qtyToRequest, 'Manuel', creator, finalReason, 'Bekleyen', req.body.priority || 'Normal']
             );
         }
+
+        await logActivity(req.user?.id, 'INSERT', 'production_requests', null, `Manuel üretim talebi oluşturuldu: ${quantity} adet (Bölünmüş olabilir). Neden: ${reason}`);
 
         res.json({ success: true, message: 'Talep başarıyla oluşturuldu.' });
     } catch (error) {
@@ -1379,16 +1392,20 @@ router.post('/requests', async (req, res) => {
 });
 
 // Update request status
-router.put('/requests/:id/status', async (req, res) => {
+router.put('/requests/:id/status', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
-    
+
     try {
         if (status === 'Reddedildi') {
-            await db.query('DELETE FROM production_requests WHERE id = ?', [id]);
+            const [result] = await db.query('DELETE FROM production_requests WHERE id = ?', [id]);
+            if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Talep bulunamadı.' });
+            await logActivity(req.user?.id, 'DELETE', 'production_requests', id, `Üretim talebi reddedildi ve silindi.`);
             res.json({ success: true, message: 'Talep reddedildi ve listeden silindi.' });
         } else {
-            await db.query('UPDATE production_requests SET status = ? WHERE id = ?', [status, id]);
+            const [result] = await db.query('UPDATE production_requests SET status = ? WHERE id = ?', [status, id]);
+            if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Talep bulunamadı.' });
+            await logActivity(req.user?.id, 'UPDATE', 'production_requests', id, `Üretim talebi durumu güncellendi: ${status}`);
             res.json({ success: true, message: `Talep durumu ${status} olarak güncellendi.` });
         }
     } catch (error) {
@@ -1398,15 +1415,17 @@ router.put('/requests/:id/status', async (req, res) => {
 });
 
 // Update product critical stock levels (for automated requests setup)
-router.put('/product-stock-rules/:productId', async (req, res) => {
+router.put('/product-stock-rules/:productId', authMiddleware, async (req, res) => {
     const { productId } = req.params;
     const { critical_stock_level, minimum_production_quantity } = req.body;
-    
+
     try {
-        await db.query(
+        const [result] = await db.query(
             'UPDATE products SET critical_stock_level = ?, minimum_production_quantity = ? WHERE Id = ?',
             [critical_stock_level, minimum_production_quantity, productId]
         );
+        if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Ürün bulunamadı.' });
+        await logActivity(req.user?.id, 'UPDATE', 'products', productId, `Kritik stok kuralı güncellendi (Kritik: ${critical_stock_level}, Min Üretim: ${minimum_production_quantity})`);
         res.json({ success: true, message: 'Kritik stok kuralları güncellendi.' });
     } catch (error) {
         console.error('Kritik stok kuralı güncellenirken hata:', error);
@@ -1420,7 +1439,7 @@ async function checkCriticalStocks() {
     try {
         // Find all active products and delegate checking to the central logic
         const [products] = await db.query('SELECT Id FROM products WHERE Category != ?', ['Hammadde']);
-        
+
         for (const p of products) {
             try {
                 await checkAndNotifyLowStock(p.Id);
@@ -1439,7 +1458,7 @@ setInterval(checkCriticalStocks, 2 * 60 * 60 * 1000);
 setTimeout(checkCriticalStocks, 5000);
 
 // Endpoint for manual trigger if needed
-router.post('/trigger-stock-check', async (req, res) => {
+router.post('/trigger-stock-check', authMiddleware, async (req, res) => {
     await checkCriticalStocks();
     res.json({ success: true, message: 'Stok kontrolü tamamlandı.' });
 });

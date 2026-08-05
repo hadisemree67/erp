@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: activities.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Aktivite ve Log Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemde gerçekleştirilen kullanıcı hareketlerini, log kayıtlarını, stok değişim geçmişini ve genel denetim (audit) izlerini sorgulamak ve listelemek için API uç noktaları sağlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, SQLite3 Veritabanı Sorguları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki ActivityLog.jsx bileşeni tarafından çağrılır; sistemdeki denetim ve takip mekanizmasının temel verisini sağlar.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, sistemde gerçekleştirilen kullanıcı hareketlerini, log kayıtlarını 
@@ -24,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { logActivity } = require('../utils/logger');
+const authMiddleware = require('../middleware/auth');
 
 const formatDatesForMySQL = (data) => {
     const formatted = { ...data };
@@ -37,7 +22,7 @@ const formatDatesForMySQL = (data) => {
 };
 
 // GET: Son 100 hareketi getir
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT a.id, a.user_id, a.action_type, a.target_table, a.target_id, a.description, a.created_at, a.is_undone, u.name as user_name
@@ -53,72 +38,105 @@ router.get('/', async (req, res) => {
     }
 });
 
-// POST: Geri Al (Undo)
-router.post('/:id/undo', async (req, res) => {
-    const logId = req.params.id;
-    const adminUserId = req.headers['x-user-id'];
+const ALLOWED_TABLES = [
+    'products', 'inventory', 'warehouses', 'stock_movements',
+    'categories', 'brands', 'kategori', 'campaigns', 'employees',
+    'employee_leaves', 'users', 'customers', 'wms_stock_balances'
+];
 
-    if (!adminUserId) return res.status(401).json({ success: false, message: 'Yetkisiz erişim.' });
+// POST: Geri Al (Undo)
+router.post('/:id/undo', authMiddleware, async (req, res) => {
+    const logId = req.params.id;
+
+    // GÜVENLİK DÜZELTMESİ: Header fallback'i kaldırıldı. Yalnızca doğrulanmış JWT user ID kabul edilir.
+    const adminUserId = req.user?.id;
+
+    if (!adminUserId) {
+        return res.status(401).json({ success: false, message: 'Yetkisiz erişim. Oturum verisi bulunamadı.' });
+    }
+
+    const connection = await db.getConnection();
 
     try {
-        // Logu getir
-        const [logs] = await db.query('SELECT * FROM activity_logs WHERE id = ?', [logId]);
-        if (logs.length === 0) return res.status(404).json({ success: false, message: 'Kayıt bulunamadı.' });
+        await connection.beginTransaction();
+
+        // Log kaydını kilitleyerek oku (Race condition önleme)
+        const [logs] = await connection.query('SELECT * FROM activity_logs WHERE id = ? FOR UPDATE', [logId]);
+        if (logs.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, message: 'Kayıt bulunamadı.' });
+        }
 
         const log = logs[0];
         if (log.is_undone) {
+            await connection.rollback();
             return res.status(400).json({ success: false, message: 'Bu işlem zaten geri alınmış.' });
         }
 
-        // Eğer eylem INSERT ise, target_id'yi silecek
+        // SQL Injection Koruması: Tablo ismi izin verilenler listesinde mi?
+        if (!ALLOWED_TABLES.includes(log.target_table)) {
+            await connection.rollback();
+            return res.status(403).json({ success: false, message: `"${log.target_table}" tablosunda geri alma işlemine izin verilmiyor.` });
+        }
+
+        // old_data metin (string) geldiyse parse et
+        let oldData = log.old_data;
+        if (typeof oldData === 'string') {
+            try { oldData = JSON.parse(oldData); } catch (e) { oldData = null; }
+        }
+
+        // 1. INSERT işlemini geri alma -> DELETE
         if (log.action_type === 'INSERT') {
-            await db.query(`DELETE FROM ${log.target_table} WHERE id = ?`, [log.target_id]);
-            await logActivity(adminUserId, 'RESTORE', log.target_table, log.target_id, `"${log.description}" işlemini geri aldı.`, null);
+            await connection.query(`DELETE FROM ?? WHERE id = ?`, [log.target_table, log.target_id]);
         }
-        // Eğer eylem DELETE ise, old_data'yı yeniden insert edecek
+        // 2. DELETE işlemini geri alma -> INSERT
         else if (log.action_type === 'DELETE') {
-            if (!log.old_data) return res.status(400).json({ success: false, message: 'Geri alınacak veri yok.' });
-            const data = formatDatesForMySQL(log.old_data);
+            if (!oldData) {
+                await connection.rollback();
+                return res.status(400).json({ success: false, message: 'Geri alınacak eski veri bulunamadı.' });
+            }
+            const data = formatDatesForMySQL(oldData);
             const keys = Object.keys(data);
-            const values = keys.map(k => {
-                if (data[k] !== null && typeof data[k] === 'object' && !(data[k] instanceof Date)) {
-                    return JSON.stringify(data[k]);
-                }
-                return data[k];
-            });
-            const placeholders = keys.map(() => '?').join(', ');
-            
-            await db.query(`INSERT INTO ${log.target_table} (${keys.join(', ')}) VALUES (${placeholders})`, values);
-            await logActivity(adminUserId, 'RESTORE', log.target_table, log.target_id, `"${log.description}" işlemini geri aldı.`, null);
+            const values = keys.map(k => (typeof data[k] === 'object' && data[k] !== null && !(data[k] instanceof Date) ? JSON.stringify(data[k]) : data[k]));
+
+            await connection.query(`INSERT INTO ?? (??) VALUES (?)`, [log.target_table, keys, values]);
         }
-        // Eğer eylem UPDATE ise, old_data ile tekrar update edecek
+        // 3. UPDATE işlemini geri alma -> UPDATE
         else if (log.action_type === 'UPDATE') {
-            if (!log.old_data) return res.status(400).json({ success: false, message: 'Geri alınacak veri yok.' });
-            const data = formatDatesForMySQL(log.old_data);
+            if (!oldData) {
+                await connection.rollback();
+                return res.status(400).json({ success: false, message: 'Geri alınacak eski veri bulunamadı.' });
+            }
+            const data = formatDatesForMySQL(oldData);
             const keys = Object.keys(data).filter(k => k.toLowerCase() !== 'id');
-            const values = keys.map(k => {
-                if (data[k] !== null && typeof data[k] === 'object' && !(data[k] instanceof Date)) {
-                    return JSON.stringify(data[k]);
-                }
-                return data[k];
-            });
-            const setClause = keys.map(k => `${k} = ?`).join(', ');
+            const values = keys.map(k => (typeof data[k] === 'object' && data[k] !== null && !(data[k] instanceof Date) ? JSON.stringify(data[k]) : data[k]));
 
-            // target_id veya data.Id
+            const setClause = keys.map(k => `\`${k}\` = ?`).join(', ');
             const idValue = data.Id || data.id || log.target_id;
-            
-            await db.query(`UPDATE ${log.target_table} SET ${setClause} WHERE id = ?`, [...values, idValue]);
-            await logActivity(adminUserId, 'RESTORE', log.target_table, log.target_id, `"${log.description}" işlemini geri aldı.`, null);
+
+            await connection.query(`UPDATE ?? SET ${setClause} WHERE id = ?`, [log.target_table, ...values, idValue]);
         }
 
-        // is_undone bayrağını işaretle
-        await db.query('UPDATE activity_logs SET is_undone = 1 WHERE id = ?', [logId]);
+        // İşlem durumunu güncelleyin
+        await connection.query('UPDATE activity_logs SET is_undone = 1 WHERE id = ?', [logId]);
+
+        await connection.commit(); // Tüm veritabanı değişikliklerini onayla
+
+        // Geri alma işleminin kendisini asenkron olarak logla
+        try {
+            await logActivity(adminUserId, 'RESTORE', log.target_table, log.target_id, `"${log.description}" işlemini geri aldı.`, null);
+        } catch (logErr) {
+            console.error('RESTORE aktivitesi loglanırken hata oluştu (işlem geri alındı):', logErr);
+        }
 
         res.json({ success: true, message: 'İşlem başarıyla geri alındı.' });
 
     } catch (error) {
+        await connection.rollback(); // Hata durumunda veritabanı değişikliklerini iptal et
         console.error('Geri alma işlemi hatası:', error);
         res.status(500).json({ success: false, message: 'Geri alınırken sunucu hatası oluştu.' });
+    } finally {
+        connection.release(); // Bağlantıyı havuza iade et
     }
 });
 

@@ -7,6 +7,8 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const authMiddleware = require('../middleware/auth');
+const { logActivity } = require('../utils/logger');
 
 // Yardımcı fonksiyonlar
 const safeNum = (val, def = 0) => {
@@ -15,7 +17,7 @@ const safeNum = (val, def = 0) => {
 };
 
 // GET /api/finance/accounts?tab=GİDER (veya GELİR)
-router.get('/accounts', async (req, res) => {
+router.get('/accounts', authMiddleware, async (req, res) => {
     try {
         const tab = req.query.tab || 'GİDER';
         const period = req.query.period || 'this_month';
@@ -272,7 +274,7 @@ router.get('/accounts', async (req, res) => {
 });
 
 // POST /api/finance/transactions - Yeni Manüel Gelir / Gider Ekle
-router.post('/transactions', async (req, res) => {
+router.post('/transactions', authMiddleware, async (req, res) => {
     try {
         const { type, category, amount, description, transaction_date } = req.body;
         
@@ -284,7 +286,7 @@ router.post('/transactions', async (req, res) => {
         const catVal = category || (type === 'GİDER' ? 'Diğer Giderler' : 'Diğer Gelirler');
         const descVal = description || catVal;
 
-        await db.query(`
+        const [result] = await db.query(`
             INSERT INTO finance_transactions (bank_account_id, type, amount, category, description, transaction_date)
             VALUES (NULL, ?, ?, ?, ?, ?)
         `, [type, safeNum(amount), catVal, descVal, dateVal]);
@@ -292,12 +294,7 @@ router.post('/transactions', async (req, res) => {
         // Sistem loglarına ekle
         try {
             const logMsg = `Yeni ${type === 'GİDER' ? 'Gider' : 'Gelir'} kalemi eklendi: ${catVal} - ${safeNum(amount).toLocaleString('tr-TR')} ₺`;
-            await db.query(`INSERT INTO activity_logs (user_id, username, action_type, description) VALUES (?, ?, ?, ?)`, [
-                req.user?.id || 1,
-                req.user?.username || 'admin',
-                type === 'GİDER' ? 'GİDER_EKLEME' : 'GELİR_EKLEME',
-                logMsg
-            ]);
+            await logActivity(req.user?.id, 'INSERT', 'finance_transactions', result.insertId, logMsg, null);
         } catch (logErr) { console.warn('Aktivite loglanırken hata:', logErr.message); }
 
         res.json({ success: true, message: `${type === 'GİDER' ? 'Gider' : 'Gelir'} kalemi başarıyla kaydedildi.` });
@@ -308,10 +305,19 @@ router.post('/transactions', async (req, res) => {
 });
 
 // DELETE /api/finance/transactions/:id - Manüel İşlemi Sil
-router.delete('/transactions/:id', async (req, res) => {
+router.delete('/transactions/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
+        const [rows] = await db.query("SELECT * FROM finance_transactions WHERE id = ?", [id]);
+        const oldData = rows.length > 0 ? rows[0] : null;
+
         await db.query("DELETE FROM finance_transactions WHERE id = ?", [id]);
+
+        if (oldData) {
+            const logMsg = `"${oldData.description || oldData.category}" başlıklı ${oldData.type === 'GİDER' ? 'Gider' : 'Gelir'} işlemi silindi (${safeNum(oldData.amount).toLocaleString('tr-TR')} ₺).`;
+            await logActivity(req.user?.id, 'DELETE', 'finance_transactions', id, logMsg, oldData);
+        }
+
         res.json({ success: true, message: 'İşlem başarıyla silindi.' });
     } catch (error) {
         console.error('Finans işlemi silinirken hata:', error);

@@ -21,8 +21,9 @@
 
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
+import ShelfBarcodeScanner from './ShelfBarcodeScanner';
 
-const StockEntry = ({ currentUser }) => {
+const StockEntry = ({ currentUser, onNavigate }) => {
     // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [products, setProducts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
@@ -71,7 +72,6 @@ const StockEntry = ({ currentUser }) => {
         fetchData();
     }, []);
 
-    // When warehouse changes, update shelves
     useEffect(() => {
         if (!formData.warehouseId) {
             setShelves([]);
@@ -82,16 +82,39 @@ const StockEntry = ({ currentUser }) => {
         const selectedWh = warehouses.find(w => w.id.toString() === formData.warehouseId.toString());
         if (selectedWh && selectedWh.Shelves) {
             setShelves(selectedWh.Shelves);
-            if (selectedWh.Shelves.length > 0) {
-                setFormData(prev => ({ ...prev, shelfAllocations: [{ shelfCode: selectedWh.Shelves[0], quantity: '' }] }));
-            } else {
-                setFormData(prev => ({ ...prev, shelfAllocations: [{ shelfCode: '', quantity: '' }] }));
-            }
+            setFormData(prev => {
+                const existingCode = prev.shelfAllocations[0]?.shelfCode;
+                if (existingCode && selectedWh.Shelves.includes(existingCode)) {
+                    return prev;
+                }
+                if (selectedWh.Shelves.length > 0) {
+                    return { ...prev, shelfAllocations: [{ shelfCode: selectedWh.Shelves[0], quantity: '' }] };
+                } else {
+                    return { ...prev, shelfAllocations: [{ shelfCode: '', quantity: '' }] };
+                }
+            });
         } else {
             setShelves([]);
             setFormData(prev => ({ ...prev, shelfAllocations: [{ shelfCode: '', quantity: '' }] }));
         }
     }, [formData.warehouseId, warehouses]);
+
+    /**
+     * @param {number} warehouse_id 
+     * @param {string} shelf_code 
+     * Barkod okuyucudan gelen rafı doğrudan state'e ekler (immutability kurallarına uygun).
+     */
+    const handleShelfFound = (warehouse_id, shelf_code) => {
+        setFormData(prev => {
+            const newAllocations = [...prev.shelfAllocations];
+            if (newAllocations.length > 0) {
+                newAllocations[0] = { ...newAllocations[0], shelfCode: shelf_code };
+            } else {
+                newAllocations.push({ shelfCode: shelf_code, quantity: '' });
+            }
+            return { ...prev, warehouseId: warehouse_id, shelfAllocations: newAllocations };
+        });
+    };
 
     useEffect(() => {
         if (!formData.productId || !formData.warehouseId) {
@@ -329,6 +352,9 @@ const StockEntry = ({ currentUser }) => {
                     expirationDate: '', 
                     description: '' 
                 }));
+                if (onNavigate) {
+                    setTimeout(() => onNavigate('stok-listesi'), 1000);
+                }
             } else {
                 setError(data.message || 'Hata oluştu');
             }
@@ -382,6 +408,12 @@ const StockEntry = ({ currentUser }) => {
                                     <option key={p.Id} value={p.Id}>[{p.Barcode}] {p.ProductName} - Mevcut Genel Stok: {p.StockQuantity}</option>
                                 ))}
                             </select>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <ShelfBarcodeScanner onShelfFound={handleShelfFound} />
                         </div>
                     </div>
 
@@ -492,15 +524,13 @@ const StockEntry = ({ currentUser }) => {
                                                         else if (!cap.hasSameCorridor) tags.push('Risk Dağıtımı (Farklı Koridor)');
                                                         tags.push(`%${cap.efficiency} Verim`);
                                                         
-                                                        let alertTxt = cap.hasOtherProducts ? ' - ⚠️ BAŞKA ÜRÜN VAR!' : '';
-                                                        text = `⭐ ${s} (Önerilen - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'}, ${tags.join(', ')})${alertTxt}`;
+                                                        text = `⭐ ${s} (Önerilen - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'}, ${tags.join(', ')})`;
                                                     } else if (cap) {
                                                         const tags = [`%${cap.efficiency} Verim`];
                                                         if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
                                                         
-                                                        let alertTxt = cap.hasOtherProducts ? ' - ⚠️ BAŞKA ÜRÜN VAR!' : '';
                                                         if (!isFull) {
-                                                            text += ` - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'} (${tags.join(', ')})${alertTxt}`;
+                                                            text += ` - Maks. ${cap.maxItems} ${selectedProduct?.package_name || 'Kap'} (${tags.join(', ')})`;
                                                         }
                                                     }
 

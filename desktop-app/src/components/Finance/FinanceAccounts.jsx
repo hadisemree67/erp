@@ -394,7 +394,7 @@ const FinanceAccounts = ({ onNavigate }) => {
                         />
                     </div>
                     <select 
-                        style={{ height: '40px', padding: '0 32px 0 16px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#1e293b', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', cursor: 'pointer', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '12px', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%2394a3b8\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'%3E%3C/path%3E%3C/svg%3E")' }}
+                        style={{ height: '40px', padding: '0 32px 0 16px', borderRadius: '8px', border: '1px solid #334155', backgroundColor: '#1e293b', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', cursor: 'pointer', appearance: 'none', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '12px', backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%2394a3b8\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'%3E%3C/path%3E%3C/svg%3E")' }}
                         value={activePeriod}
                         onChange={(e) => setActivePeriod(e.target.value)}
                         title="Dönem Seçimi"

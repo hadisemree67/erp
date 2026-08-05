@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
 
 export default function SummaryScreen({ route, navigation }) {
     const { cargoBarcode, finalWeight, boxInfo } = route.params;
@@ -8,6 +9,9 @@ export default function SummaryScreen({ route, navigation }) {
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.card}>
+                <View style={styles.iconCircle}>
+                    <Feather name="check" size={40} color="#10b981" />
+                </View>
                 <Text style={styles.title}>Sipariş Tamamlandı!</Text>
                 
                 <View style={styles.infoRow}>
@@ -31,6 +35,7 @@ export default function SummaryScreen({ route, navigation }) {
                 onPress={() => navigation.reset({ index: 0, routes: [{ name: 'Home' }] })}
             >
                 <Text style={styles.buttonText}>Ana Ekrana Dön</Text>
+                <Feather name="home" size={20} color="#fff" style={{ marginLeft: 8 }} />
             </TouchableOpacity>
         </SafeAreaView>
     );
@@ -40,74 +45,98 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8fafc',
-        padding: 20,
+        padding: 24,
         justifyContent: 'center'
     },
     card: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 20,
+        backgroundColor: '#ffffff',
+        borderRadius: 20,
+        padding: 24,
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 10,
-        elevation: 5,
-        marginBottom: 30
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 4,
+        marginBottom: 32,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+    },
+    iconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#d1fae5',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
     },
     title: {
         fontSize: 24,
-        fontWeight: 'bold',
-        color: '#10b981',
-        marginBottom: 20
+        fontWeight: '800',
+        color: '#0f172a',
+        marginBottom: 24,
+        letterSpacing: -0.5,
     },
     infoRow: {
         flexDirection: 'row',
         width: '100%',
         justifyContent: 'space-between',
-        paddingVertical: 10,
+        paddingVertical: 12,
         borderBottomWidth: 1,
         borderBottomColor: '#f1f5f9'
     },
     label: {
-        fontSize: 16,
-        color: '#64748b'
+        fontSize: 15,
+        color: '#64748b',
+        fontWeight: '500',
     },
     value: {
         fontSize: 16,
-        fontWeight: 'bold',
-        color: '#334155'
+        fontWeight: '700',
+        color: '#0f172a'
     },
     barcodeBox: {
-        marginTop: 30,
-        padding: 20,
+        marginTop: 32,
+        padding: 24,
+        borderRadius: 16,
         borderWidth: 2,
-        borderColor: '#000',
+        borderColor: '#cbd5e1',
         borderStyle: 'dashed',
         alignItems: 'center',
         width: '100%',
         backgroundColor: '#f8fafc'
     },
     barcodeLabel: {
-        fontSize: 12,
+        fontSize: 13,
+        fontWeight: '700',
         color: '#64748b',
-        marginBottom: 10
+        marginBottom: 8,
+        letterSpacing: 1,
     },
     barcodeText: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: '900',
+        color: '#0f172a',
         letterSpacing: 2
     },
     button: {
-        backgroundColor: '#3b82f6',
-        height: 55,
-        borderRadius: 12,
+        backgroundColor: '#4f46e5',
+        height: 56,
+        borderRadius: 16,
+        flexDirection: 'row',
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
+        shadowColor: '#4f46e5',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 6,
     },
     buttonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold'
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     }
 });

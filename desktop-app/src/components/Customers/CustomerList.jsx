@@ -60,6 +60,11 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
         if (onNavigate) onNavigate('musteri-ekle');
     };
 
+    const handleViewOrders = (customer) => {
+        if (onEdit) onEdit(customer);
+        if (onNavigate) onNavigate('musteri-siparisleri');
+    };
+
     const handleAddClick = () => {
         if (onEdit) onEdit(null);
         if (onNavigate) onNavigate('musteri-ekle');
@@ -161,6 +166,10 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
                                     </td>
                                     <td style={{ padding: '16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                         <div className="action-container" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+                                            <button onClick={() => handleViewOrders(c)} title="Siparişleri Gör" style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center', gap: '4px' }} onMouseOver={e => e.currentTarget.style.color = '#059669'} onMouseOut={e => e.currentTarget.style.color = '#10b981'}>
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 3v5h5M16 13H8M16 17H8M10 9H8"/></svg>
+                                                <span style={{fontSize: '12px', fontWeight: '600'}}>Siparişler</span>
+                                            </button>
                                             <button onClick={() => handleEditClick(c)} title="Düzenle" style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', padding: '4px', transition: 'color 0.2s' }} onMouseOver={e => e.currentTarget.style.color = '#0f172a'} onMouseOut={e => e.currentTarget.style.color = '#334155'}>
                                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                                             </button>

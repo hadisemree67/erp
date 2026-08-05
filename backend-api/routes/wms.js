@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: wms.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Depo Yönetim Sistemi (WMS Operasyonları)
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Stok giriş/çıkış işlemleri, depolar arası transferler, mal kabul (Goods Receipt), sayım düzeltmeleri, barkodlu takipli stok hareketleri ve envanter bakiyelerinin gerçek zamanlı takibini yönetir.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Karmaşık SQL Sorguları, Stok Hareket Mantığı (Transaction)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Sistemin en kritik operasyonel rotasıdır; önyüzdeki tüm WMS (StockList, InventoryEntry, GoodsReceipt vb.) bileşenleri tarafından kullanılır.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, depo (Warehouse Management System) işlemlerini yönetir. 
@@ -24,84 +8,12 @@ const multer = require('multer');
 const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 const router = express.Router();
 const db = require('../db');
-
-// Rafın içine (3 boyutlu olarak) kaç koli ürün sığacağını hesaplıyoruz.
-// Ürünün en/boy/derinliği ile rafın boşluğunu çarpıştırıyoruz.
-function calculateShelf3D({ sW, sH, sD, maxVolume, pW, pH, pD, productVolume, isStackable, maxStackLimit, pCap, currentPackages = 0, currentFilledVol = 0 }) {
-    let maxPackagesEmpty = 0; // Rafa sıfırdan konulursa alabileceği maksimum kap/koli sayısı
-    let physicallyFits = true; // Ürün fiziksel olarak rafa (kapıdan) sığıyor mu?
-    
-    // Ürünün hacmi yoksa en*boy*derinlik çarparak bul
-    let usedVolPerPackage = (pW * pH * pD > 0) ? (pW * pH * pD) : (productVolume > 0 ? productVolume : 0);
-
-    if (sW > 0 && sH > 0 && sD > 0 && pW > 0 && pH > 0 && pD > 0) {
-        const usableW = Math.max(0, sW - 10);
-        const usableH = Math.max(0, sH - 5);
-        const usableD = Math.max(0, sD - 5);
-
-        const wCount = Math.floor(usableW / pW);
-        const dCount = Math.floor(usableD / pD);
-        const baseCount = wCount * dCount;
-
-        let hCount = 0;
-        if (isStackable) {
-            hCount = Math.floor(usableH / pH);
-            if (hCount > maxStackLimit) hCount = maxStackLimit;
-        } else {
-            hCount = (usableH >= pH) ? 1 : 0;
-        }
-
-        maxPackagesEmpty = baseCount * hCount;
-        physicallyFits = maxPackagesEmpty > 0;
-    } else if (usedVolPerPackage > 0 && maxVolume > 0) {
-        maxPackagesEmpty = Math.floor(maxVolume / usedVolPerPackage);
-        physicallyFits = maxPackagesEmpty > 0;
-    } else if (maxVolume === 0 || usedVolPerPackage === 0) {
-        maxPackagesEmpty = Infinity;
-        physicallyFits = true;
-    }
-
-    let remainingPackages = Infinity;
-    if (maxPackagesEmpty !== Infinity) {
-        if (currentFilledVol > 0 && maxVolume > 0 && usedVolPerPackage > 0) {
-            // Kalan hacmi bul
-            const emptyVol = Math.max(0, maxVolume - currentFilledVol);
-            // Kalan hacme kaç paket sığar?
-            const fitByVol = Math.floor(emptyVol / usedVolPerPackage);
-            // Ancak boş rafa sığabilecek maksimum sayıyı aşamaz
-            remainingPackages = Math.min(fitByVol, maxPackagesEmpty);
-        } else {
-            remainingPackages = maxPackagesEmpty;
-        }
-    }
-
-    const maxItems = remainingPackages === Infinity ? Infinity : remainingPackages * (pCap || 1);
-
-    let theoreticalMaxTotal = maxPackagesEmpty;
-    let efficiency = 0;
-    if (theoreticalMaxTotal > 0 && theoreticalMaxTotal !== Infinity && usedVolPerPackage > 0 && maxVolume > 0) {
-        efficiency = ((theoreticalMaxTotal * usedVolPerPackage) / maxVolume) * 100;
-        if (efficiency > 100) efficiency = 100;
-    }
-
-    return {
-        maxPackagesEmpty,
-        remainingPackages,
-        maxItems,
-        physicallyFits,
-        efficiency: parseFloat(efficiency.toFixed(1)),
-        isStackable,
-        maxStackLimit,
-        emptyVolume: Math.max(0, maxVolume - currentFilledVol),
-        currentFilled: currentFilledVol,
-        maxVolume,
-        fillPercentage: maxVolume > 0 ? Math.min(((currentFilledVol / maxVolume) * 100), 100).toFixed(1) : 0
-    };
-}
-
+const authMiddleware = require('../middleware/auth');
+const { logActivity } = require('../utils/logger');
+const { calculateShelf3D } = require('../utils/wmsUtils');
 
 // Tüm depoları getir
-router.get('/warehouses', async (req, res) => {
+router.get('/warehouses', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM warehouses ORDER BY created_at DESC');
         res.json(rows);
@@ -112,7 +24,7 @@ router.get('/warehouses', async (req, res) => {
 });
 
 // Bir depo için lokasyonları getir
-router.get('/warehouses/:warehouseId/locations', async (req, res) => {
+router.get('/warehouses/:warehouseId/locations', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT id, shelf_code as shelf, shelf_code as rack, "Genel" as aisle, shelf_code as barcode FROM warehouse_shelves WHERE warehouse_id = ?', [req.params.warehouseId]);
         res.json(rows);
@@ -123,12 +35,13 @@ router.get('/warehouses/:warehouseId/locations', async (req, res) => {
 });
 
 // Depo krokisini kaydet
-router.post('/warehouses/:warehouseId/layout', async (req, res) => {
+router.post('/warehouses/:warehouseId/layout', authMiddleware, async (req, res) => {
     try {
         const { warehouseId } = req.params;
         const layoutData = req.body; // { grid, rows, cols }
-        
+
         await db.query('UPDATE warehouses SET layout_data = ? WHERE id = ?', [JSON.stringify(layoutData), warehouseId]);
+        await logActivity(req.user?.id, 'UPDATE', 'warehouses', warehouseId, `Depo krokisi güncellendi.`);
         res.json({ success: true, message: 'Kroki başarıyla kaydedildi.' });
     } catch (error) {
         console.error('Kroki kaydedilirken hata:', error);
@@ -137,7 +50,7 @@ router.post('/warehouses/:warehouseId/layout', async (req, res) => {
 });
 
 // Bir depoda belirli bir ürünü içeren rafları getir
-router.get('/warehouses/:warehouseId/products/:productId/shelves', async (req, res) => {
+router.get('/warehouses/:warehouseId/products/:productId/shelves', authMiddleware, async (req, res) => {
     try {
         const { warehouseId, productId } = req.params;
         const [rows] = await db.query(
@@ -152,11 +65,11 @@ router.get('/warehouses/:warehouseId/products/:productId/shelves', async (req, r
 });
 
 // Depo krokisini getir
-router.get('/warehouses/:warehouseId/layout', async (req, res) => {
+router.get('/warehouses/:warehouseId/layout', authMiddleware, async (req, res) => {
     try {
         const { warehouseId } = req.params;
         const [rows] = await db.query('SELECT layout_data FROM warehouses WHERE id = ?', [warehouseId]);
-        
+
         if (rows.length > 0 && rows[0].layout_data) {
             let parsed = rows[0].layout_data;
             if (typeof parsed === 'string') {
@@ -173,7 +86,7 @@ router.get('/warehouses/:warehouseId/layout', async (req, res) => {
 });
 
 // Belirli bir raf için stoğu getir
-router.get('/warehouses/:warehouseId/shelves/:shelfCode/stock', async (req, res) => {
+router.get('/warehouses/:warehouseId/shelves/:shelfCode/stock', authMiddleware, async (req, res) => {
     try {
         const { warehouseId, shelfCode } = req.params;
 
@@ -221,7 +134,7 @@ router.get('/warehouses/:warehouseId/shelves/:shelfCode/stock', async (req, res)
 });
 
 // Belirli bir rafı boşalt
-router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', async (req, res) => {
+router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', authMiddleware, async (req, res) => {
     try {
         const { warehouseId, shelfCode } = req.params;
         const userId = req.body.userId || 1; // Fallback or pass from frontend
@@ -255,6 +168,8 @@ router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', async (req, res
         // 3. Delete balances
         await db.query('DELETE FROM wms_stock_balances WHERE warehouse_id = ? AND shelf_code = ?', [warehouseId, shelfCode]);
 
+        await logActivity(req.user?.id || userId, 'DELETE', 'wms_stock_balances', null, `Raf tamamen boşaltıldı: Depo #${warehouseId}, Raf: ${shelfCode}`);
+
         await db.query('COMMIT');
         res.json({ success: true, message: 'Raf başarıyla boşaltıldı.' });
     } catch (error) {
@@ -265,7 +180,7 @@ router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', async (req, res
 });
 
 // Bir stok girişi kaydet (Mal Kabul)
-router.post('/stock-entry', async (req, res) => {
+router.post('/stock-entry', authMiddleware, async (req, res) => {
     const { productId, warehouseId, shelfAllocations, userId, description, batchNumber, expirationDate, supplierId, unitPrice } = req.body;
 
     let formattedExpDate = expirationDate || null;
@@ -336,9 +251,9 @@ router.post('/stock-entry', async (req, res) => {
                     if (calc.maxItems !== Infinity && allocation.quantity > calc.maxItems) {
                         await conn.query('ROLLBACK');
                         conn.release();
-                        return res.status(400).json({ 
-                            success: false, 
-                            message: `Hata: ${allocation.shelfCode} rafının kapasitesi aşıldı! Seçilen üründen bu rafa en fazla ${calc.maxItems} adet (${calc.remainingPackages} koli/paket) daha sığabilir.` 
+                        return res.status(400).json({
+                            success: false,
+                            message: `Hata: ${allocation.shelfCode} rafının kapasitesi aşıldı! Seçilen üründen bu rafa en fazla ${calc.maxItems} adet (${calc.remainingPackages} koli/paket) daha sığabilir.`
                         });
                     }
                 } else if (productVolume > 0) {
@@ -355,9 +270,9 @@ router.post('/stock-entry', async (req, res) => {
                         if (allocation.quantity > emptySlots) {
                             await conn.query('ROLLBACK');
                             conn.release();
-                            return res.status(400).json({ 
-                                success: false, 
-                                message: `Hata: ${allocation.shelfCode} rafının kapasitesi aşıldı! Seçilen üründen bu rafa en fazla ${emptySlots} adet daha sığabilir.` 
+                            return res.status(400).json({
+                                success: false,
+                                message: `Hata: ${allocation.shelfCode} rafının kapasitesi aşıldı! Seçilen üründen bu rafa en fazla ${emptySlots} adet daha sığabilir.`
                             });
                         }
                     }
@@ -380,7 +295,7 @@ router.post('/stock-entry', async (req, res) => {
             // 2. Update the specific location balance (considering batch_number and expiration_date)
             const safeBatch = batchNumber || '';
             const safeExp = formattedExpDate;
-            
+
             const [existingBalances] = await conn.query(
                 'SELECT id, quantity FROM wms_stock_balances WHERE product_id = ? AND warehouse_id = ? AND shelf_code = ? AND COALESCE(batch_number, "") = ? AND (expiration_date = ? OR (expiration_date IS NULL AND ? IS NULL)) AND (supplier_id = ? OR (supplier_id IS NULL AND ? IS NULL)) AND (unit_price = ? OR (unit_price IS NULL AND ? IS NULL)) FOR UPDATE',
                 [productId, warehouseId, shelfCode, safeBatch, safeExp, safeExp, supplierId || null, supplierId || null, unitPrice || null, unitPrice || null]
@@ -406,21 +321,23 @@ router.post('/stock-entry', async (req, res) => {
         // 4. Finans Gider Kaydı (Otomatik)
         if (supplierId && unitPrice && unitPrice > 0 && totalAdded > 0) {
             const totalCost = parseFloat(unitPrice) * totalAdded;
-            
+
             const [prodRows] = await conn.query('SELECT ProductName FROM products WHERE Id = ?', [productId]);
             const [supRows] = await conn.query('SELECT SupplierName FROM suppliers WHERE Id = ?', [supplierId]);
-            
+
             const prodName = prodRows.length > 0 ? prodRows[0].ProductName : 'Bilinmeyen Ürün';
             const supName = supRows.length > 0 ? supRows[0].SupplierName : 'Bilinmeyen Tedarikçi';
-            
+
             const desc = `${prodName} ürünü için ${supName} adlı tedarikçiden ${totalAdded} adet manuel depo girişi (mal kabul) yapıldı.`;
-            
+
             await conn.query(`
                 INSERT INTO finance_transactions 
                 (type, amount, category, description, transaction_date) 
                 VALUES ('GİDER', ?, 'Hammadde / Ürün Alımı', ?, CURDATE())
             `, [totalCost, desc]);
         }
+
+        await logActivity(req.user?.id || userId, 'INSERT', 'StockMovements', null, `Depoya manuel ürün girişi yapıldı. Ürün #${productId}, Toplam Miktar: ${totalAdded}`);
 
         await conn.query('COMMIT');
         conn.release();
@@ -435,7 +352,7 @@ router.post('/stock-entry', async (req, res) => {
 });
 
 // Detaylı stok bakiyelerini getir (Stok Listesi / Envanter)
-router.get('/stock-list', async (req, res) => {
+router.get('/stock-list', authMiddleware, async (req, res) => {
     try {
         const query = `
             SELECT 
@@ -487,9 +404,9 @@ router.get('/stock-list', async (req, res) => {
             const pW = parseFloat(row.product_width) || 0;
             const pH = parseFloat(row.product_height) || 0;
             const pD = parseFloat(row.product_depth) || 0;
-            
+
             let absoluteMaxCapacity = 0;
-            
+
             if (sW > 0 && sH > 0 && sD > 0 && pW > 0 && pH > 0 && pD > 0) {
                 // Yanlardan 5+5=10 cm, üstten 5 cm, önden (derinlik) 5 cm boşluk
                 const usableW = Math.max(0, sW - 10);
@@ -499,30 +416,30 @@ router.get('/stock-list', async (req, res) => {
                 const wCount = Math.floor(usableW / pW);
                 const dCount = Math.floor(usableD / pD);
                 const baseCount = wCount * dCount;
-                
+
                 let hCount = Math.floor(usableH / pH);
                 const isStackable = row.is_stackable === 1 || row.is_stackable === true || row.is_stackable === '1';
-                
+
                 if (isStackable) {
                     const stackLimit = parseInt(row.max_stack_limit) || 1;
                     if (hCount > stackLimit) hCount = stackLimit;
                 } else {
                     hCount = 1;
                 }
-                
+
                 absoluteMaxCapacity = baseCount * hCount;
             } else {
                 let containerVolume = parseFloat(row.product_volume) || 0;
                 if (pW > 0 && pH > 0 && pD > 0) {
                     containerVolume = pW * pH * pD;
                 }
-                
+
                 const sVol = parseFloat(row.shelf_max_volume) || 0;
                 if (sVol > 0 && containerVolume > 0) {
                     absoluteMaxCapacity = Math.floor(sVol / containerVolume);
                 }
             }
-            
+
             const packageCapacity = parseFloat(row.package_capacity) || 1;
 
             return {
@@ -539,32 +456,32 @@ router.get('/stock-list', async (req, res) => {
 });
 
 // Bir stok bakiyesi satırını güncelle (Stok Düzenle)
-router.put('/stock/:id', async (req, res) => {
+router.put('/stock/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { quantity, batch_number, expiration_date, supplier_id, unit_price } = req.body;
 
     if (quantity === undefined) {
         return res.status(400).json({ success: false, message: 'Miktar zorunludur.' });
     }
-    
+
     try {
         await db.query('BEGIN');
-        
+
         // Find old balance
         const [rows] = await db.query('SELECT * FROM wms_stock_balances WHERE id = ? FOR UPDATE', [id]);
         if (rows.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ success: false, message: 'Stok kaydı bulunamadı.' });
         }
-        
+
         const oldData = rows[0];
         const diff = quantity - oldData.quantity;
-        
+
         const supplier_id_val = req.body.supplier_id !== undefined ? (req.body.supplier_id === '' ? null : req.body.supplier_id) : oldData.supplier_id;
         const unit_price_val = req.body.unit_price !== undefined ? (req.body.unit_price === '' ? null : req.body.unit_price) : oldData.unit_price;
         const warehouse_id_val = req.body.warehouse_id !== undefined ? req.body.warehouse_id : oldData.warehouse_id;
         const shelf_code_val = req.body.shelf_code !== undefined ? req.body.shelf_code : oldData.shelf_code;
-        
+
         let formattedExpDate = req.body.expiration_date !== undefined ? (req.body.expiration_date || null) : oldData.expiration_date;
         if (formattedExpDate && typeof formattedExpDate === 'string' && formattedExpDate.includes('T')) {
             formattedExpDate = formattedExpDate.split('T')[0];
@@ -572,33 +489,33 @@ router.put('/stock/:id', async (req, res) => {
 
         // Update balance
         await db.query('UPDATE wms_stock_balances SET quantity = ?, batch_number = ?, expiration_date = ?, supplier_id = ?, unit_price = ?, warehouse_id = ?, shelf_code = ? WHERE id = ?', [
-            quantity, 
-            batch_number || '', 
-            formattedExpDate, 
+            quantity,
+            batch_number || '',
+            formattedExpDate,
             supplier_id_val,
             unit_price_val,
             warehouse_id_val,
             shelf_code_val,
             id
         ]);
-        
+
         // Update global product stock if quantity changed
         if (diff !== 0) {
             await db.query('UPDATE products SET StockQuantity = StockQuantity + ? WHERE Id = ?', [diff, oldData.product_id]);
         }
-        
+
         if (oldData.warehouse_id !== warehouse_id_val || oldData.shelf_code !== shelf_code_val) {
             // Log transfer out from old location
             await db.query(
                 'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
-                    oldData.product_id, 
-                    req.headers['x-user-id'] || 1,
-                    'OUT', 
-                    oldData.quantity, 
-                    oldData.warehouse_id, oldData.shelf_code, 
-                    oldData.batch_number || null, 
-                    oldData.expiration_date, 
+                    oldData.product_id,
+                    req.user?.id || 1,
+                    'OUT',
+                    oldData.quantity,
+                    oldData.warehouse_id, oldData.shelf_code,
+                    oldData.batch_number || null,
+                    oldData.expiration_date,
                     `Konum Değişikliği (Çıkış -> Depo: ${warehouse_id_val}, Raf: ${shelf_code_val})`
                 ]
             );
@@ -606,13 +523,13 @@ router.put('/stock/:id', async (req, res) => {
             await db.query(
                 'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
-                    oldData.product_id, 
-                    req.headers['x-user-id'] || 1,
-                    'IN', 
-                    quantity, 
-                    warehouse_id_val, shelf_code_val, 
-                    batch_number || null, 
-                    formattedExpDate, 
+                    oldData.product_id,
+                    req.user?.id || 1,
+                    'IN',
+                    quantity,
+                    warehouse_id_val, shelf_code_val,
+                    batch_number || null,
+                    formattedExpDate,
                     `Konum Değişikliği (Giriş <- Depo: ${oldData.warehouse_id}, Raf: ${oldData.shelf_code})`
                 ]
             );
@@ -621,25 +538,27 @@ router.put('/stock/:id', async (req, res) => {
             await db.query(
                 'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
-                    oldData.product_id, 
-                    req.headers['x-user-id'] || 1, // fallback to 1 if not provided
-                    diff > 0 ? 'IN' : 'OUT', 
-                    Math.abs(diff), 
-                    warehouse_id_val, shelf_code_val, 
-                    batch_number || null, 
-                    formattedExpDate, 
+                    oldData.product_id,
+                    req.user?.id || 1, // fallback to 1 if not provided
+                    diff > 0 ? 'IN' : 'OUT',
+                    Math.abs(diff),
+                    warehouse_id_val, shelf_code_val,
+                    batch_number || null,
+                    formattedExpDate,
                     'Manuel Stok Düzenlemesi'
                 ]
             );
         }
-        
+
         await db.query('COMMIT');
-        
+
+        await logActivity(req.user?.id, 'UPDATE', 'wms_stock_balances', id, `Stok kaydı güncellendi (Miktar: ${quantity}, Depo: ${warehouse_id_val}, Raf: ${shelf_code_val})`);
+
         // Check critical stock after manual edit
         if (diff !== 0) {
             await checkAndNotifyLowStock(oldData.product_id);
         }
-        
+
         res.json({ success: true, message: 'Stok kaydı başarıyla güncellendi.' });
     } catch (error) {
         await db.query('ROLLBACK');
@@ -649,35 +568,36 @@ router.put('/stock/:id', async (req, res) => {
 });
 
 // Bir stok bakiyesi satırını sil
-router.delete('/stock/:id', async (req, res) => {
+router.delete('/stock/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
-    
+
     try {
         await db.query('BEGIN');
-        
+
         // Find old balance
         const [rows] = await db.query('SELECT * FROM wms_stock_balances WHERE id = ? FOR UPDATE', [id]);
         if (rows.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ success: false, message: 'Stok kaydı bulunamadı.' });
         }
-        
+
         const oldData = rows[0];
-        
+
         // Delete balance
         await db.query('DELETE FROM wms_stock_balances WHERE id = ?', [id]);
-        
+
         // Deduct from global product stock
         await db.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [oldData.quantity, oldData.product_id]);
         await checkAndNotifyLowStock(oldData.product_id);
-        
+
         // Log movement
         await db.query(
             'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [oldData.product_id, req.headers['x-user-id'] || 1, 'OUT', oldData.quantity, oldData.warehouse_id, oldData.shelf_code, oldData.batch_number, oldData.expiration_date, 'Manuel Stok Silme']
+            [oldData.product_id, req.user?.id || 1, 'OUT', oldData.quantity, oldData.warehouse_id, oldData.shelf_code, oldData.batch_number, oldData.expiration_date, 'Manuel Stok Silme']
         );
-        
+
         await db.query('COMMIT');
+        await logActivity(req.user?.id || 1, 'DELETE', 'wms_stock_balances', id, `Stok kaydı silindi (Ürün #${oldData.product_id}, Miktar: ${oldData.quantity})`);
         res.json({ success: true, message: 'Stok kaydı başarıyla silindi.' });
     } catch (error) {
         await db.query('ROLLBACK');
@@ -687,7 +607,7 @@ router.delete('/stock/:id', async (req, res) => {
 });
 
 // Tekli transfer uç noktası
-router.post('/transfer', async (req, res) => {
+router.post('/transfer', authMiddleware, async (req, res) => {
     const { balanceId, quantity, targetWarehouseId, targetShelfCode, userId, description } = req.body;
 
     if (!balanceId || !quantity || !targetWarehouseId || !targetShelfCode) {
@@ -722,7 +642,7 @@ router.post('/transfer', async (req, res) => {
 
         // Deduct from source
         await db.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [transferQty, balanceId]);
-        
+
         // Log OUT movement from source
         await db.query(
             'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -732,7 +652,7 @@ router.post('/transfer', async (req, res) => {
         // Add to target
         const safeBatch = balance.batch_number || '';
         const safeExp = balance.expiration_date || null;
-        
+
         const [targetRows] = await db.query(
             'SELECT id FROM wms_stock_balances WHERE product_id = ? AND warehouse_id = ? AND shelf_code = ? AND batch_number = ? AND (expiration_date = ? OR (expiration_date IS NULL AND ? IS NULL)) FOR UPDATE',
             [balance.product_id, targetWarehouseId, targetShelfCode, safeBatch, safeExp, safeExp]
@@ -754,6 +674,7 @@ router.post('/transfer', async (req, res) => {
         );
 
         await db.query('COMMIT');
+        await logActivity(userId || req.user?.id, 'UPDATE', 'wms_stock_balances', balanceId, `Stok transferi yapıldı. Hedef Depo: ${targetWarehouseId}, Raf: ${targetShelfCode}, Miktar: ${transferQty}`);
         res.json({ success: true, message: 'Depo transferi başarıyla tamamlandı.' });
     } catch (error) {
         await db.query('ROLLBACK');
@@ -763,7 +684,7 @@ router.post('/transfer', async (req, res) => {
 });
 
 // Stok bakiyeleri için toplu işlem uç noktası
-router.post('/bulk-action', async (req, res) => {
+router.post('/bulk-action', authMiddleware, async (req, res) => {
     const { balanceIds, actionType, quantity, targetWarehouseId, targetShelfCode, userId, description } = req.body;
 
     if (!Array.isArray(balanceIds) || balanceIds.length === 0) {
@@ -776,7 +697,7 @@ router.post('/bulk-action', async (req, res) => {
         for (const balanceId of balanceIds) {
             const [rows] = await db.query('SELECT product_id, warehouse_id, shelf_code, quantity, batch_number, expiration_date FROM wms_stock_balances WHERE id = ? FOR UPDATE', [balanceId]);
             if (rows.length === 0) continue;
-            
+
             const balance = rows[0];
 
             if (actionType === 'ADD') {
@@ -848,6 +769,7 @@ router.post('/bulk-action', async (req, res) => {
         }
 
         await db.query('COMMIT');
+        await logActivity(userId || req.user?.id, 'UPDATE', 'wms_stock_balances', null, `Toplu stok işlemi yapıldı (${actionType}).`);
         res.json({ success: true, message: 'Toplu işlemler başarıyla tamamlandı.' });
     } catch (error) {
         await db.query('ROLLBACK');
@@ -857,7 +779,7 @@ router.post('/bulk-action', async (req, res) => {
 });
 
 // GET /shelf-capacity
-router.get('/shelf-capacity', async (req, res) => {
+router.get('/shelf-capacity', authMiddleware, async (req, res) => {
     const { warehouseId, shelfCode, productId, pW: qW, pH: qH, pD: qD, pVol: qVol, pStack: qStack, pLimit: qLimit, pCap: qCap } = req.query;
 
     if (!warehouseId || !shelfCode) {
@@ -904,14 +826,14 @@ router.get('/shelf-capacity', async (req, res) => {
 
         let maxItems3D = Infinity;
         let physicallyFits = true;
-        
+
         const usableVolume = maxVolume;
 
         const [filledRows] = await db.query(
             'SELECT b.product_id, b.quantity, p.Volume, p.package_capacity FROM wms_stock_balances b JOIN products p ON b.product_id = p.Id WHERE b.warehouse_id = ? AND b.shelf_code = ?',
             [warehouseId, shelfCode]
         );
-        
+
         let currentFilledVol = 0;
         let currentPackages = 0;
         for (const row of filledRows) {
@@ -955,7 +877,7 @@ router.get('/shelf-capacity', async (req, res) => {
 });
 
 // GET /warehouse-capacities (bulk)
-router.get('/warehouse-capacities', async (req, res) => {
+router.get('/warehouse-capacities', authMiddleware, async (req, res) => {
     const { warehouseId, productId, w, h, d, stackable, max_stack } = req.query;
     if (!warehouseId) return res.status(400).json({ success: false, message: 'Eksik parametre.' });
     try {
@@ -992,7 +914,7 @@ router.get('/warehouse-capacities', async (req, res) => {
         const containsSameProductMap = {};
         const containsOtherProductsMap = {};
         const existingCorridors = new Set();
-        filledData.forEach(r => { 
+        filledData.forEach(r => {
             let vol = parseFloat(r.prodVolume) || 0;
             if (productId && r.product_id.toString() === productId.toString() && productVolume > 0) {
                 vol = productVolume;
@@ -1000,16 +922,16 @@ router.get('/warehouse-capacities', async (req, res) => {
             let pCapRow = parseFloat(r.package_capacity) || 1;
             if (pCapRow <= 0) pCapRow = 1;
             const pkgs = Math.ceil((parseFloat(r.quantity) || 0) / pCapRow);
-            
+
             filledVolMap[r.shelf_code] = (filledVolMap[r.shelf_code] || 0) + (pkgs * vol);
             filledPkgMap[r.shelf_code] = (filledPkgMap[r.shelf_code] || 0) + pkgs;
-            
+
             if (r.product_id.toString() === productId.toString() && parseFloat(r.quantity) > 0) {
                 containsSameProductMap[r.shelf_code] = true;
                 const corridor = r.shelf_code.split('-')[0].trim();
                 existingCorridors.add(corridor);
             }
-            
+
             if (productId && r.product_id.toString() !== productId.toString() && parseFloat(r.quantity) > 0) {
                 containsOtherProductsMap[r.shelf_code] = true;
             }
@@ -1021,7 +943,7 @@ router.get('/warehouse-capacities', async (req, res) => {
             const sW = parseFloat(shelf.width) || 0;
             const sH = parseFloat(shelf.height) || 0;
             const sD = parseFloat(shelf.depth) || 0;
-            
+
             const currentFilledVol = filledVolMap[shelf.shelf_code] || 0;
             const currentPackages = filledPkgMap[shelf.shelf_code] || 0;
 
@@ -1033,9 +955,9 @@ router.get('/warehouse-capacities', async (req, res) => {
             });
 
             const corridor = shelf.shelf_code.split('-')[0].trim();
-            capacities[shelf.shelf_code] = { 
-                maxItems: calc.maxItems, 
-                physicallyFits: calc.physicallyFits, 
+            capacities[shelf.shelf_code] = {
+                maxItems: calc.maxItems,
+                physicallyFits: calc.physicallyFits,
                 efficiency: calc.efficiency,
                 hasSameProduct: containsSameProductMap[shelf.shelf_code] || false,
                 hasSameCorridor: existingCorridors.has(corridor),
@@ -1051,7 +973,7 @@ router.get('/warehouse-capacities', async (req, res) => {
 
 
 // GET /shelf-by-barcode
-router.get('/shelf-by-barcode', async (req, res) => {
+router.get('/shelf-by-barcode', authMiddleware, async (req, res) => {
     const { barcode } = req.query;
     if (!barcode) {
         return res.status(400).json({ success: false, message: 'Barkod parametresi eksik.' });
@@ -1075,9 +997,9 @@ router.get('/shelf-by-barcode', async (req, res) => {
 });
 
 // FEFO tabanlı hızlı stok düşüşü (Hızlı Çıkış)
-router.post('/deduct-fefo', async (req, res) => {
-    const { barcode, quantity } = req.body;
-    const userId = req.headers['x-user-id'] || 1;
+router.post('/deduct-fefo', authMiddleware, async (req, res) => {
+    const { barcode, quantity, warehouseId, shelfCode } = req.body;
+    const userId = req.user?.id || 1;
     const deductQty = parseInt(quantity, 10);
 
     if (!barcode || !deductQty || deductQty <= 0) {
@@ -1095,20 +1017,28 @@ router.post('/deduct-fefo', async (req, res) => {
         }
         const product = products[0];
 
-        // 2. Toplam stok yeterli mi?
-        if (product.StockQuantity < deductQty) {
-            await db.query('ROLLBACK');
-            return res.status(400).json({ success: false, message: `Yetersiz stok! Mevcut stok: ${product.StockQuantity}` });
+        // 3. Stok bakiyelerini getir (FEFO - Son Kullanma Tarihi en yakın olanlar önce)
+        let balancesQuery = 'SELECT * FROM wms_stock_balances WHERE product_id = ? AND quantity > 0';
+        let queryParams = [product.Id];
+
+        if (warehouseId && shelfCode) {
+            balancesQuery += ' AND warehouse_id = ? AND shelf_code = ?';
+            queryParams.push(warehouseId, shelfCode);
         }
 
-        // 3. Stok bakiyelerini getir (FEFO - Son Kullanma Tarihi en yakın olanlar önce)
-        const [balances] = await db.query(
-            'SELECT * FROM wms_stock_balances WHERE product_id = ? AND quantity > 0 ORDER BY ISNULL(expiration_date), expiration_date ASC, id ASC FOR UPDATE',
-            [product.Id]
-        );
+        balancesQuery += ' ORDER BY ISNULL(expiration_date), expiration_date ASC, id ASC FOR UPDATE';
+        
+        const [balances] = await db.query(balancesQuery, queryParams);
+        
+        // Raf özelinde stok yeterlilik kontrolü
+        const totalAvailable = balances.reduce((sum, b) => sum + b.quantity, 0);
+        if (totalAvailable < deductQty) {
+            await db.query('ROLLBACK');
+            return res.status(400).json({ success: false, message: warehouseId ? `Seçilen rafta yetersiz stok! Mevcut: ${totalAvailable}` : `Yetersiz stok! Mevcut: ${totalAvailable}` });
+        }
 
         let remainingToDeduct = deductQty;
-        
+
         for (const balance of balances) {
             if (remainingToDeduct <= 0) break;
 
@@ -1126,14 +1056,14 @@ router.post('/deduct-fefo', async (req, res) => {
             await db.query(
                 'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [
-                    product.Id, 
-                    userId, 
-                    'OUT', 
-                    qtyToTake, 
-                    balance.warehouse_id, 
-                    balance.shelf_code, 
-                    balance.batch_number, 
-                    balance.expiration_date, 
+                    product.Id,
+                    userId,
+                    'OUT',
+                    qtyToTake,
+                    balance.warehouse_id,
+                    balance.shelf_code,
+                    balance.batch_number,
+                    balance.expiration_date,
                     'Hızlı Çıkış (FEFO) ile düşüldü.'
                 ]
             );
@@ -1141,11 +1071,13 @@ router.post('/deduct-fefo', async (req, res) => {
 
         // 4. Genel ürün stokunu düş
         await db.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [deductQty, product.Id]);
-        
+
         await db.query('COMMIT');
-        
+
         // Kritik stok kontrolü (async, response'u bekletmez)
         checkAndNotifyLowStock(product.Id).catch(err => console.error("Stok uyarısı hatası (FEFO):", err));
+
+        await logActivity(userId, 'UPDATE', 'wms_stock_balances', null, `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName}`);
 
         res.json({ success: true, message: `${deductQty} adet stok başarıyla FEFO sırasına göre düşüldü.` });
     } catch (error) {

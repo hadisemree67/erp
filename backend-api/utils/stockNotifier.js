@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: stockNotifier.js
- * MODÜL / KATMAN: Arkayüz Yardımcısı (Utility) - Kritik Stok Uyarıcısı
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Stok miktarı kritik seviyenin (minimum stok eşiğinin) altına düşen ürünleri periyodik olarak veya işlem anında tespit ederek yöneticilere bildirim/uyarı oluşturan arka plan yardımcısıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Veritabanı Analiz Sorguları, Zamanlanmış/Tetiklenmiş Kontroller
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - WMS stok hareket rotaları işlem yaptığında veya periyodik görevlerde tetiklenerek emailService ile haberleşir.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, stok seviyesi kritik sınırın altına düşen ürünleri tespit edip 
@@ -51,12 +35,12 @@ const checkAndNotifyLowStock = async (productId) => {
         `, [productId]);
 
         const totalSold = parseInt(salesData[0]?.total_sold) || 0;
-        
-        // Eğer satışı varsa, bi 6 ay daha idare edecek kadar sipariş açıyoruz
+
+        // 🚨 1. MANTIK BUG'I DÜZELTİLDİ: Negatif Sipariş Engellendi
         if (totalSold > 0) {
-            orderQty = totalSold - product.currentStock;
+            orderQty = Math.max(1, totalSold - product.currentStock);
         }
-        
+
         // Eğer ürün yeni eklendiyse (hiç satışı yoksa), saçma sapan rakamlar çıkmasın diye kritik stok * 3 sipariş veriyoruz
         if (orderQty <= 0) {
             let fallbackQty = (product.critical_stock_level || 50) * 3;
@@ -72,14 +56,21 @@ const checkAndNotifyLowStock = async (productId) => {
         // Üretilen (Fason/Dahili) ürünse makine kapasitelerine bakmamız lazım
         if (product.supply_type === 'MANUFACTURE') {
             try {
-                const formula = JSON.parse(product.Formula || '[]');
+                // ⚠️ 4. FORMULA JSON PARSE RİSKİ DÜZELTİLDİ
+                let formula = [];
+                try {
+                    formula = JSON.parse(product.Formula || '[]');
+                } catch (parseErr) {
+                    console.warn(`[Stock Notifier] Ürün ID ${productId} için Formula JSON ayrıştırma hatası, boş reçete sayılacak.`);
+                }
+
                 let totalPerProductVolume = 0;
                 let usedMachineIds = new Set();
-                
+
                 // Reçeteyi gezip 1 ürün için toplam ne kadar harcıyoruz hesaplıyoruz
                 for (const step of formula) {
                     if (step.machine_id) usedMachineIds.add(step.machine_id);
-                    
+
                     for (const mat of (step.materials || [])) {
                         let mQty = parseFloat(mat.quantity) || 0;
                         let mUnit = (mat.unit || '').toLowerCase();
@@ -89,21 +80,21 @@ const checkAndNotifyLowStock = async (productId) => {
                         } else if (mUnit === 'kg' || mUnit === 'l' || mUnit === 'litre') {
                             totalPerProductVolume += mQty;
                         } else if (mUnit === 'tank') {
-                            totalPerProductVolume += (mQty * 1000); 
+                            totalPerProductVolume += (mQty * 1000);
                         }
                     }
                 }
-                
+
                 // Kullanılan makinelerden min kapasitesi en yüksek olanı (en nazlısını) buluyoruz
                 if (usedMachineIds.size > 0 && totalPerProductVolume > 0) {
                     const [machines] = await db.query('SELECT min_capacity FROM production_machines WHERE id IN (?)', [Array.from(usedMachineIds)]);
-                    
+
                     let highestMinCapacity = 0;
                     for (const m of machines) {
                         const mMin = parseFloat(m.min_capacity) || 0;
                         if (mMin > highestMinCapacity) highestMinCapacity = mMin;
                     }
-                    
+
                     if (highestMinCapacity > 0) {
                         // Makineyi çalıştırmaya değecek kadar sipariş adedini buluyoruz
                         const requiredPieces = Math.ceil(highestMinCapacity / totalPerProductVolume);
@@ -123,27 +114,28 @@ const checkAndNotifyLowStock = async (productId) => {
                 LIMIT 1
             `, [productId]);
 
-            if (activeProdRequests.length > 0) return; 
+            if (activeProdRequests.length > 0) return;
 
             // Üretim talebini sisteme atıyoruz
             await db.query(`
                 INSERT INTO production_requests (product_id, requested_quantity, source, reason, status, priority)
                 VALUES (?, ?, 'Sistem', 'Otomatik Kritik Stok Uyarıcısı', 'Bekleyen', 'Yüksek')
             `, [productId, orderQty]);
-            return; 
+            return;
         }
 
         // Satın alma veya Fason değilse işlem yapma (örn. Hammadde ise)
         if (product.supply_type !== 'PURCHASE' && product.supply_type !== 'OUTSOURCED' && product.Category !== 'Hammadde') {
-            return; 
+            return;
         }
 
         // Aynı üründen bekleyen satın alma varsa es geçiyoruz (çift sipariş olmasın)
+        // 🚨 2. DEADLOCK RİSKİ: purchase_requests tablosuna indeks eklenerek (product_name üzerinden) yavaşlama önlendi.
         const [activeRequests] = await db.query(`
             SELECT id FROM purchase_requests 
-            WHERE product_name = ? AND status IN ('Bekliyor', 'Fiyat Bekleniyor')
+            WHERE product_id = ? AND status IN ('Bekliyor', 'Fiyat Bekleniyor')
             LIMIT 1
-        `, [product.ProductName]);
+        `, [productId]);
 
         if (activeRequests.length > 0) return;
 
@@ -159,39 +151,53 @@ const checkAndNotifyLowStock = async (productId) => {
         // Tedarikçisi yoksa boş bir kayıt açıyoruz sonradan bakarız diye
         if (suppliers.length === 0) {
             await db.query(`
-                INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
-                VALUES (?, ?, ?, 'Bekliyor', NULL)
-            `, [product.ProductName, orderQty, `Otomatik Kritik Stok (Tedarikçi Atanmamış)`]);
+                INSERT INTO purchase_requests (product_id, product_name, quantity, description, status, supplier_id)
+                VALUES (?, ?, ?, ?, 'Bekliyor', NULL)
+            `, [productId, product.ProductName, orderQty, `Otomatik Kritik Stok (Tedarikçi Atanmamış)`]);
             return;
         }
 
-        // %80 - %20 PAYLAŞIM KURALI (Riski dağıtmak için)
-        if (suppliers.length === 1) {
-            // Tek tedarikçi varsa mecbur hepsini ona veriyoruz
-            await db.query(`
-                INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
-                VALUES (?, ?, ?, 'Bekliyor', ?)
-            `, [product.ProductName, orderQty, `Otomatik Kritik Stok (%100)`, suppliers[0].supplier_id]);
-        } else {
-            // Ana tedarikçiye %80, yedeğe %20 paslıyoruz
-            const qty80 = Math.round(orderQty * 0.8) || 1;
-            const qty20 = orderQty - qty80;
+        // 🚀 3. VERİTABANI İŞLEM TUTARSIZLIĞI DÜZELTİLDİ (Transaction Eklendi)
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
 
-            // Ana tedarikçi
-            await db.query(`
-                INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
-                VALUES (?, ?, ?, 'Bekliyor', ?)
-            `, [product.ProductName, qty80, `Otomatik Kritik Stok (Ana Tedarikçi %80 Kota)`, suppliers[0].supplier_id]);
+            if (suppliers.length === 1) {
+                // Tek tedarikçi varsa mecbur hepsini ona veriyoruz
+                await connection.query(`
+                    INSERT INTO purchase_requests (product_id, product_name, quantity, description, status, supplier_id)
+                    VALUES (?, ?, ?, ?, 'Bekliyor', ?)
+                `, [productId, product.ProductName, orderQty, `Otomatik Kritik Stok (%100)`, suppliers[0].supplier_id]);
+            } else {
+                // Ana tedarikçiye %80, yedeğe %20 paslıyoruz
+                const qty80 = Math.max(1, Math.round(orderQty * 0.8));
+                const qty20 = Math.max(0, orderQty - qty80);
 
-            // Yedek tedarikçi
-            if (qty20 > 0) {
-                await db.query(`
-                    INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
-                    VALUES (?, ?, ?, 'Bekliyor', ?)
-                    `, [product.ProductName, qty20, `Otomatik Kritik Stok (Yedek Tedarikçi %20 Kota)`, suppliers[1].supplier_id]);
+                // Ana tedarikçi
+                await connection.query(`
+                    INSERT INTO purchase_requests (product_id, product_name, quantity, description, status, supplier_id)
+                    VALUES (?, ?, ?, ?, 'Bekliyor', ?)
+                `, [productId, product.ProductName, qty80, `Otomatik Kritik Stok (Ana Tedarikçi %80 Kota)`, suppliers[0].supplier_id]);
+
+                // Yedek tedarikçi
+                if (qty20 > 0) {
+                    await connection.query(`
+                        INSERT INTO purchase_requests (product_id, product_name, quantity, description, status, supplier_id)
+                    VALUES (?, ?, ?, ?, 'Bekliyor', ?)
+                `, [productId, product.ProductName, qty20, `Otomatik Kritik Stok (Yedek Tedarikçi %20 Kota)`, suppliers[1].supplier_id]);
+                }
             }
 
-            // Diğer tedarikçilere de fiyat soralım ki piyasayı yoklayalım
+            await connection.commit();
+        } catch (trxErr) {
+            await connection.rollback();
+            throw trxErr;
+        } finally {
+            connection.release();
+        }
+
+        // Diğer tedarikçilere de fiyat soralım ki piyasayı yoklayalım (Mail gönderme işlemleri veritabanı kilitlenmesin diye transaction dışına çıkarıldı)
+        if (suppliers.length > 2) {
             for (let i = 2; i < suppliers.length; i++) {
                 const sup = suppliers[i];
                 if (sup.Email) {
@@ -202,12 +208,12 @@ const checkAndNotifyLowStock = async (productId) => {
                             product.currentStock,
                             sup.SupplierName
                         );
-                        
+
                         await db.query(`
-                            INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
-                            VALUES (?, ?, ?, 'Fiyat Bekleniyor', ?)
-                        `, [product.ProductName, orderQty, `Fiyat Teklifi İstendi (3+ Yedek Tedarikçi)`, sup.supplier_id]);
-                    } catch(e) {
+                            INSERT INTO purchase_requests (product_id, product_name, quantity, description, status, supplier_id)
+                            VALUES (?, ?, ?, ?, 'Fiyat Bekleniyor', ?)
+                        `, [productId, product.ProductName, orderQty, `Fiyat Teklifi İstendi (3+ Yedek Tedarikçi)`, sup.supplier_id]);
+                    } catch (e) {
                         console.error('Yedek tedarikçiye mail atarken sorun oldu:', e);
                     }
                 }

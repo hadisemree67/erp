@@ -44,6 +44,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   const [fastDeductBarcode, setFastDeductBarcode] = useState('');
   const [fastDeductQty, setFastDeductQty] = useState('');
   const [fastDeductLoading, setFastDeductLoading] = useState(false);
+  const [fastDeductSelectedShelf, setFastDeductSelectedShelf] = useState(''); // "warehouseId_shelfCode" format
 
   // Edit State
   const [editingStock, setEditingStock] = useState(null);
@@ -114,10 +115,23 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
 
         setFastDeductLoading(true);
         try {
+            let warehouseId = null;
+            let shelfCode = null;
+            if (fastDeductSelectedShelf) {
+                const parts = fastDeductSelectedShelf.split('_');
+                warehouseId = parts[0];
+                shelfCode = parts[1];
+            }
+
             const res = await apiFetch('http://localhost:3000/api/wms/deduct-fefo', {
                 method: 'POST',
                 headers: { 'x-user-id': currentUser?.id, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ barcode: fastDeductBarcode, quantity: fastDeductQty })
+                body: JSON.stringify({ 
+                    barcode: fastDeductBarcode, 
+                    quantity: fastDeductQty,
+                    warehouseId,
+                    shelfCode
+                })
             });
             const data = await res.json();
             if (data.success) {
@@ -125,6 +139,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                 setIsFastDeductVisible(false);
                 setFastDeductBarcode('');
                 setFastDeductQty('');
+                setFastDeductSelectedShelf('');
                 fetchStockList();
             } else {
                 alert('Hata: ' + data.message);
@@ -511,6 +526,15 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                     }
                 }
 
+                const uniqueShelves = [];
+                group.batches.forEach(b => {
+                    const key = `${b.warehouse_name}-${b.shelf_code}`;
+                    if (!uniqueShelves.find(s => s.key === key)) {
+                        uniqueShelves.push({ key, cap: b.shelf_max_capacity || 0 });
+                    }
+                });
+                const totalCap = uniqueShelves.reduce((sum, s) => sum + s.cap, 0);
+
                 return (
                     <tr key={group.groupKey} className="hover-row" onClick={() => setSelectedGroup(group)} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.15s', cursor: 'pointer', backgroundColor: 'white' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'white'}>
                         <td style={{ padding: '16px' }}>
@@ -563,14 +587,6 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                             return `${qty} ${u}`;
                                         };
 
-                                        const uniqueShelves = [];
-                                        group.batches.forEach(b => {
-                                            const key = `${b.warehouse_name}-${b.shelf_code}`;
-                                            if (!uniqueShelves.find(s => s.key === key)) {
-                                                uniqueShelves.push({ key, cap: b.shelf_max_capacity || 0 });
-                                            }
-                                        });
-                                        const totalCap = uniqueShelves.reduce((sum, s) => sum + s.cap, 0);
                                         return group.product?.unit_type && group.product.unit_type !== 'Adet' && group.product?.package_capacity > 0 ? (
                                             <span style={{ fontSize: '13px', color: '#0369a1' }}>
                                                 {formatDualStr(group.total_quantity, totalCap, group.product.unit_type)} <br/>
@@ -588,7 +604,9 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                             )}
                             {sktBadge}
                             <div style={{ marginTop: '8px' }}>
-                                {group.total_quantity === 0 ? (
+                                {totalCap > 0 && group.total_quantity > totalCap ? (
+                                    <span style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-block' }}>⚠️ Maks. Stok Aşıldı</span>
+                                ) : group.total_quantity === 0 ? (
                                     <span style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-block' }}>🔴 Stok Yok</span>
                                 ) : group.total_quantity <= 20 ? (
                                     <span style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', display: 'inline-block' }}>🔴 Kritik Stok</span>
@@ -768,6 +786,97 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                                 <button type="button" onClick={() => setProductionRequestProduct(null)} style={{ padding: '10px 16px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>İptal</button>
                                 <button type="submit" style={{ padding: '10px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Talep Gönder</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+            {isFastDeductVisible && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                    <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
+                        <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            Acil Çıkış
+                        </h3>
+                        <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px', marginTop: 0 }}>Okuttuğunuz barkoddan belirttiğiniz miktar, son kullanma tarihi en yakın raflardan otomatik düşülecektir.</p>
+                        
+                        <form onSubmit={handleFastDeductSubmit}>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>Barkod</label>
+                                <input 
+                                    autoFocus 
+                                    type="text" 
+                                    value={fastDeductBarcode} 
+                                    onChange={(e) => setFastDeductBarcode(e.target.value)} 
+                                    placeholder="Barkod okutun..." 
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '2px solid #ef4444', outline: 'none', fontSize: '16px', boxSizing: 'border-box' }}
+                                />
+                            </div>
+
+                            {(() => {
+                                const search = fastDeductBarcode.trim().toLowerCase();
+                                if (!search) return null;
+                                
+                                const availableShelves = stockItems.filter(item => {
+                                    let displayBarcode = item.barcode;
+                                    if (displayBarcode?.startsWith('[')) {
+                                        try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch(e){}
+                                    }
+                                    return item.barcode?.toLowerCase() === search || displayBarcode?.toLowerCase() === search;
+                                }).reduce((acc, item) => {
+                                    const key = `${item.warehouse_id}_${item.shelf_code}`;
+                                    if (!acc[key]) {
+                                        acc[key] = {
+                                            warehouse_id: item.warehouse_id,
+                                            warehouse_name: item.warehouse_name,
+                                            shelf_code: item.shelf_code,
+                                            total_quantity: 0
+                                        };
+                                    }
+                                    acc[key].total_quantity += item.quantity;
+                                    return acc;
+                                }, {});
+
+                                const shelfList = Object.values(availableShelves);
+                                if (shelfList.length > 0) {
+                                    return (
+                                        <div style={{ marginBottom: '16px' }}>
+                                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>Raf Seçimi (İsteğe Bağlı)</label>
+                                            <select 
+                                                value={fastDeductSelectedShelf}
+                                                onChange={(e) => setFastDeductSelectedShelf(e.target.value)}
+                                                style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '15px', backgroundColor: 'white' }}
+                                            >
+                                                <option value="">-- Tüm Raflardan FEFO ile Düş --</option>
+                                                {shelfList.map(s => (
+                                                    <option key={`${s.warehouse_id}_${s.shelf_code}`} value={`${s.warehouse_id}_${s.shelf_code}`}>
+                                                        {s.warehouse_name} / {s.shelf_code} (Mevcut: {s.total_quantity} Adet)
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })()}
+                            
+                            <div style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>Düşülecek Miktar</label>
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    value={fastDeductQty} 
+                                    onChange={(e) => setFastDeductQty(e.target.value)} 
+                                    placeholder="Örn: 25" 
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '16px', boxSizing: 'border-box' }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button type="button" onClick={() => setIsFastDeductVisible(false)} disabled={fastDeductLoading} style={{ flex: 1, padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontWeight: '600', color: '#475569' }}>İptal</button>
+                                <button type="submit" disabled={fastDeductLoading} style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '8px', background: '#ef4444', cursor: fastDeductLoading ? 'not-allowed' : 'pointer', fontWeight: '600', color: 'white', display: 'flex', justifyContent: 'center' }}>
+                                    {fastDeductLoading ? 'Düşülüyor...' : 'Çıkış Yap'}
+                                </button>
                             </div>
                         </form>
                     </div>

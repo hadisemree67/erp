@@ -74,8 +74,15 @@ body::after {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .glass-card h1 {
@@ -242,8 +249,15 @@ body::after {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .glass-card h1 {
@@ -345,6 +359,15 @@ body::after {
 }
 
 /* Tablo Satırı İçi İşlem İkonları Hover Efekti */
-.hover-row .action-container { opacity: 0; transition: opacity 0.2s; }
-.hover-row:hover .action-container { opacity: 1; }
-.req-row-hover:hover { background-color: #f1f5f9 !important; }
+.hover-row .action-container {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.hover-row:hover .action-container {
+  opacity: 1;
+}
+
+.req-row-hover:hover {
+  background-color: #f1f5f9 !important;
+}

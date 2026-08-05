@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: warehouses.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Depo Tanımları ve Fiziksel Yapı
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Fiziksel depoların oluşturulması, depo içindeki raf, koridor ve hücre yapılandırmalarının tanımlanması ve depo yerleşim düzeninin yönetilmesi için API uç noktaları sağlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Veritabanı Yapılandırma Sorguları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki WarehouseList, WarehouseForm ve WarehouseLayout bileşenleri ile etkileşimlidir.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, fiziksel depoların oluşturulması, depo içindeki raf, koridor ve hücre yapılandırmalarının 
@@ -23,10 +7,11 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const authMiddleware = require('../middleware/auth');
 const { logActivity } = require('../utils/logger');
 
 // GET: Tüm depoları ve onlara bağlı rafları getir
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const [warehouses] = await db.query('SELECT * FROM warehouses ORDER BY created_at DESC');
         const [shelves] = await db.query('SELECT * FROM warehouse_shelves');
@@ -49,7 +34,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET: Raf kapasitelerini hesapla
-router.get('/shelf-capacities', async (req, res) => {
+router.get('/shelf-capacities', authMiddleware, async (req, res) => {
     const { productId } = req.query;
     try {
         if (!productId) {
@@ -61,7 +46,7 @@ router.get('/shelf-capacities', async (req, res) => {
         if (productRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Ürün bulunamadı.' });
         }
-        
+
         const productVolume = parseFloat(productRows[0].Volume) || 0;
 
         // 2. Rafları çek
@@ -97,7 +82,7 @@ router.get('/shelf-capacities', async (req, res) => {
             const key = `${shelf.warehouse_id}_${shelf.shelf_code}`;
             const maxVol = parseFloat(shelf.max_volume) || 0;
             const usedVol = shelfUsage[key] || 0;
-            
+
             let fitCount = null; // null = sınırsız
 
             if (maxVol > 0 && productVolume > 0) {
@@ -108,7 +93,7 @@ router.get('/shelf-capacities', async (req, res) => {
             if (!capacities[shelf.warehouse_id]) {
                 capacities[shelf.warehouse_id] = {};
             }
-            
+
             capacities[shelf.warehouse_id][shelf.shelf_code] = fitCount;
 
             // En iyi rafı bul (En az 1 tane sığabilenler arasından)
@@ -127,9 +112,9 @@ router.get('/shelf-capacities', async (req, res) => {
 });
 
 // POST: Yeni depo ekle
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
     const { name, location, address, shelves, max_capacity, warehouse_type } = req.body;
-    
+
     if (!name) {
         return res.status(400).json({ success: false, message: 'Depo adı zorunludur.' });
     }
@@ -158,7 +143,7 @@ router.post('/', async (req, res) => {
                 // Eski maxVolume'dan geldiyse ama genişlik yoksa (nadir ama mümkün), koru, aksi takdirde hesapla.
                 const legacyVol = typeof shelf === 'object' && shelf.maxVolume ? parseFloat(shelf.maxVolume) || 0 : 0;
                 const max_volume = (width > 0 && height > 0 && depth > 0) ? (width * height * depth) : legacyVol;
-                
+
                 if (shelf_code && shelf_code.trim() !== '') {
                     await connection.query(
                         'INSERT INTO warehouse_shelves (warehouse_id, shelf_code, max_volume, width, height, depth, barcode) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -171,6 +156,7 @@ router.post('/', async (req, res) => {
         await connection.commit();
         connection.release();
 
+        await logActivity(req.user?.id, 'INSERT', 'warehouses', warehouseId, `Yeni depo eklendi: ${name}`);
         res.status(201).json({ success: true, message: 'Depo başarıyla eklendi.', id: warehouseId });
     } catch (error) {
         if (connection) {
@@ -183,7 +169,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT: Depo güncelle
-router.put('/:id', async (req, res) => {
+router.put('/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { name, location, address, shelves, max_capacity, warehouse_type } = req.body;
 
@@ -197,10 +183,16 @@ router.put('/:id', async (req, res) => {
         await connection.beginTransaction();
 
         // 1. Depoyu Güncelle
-        await connection.query(
+        const [result] = await connection.query(
             'UPDATE warehouses SET name = ?, location = ?, warehouse_type = ?, address = ?, max_capacity = ? WHERE id = ?',
             [name, location || '', warehouse_type || 'STOK', address || '', max_capacity || null, id]
         );
+
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(404).json({ success: false, message: 'Depo bulunamadı.' });
+        }
 
         // 2. Mevcut rafları sil (Sıfırdan yazıyoruz)
         await connection.query('DELETE FROM warehouse_shelves WHERE warehouse_id = ?', [id]);
@@ -215,7 +207,7 @@ router.put('/:id', async (req, res) => {
                 const barcode = typeof shelf === 'object' && shelf.barcode ? shelf.barcode.trim() : null;
                 const legacyVol = typeof shelf === 'object' && shelf.maxVolume ? parseFloat(shelf.maxVolume) || 0 : 0;
                 const max_volume = (width > 0 && height > 0 && depth > 0) ? (width * height * depth) : legacyVol;
-                
+
                 if (shelf_code && shelf_code.trim() !== '') {
                     await connection.query(
                         'INSERT INTO warehouse_shelves (warehouse_id, shelf_code, max_volume, width, height, depth, barcode) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -228,6 +220,7 @@ router.put('/:id', async (req, res) => {
         await connection.commit();
         connection.release();
 
+        await logActivity(req.user?.id, 'UPDATE', 'warehouses', id, `Depo güncellendi: ${name}`);
         res.json({ success: true, message: 'Depo başarıyla güncellendi.' });
     } catch (error) {
         if (connection) {
@@ -240,11 +233,13 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE: Depo sil
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
         // ON DELETE CASCADE olduğu için warehouse_shelves otomatik silinecek
-        await db.query('DELETE FROM warehouses WHERE id = ?', [id]);
+        const [result] = await db.query('DELETE FROM warehouses WHERE id = ?', [id]);
+        if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Depo bulunamadı.' });
+        await logActivity(req.user?.id, 'DELETE', 'warehouses', id, 'Depo silindi.');
         res.json({ success: true, message: 'Depo başarıyla silindi.' });
     } catch (error) {
         console.error('Depo silinirken hata:', error);

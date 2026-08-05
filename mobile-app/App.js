@@ -10,6 +10,9 @@ import PickingScreen from './src/screens/PickingScreen';
 import SummaryScreen from './src/screens/SummaryScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import PendingOrdersScreen from './src/screens/PendingOrdersScreen';
+import PackagingScreen from './src/screens/PackagingScreen';
+import PendingPackagingScreen from './src/screens/PendingPackagingScreen';
+import ShippingScreen from './src/screens/ShippingScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -36,7 +39,7 @@ function AppNavigator() {
                     <Stack.Screen 
                         name="Picking" 
                         component={PickingScreen} 
-                        options={{ headerShown: true, title: 'Sipariş Toplama' }}
+                        options={{ headerShown: false, title: 'Sipariş Toplama' }}
                     />
                     <Stack.Screen 
                         name="Summary" 
@@ -50,6 +53,21 @@ function AppNavigator() {
                     <Stack.Screen 
                         name="PendingOrders" 
                         component={PendingOrdersScreen} 
+                        options={{ headerShown: false }}
+                    />
+                    <Stack.Screen 
+                        name="Packaging" 
+                        component={PackagingScreen} 
+                        options={{ headerShown: false, title: 'Paketleme Aşaması' }}
+                    />
+                    <Stack.Screen 
+                        name="PendingPackaging" 
+                        component={PendingPackagingScreen} 
+                        options={{ headerShown: false }}
+                    />
+                    <Stack.Screen 
+                        name="Shipping" 
+                        component={ShippingScreen} 
                         options={{ headerShown: false }}
                     />
                 </>

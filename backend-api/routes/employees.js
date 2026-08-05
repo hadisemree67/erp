@@ -1,21 +1,4 @@
-/**
- * ============================================================================
- * DOSYA ADI: employees.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - İnsan Kaynakları (Çalışanlar)
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Şirket çalışanlarının (personelin) özlük bilgileri, maaş bilgileri, departman atamaları, izin talepleri ve işten ayrılma (offboarding) süreçlerini yöneten HTTP API uç noktalarını tanımlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Veritabanı İşlemleri (CRUD), Asenkron Sorgular
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki EmployeeList, EmployeeForm, LeaveManagement ve EmployeeOffboard bileşenleri ile doğrudan haberleşir.
- * ============================================================================
- */
-
 /*
- * ÖZET:
  * Bu modül, şirket çalışanlarının özlük bilgileri, maaş bilgileri, departman atamaları, 
  * izin talepleri ve işten ayrılma süreçlerini yöneten API rotalarını tanımlar.
  */
@@ -26,6 +9,7 @@ const db = require('../db');
 const { logActivity } = require('../utils/logger');
 const multer = require('multer');
 const path = require('path');
+const authMiddleware = require('../middleware/auth');
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -36,7 +20,27 @@ const storage = multer.diskStorage({
         cb(null, 'employee-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
-const upload = multer({ storage: storage });
+const fileFilter = (req, file, cb) => {
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Desteklenmeyen dosya formatı.'), false);
+    }
+};
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: fileFilter
+});
+const uploadMiddleware = (req, res, next) => {
+    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documents', maxCount: 10 }])(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ success: false, message: err.message });
+        }
+        next();
+    });
+};
 
 const safeStr = (val) => {
     if (val === undefined || val === null || String(val).trim() === '' || String(val).trim() === 'undefined' || String(val).trim() === 'null') {
@@ -83,32 +87,15 @@ async function ensureEmployeeTables() {
                 photo_path VARCHAR(255),
                 is_active TINYINT DEFAULT 1,
                 hakedilen_yillik_izin INT DEFAULT 14,
+                work_status VARCHAR(50) DEFAULT 'Aktif',
+                offboarding_status VARCHAR(50) NULL,
+                offboarding_details JSON NULL,
+                end_date DATE NULL,
+                exit_reason TEXT NULL,
+                severance_pay DECIMAL(10,2) NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-        const cols = [
-            ['department', 'VARCHAR(100)'],
-            ['position', 'VARCHAR(100)'],
-            ['phone', 'VARCHAR(50)'],
-            ['email', 'VARCHAR(100)'],
-            ['start_date', 'DATE NULL'],
-            ['salary', 'DECIMAL(10,2) NULL'],
-            ['tckn', 'VARCHAR(20)'],
-            ['address', 'TEXT'],
-            ['blood_type', 'VARCHAR(10)'],
-            ['emergency_contact', 'VARCHAR(100)'],
-            ['photo_path', 'VARCHAR(255)'],
-            ['is_active', 'TINYINT DEFAULT 1'],
-            ['hakedilen_yillik_izin', 'INT DEFAULT 14'],
-            ['work_status', "VARCHAR(50) DEFAULT 'Aktif'"]
-        ];
-        for (const [col, def] of cols) {
-            try {
-                await db.query(`ALTER TABLE employees ADD COLUMN ${col} ${def}`);
-            } catch(e) {
-                if (e.errno !== 1060 && e.code !== 'ER_DUP_FIELDNAME') console.warn(`Kolon ekleme hatası (${col}):`, e.message);
-            }
-        }
 
         await db.query(`
             CREATE TABLE IF NOT EXISTS employee_documents (
@@ -136,6 +123,21 @@ async function ensureEmployeeTables() {
                 FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
             )
         `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS employee_overtimes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                employee_id INT NOT NULL,
+                overtime_date DATE NOT NULL,
+                hours DECIMAL(5,2) NOT NULL,
+                hourly_wage DECIMAL(10,2) NOT NULL,
+                total_amount DECIMAL(10,2) NOT NULL,
+                month INT NOT NULL,
+                year INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+            )
+        `);
     } catch(err) {
         console.error('Personel tabloları başlatılırken hata:', err);
     }
@@ -143,7 +145,7 @@ async function ensureEmployeeTables() {
 ensureEmployeeTables();
 
 // GET: Tüm personelleri getir
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const { search } = req.query;
         let query = 'SELECT * FROM employees';
@@ -151,13 +153,14 @@ router.get('/', async (req, res) => {
         
         if (search) {
             query += ' WHERE full_name LIKE ? OR tckn LIKE ?';
-            params = [`%${search}%`, `%${search}%`];
+            const escaped = search.replace(/[%_]/g, '\\$&');
+            params = [`%${escaped}%`, `%${escaped}%`];
         }
-        
+
         query += ' ORDER BY is_active DESC, id DESC';
-        
+
         const [rows] = await db.query(query, params);
-        
+
         // Her çalışan için şu anda (bugün) aktif bir izin veya rapor var mı kontrol edelim:
         let leaveMap = {};
         try {
@@ -169,7 +172,7 @@ router.get('/', async (req, res) => {
             activeLeaves.forEach(l => {
                 leaveMap[l.employee_id] = l;
             });
-        } catch(e) {
+        } catch (e) {
             console.log('İzin sorgusu uyarı:', e.message);
         }
 
@@ -192,10 +195,10 @@ router.get('/', async (req, res) => {
 });
 
 // POST: Yeni personel ekle
-router.post('/', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documents', maxCount: 10 }]), async (req, res) => {
+router.post('/', authMiddleware, uploadMiddleware, async (req, res) => {
     const { full_name, department, position, phone, email, start_date, salary, tckn, address, blood_type, emergency_contact, work_status } = req.body;
     const photo_path = req.files && req.files.photo ? `/uploads/${req.files.photo[0].filename}` : null;
-    
+
     if (!full_name || !safeStr(full_name)) {
         return res.status(400).json({ success: false, message: 'Ad Soyad zorunludur.' });
     }
@@ -205,7 +208,7 @@ router.post('/', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documen
             'INSERT INTO employees (full_name, department, position, phone, email, start_date, salary, tckn, address, blood_type, emergency_contact, photo_path, work_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [safeStr(full_name), safeStr(department), safeStr(position), safeStr(phone), safeStr(email), safeDate(start_date), safeNum(salary), safeStr(tckn), safeStr(address), safeStr(blood_type), safeStr(emergency_contact), photo_path, safeStr(work_status) || 'Aktif']
         );
-        
+
         const insertId = result.insertId;
 
         // Dosyaları kaydet
@@ -217,8 +220,8 @@ router.post('/', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documen
                 );
             }
         }
-        
-        await logActivity(req.headers['x-user-id'] || '', 'INSERT', 'employees', insertId, `"${full_name}" adlı personeli İK listesine ekledi.`, null);
+
+        await logActivity(req.user?.id, 'INSERT', 'employees', insertId, `"${full_name}" adlı personeli İK listesine ekledi.`, null);
 
         res.status(201).json({ success: true, message: 'Personel başarıyla eklendi.' });
     } catch (error) {
@@ -226,10 +229,11 @@ router.post('/', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documen
         res.status(500).json({ success: false, message: 'Sunucu hatası: ' + (error.sqlMessage || error.message || error) });
     }
 });
+
 // PUT: Seçili personelleri toplu düzenle
-router.put('/bulk-edit', async (req, res) => {
-    const { ids, updates } = req.body; 
-    
+router.put('/bulk-edit', authMiddleware, async (req, res) => {
+    const { ids, updates } = req.body;
+
     let finalUpdates = updates;
     if (!finalUpdates && req.body.field) {
         finalUpdates = [{ field: req.body.field, type: req.body.type, value: req.body.value }];
@@ -242,14 +246,16 @@ router.put('/bulk-edit', async (req, res) => {
         return res.status(400).json({ success: false, message: 'Değişiklik bulunamadı.' });
     }
 
+    let conn;
     try {
-        await db.query('START TRANSACTION');
-        
+        conn = await db.getConnection();
+        await conn.beginTransaction();
+
         for (const id of ids) {
-            const [oldRows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
+            const [oldRows] = await conn.query('SELECT * FROM employees WHERE id = ?', [id]);
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
-            
+
             for (const update of finalUpdates) {
                 const { field, type, value } = update;
                 if (!['salary', 'departmentAndPosition'].includes(field)) continue;
@@ -264,73 +270,79 @@ router.put('/bulk-edit', async (req, res) => {
                     if (isNaN(numValue)) continue;
 
                     newVal = currentVal;
-                    
+
                     if (type === 'percentage') {
                         newVal = currentVal + (currentVal * numValue / 100);
                     } else if (type === 'fixed') {
                         newVal = currentVal + numValue;
                     }
-                    
+
                     if (newVal < 0) newVal = 0;
-                    
+
                     const actionText = numValue >= 0 ? 'artırdı' : 'düşürdü';
                     const valText = type === 'percentage' ? `%${Math.abs(numValue)}` : `${Math.abs(numValue)}₺`;
                     logMsg = `"${oldData.full_name}" adlı personelin maaşını ${valText} ${actionText}.`;
 
-                    await db.query(`UPDATE employees SET ${field} = ? WHERE id = ?`, [newVal, id]);
+                    await conn.query(`UPDATE employees SET ${field} = ? WHERE id = ?`, [newVal, id]);
                 } else if (field === 'departmentAndPosition') {
                     const { department, position } = value;
                     logMsg = `"${oldData.full_name}" adlı personelin birimini "${department}" ve görevini "${position}" olarak güncelledi.`;
 
-                    await db.query(`UPDATE employees SET department = ?, position = ? WHERE id = ?`, [department, position, id]);
+                    await conn.query(`UPDATE employees SET department = ?, position = ? WHERE id = ?`, [department, position, id]);
                 }
-                
-                await logActivity(req.headers['x-user-id'], 'UPDATE', 'employees', id, logMsg, oldData);
+
+                await logActivity(req.user?.id, 'UPDATE', 'employees', id, logMsg, oldData);
             }
         }
-        
-        await db.query('COMMIT');
+
+        await conn.commit();
         res.json({ success: true, message: `${ids.length} adet personel başarıyla güncellendi.` });
     } catch (error) {
-        await db.query('ROLLBACK');
+        if (conn) await conn.rollback();
         console.error('Toplu düzenleme hatası:', error);
         res.status(500).json({ success: false, message: 'Toplu güncelleme sırasında sunucu hatası oluştu.' });
+    } finally {
+        if (conn) conn.release();
     }
 });
 
 // DELETE: Seçili personelleri toplu sil
-router.delete('/bulk', async (req, res) => {
+router.delete('/bulk', authMiddleware, async (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'Silinecek personel seçilmedi.' });
     }
-    
+
+    let conn;
     try {
-        await db.query('START TRANSACTION');
-        
+        conn = await db.getConnection();
+        await conn.beginTransaction();
+
         for (const id of ids) {
-            const [oldRows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
+            const [oldRows] = await conn.query('SELECT * FROM employees WHERE id = ?', [id]);
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
-            
-            await db.query('DELETE FROM employees WHERE id = ?', [id]);
-            await logActivity(req.headers['x-user-id'], 'DELETE', 'employees', id, `"${oldData.full_name}" adlı personeli toplu işlem ile sistemden sildi.`, oldData);
+
+            await conn.query('DELETE FROM employees WHERE id = ?', [id]);
+            await logActivity(req.user?.id, 'DELETE', 'employees', id, `"${oldData.full_name}" adlı personeli toplu işlem ile sistemden sildi.`, oldData);
         }
-        
-        await db.query('COMMIT');
+
+        await conn.commit();
         res.json({ success: true, message: `${ids.length} adet personel başarıyla silindi.` });
     } catch (error) {
-        await db.query('ROLLBACK');
+        if (conn) await conn.rollback();
         console.error('Toplu silme hatası:', error);
         res.status(500).json({ success: false, message: 'Personeller silinirken sunucu hatası oluştu.' });
+    } finally {
+        if (conn) conn.release();
     }
 });
 
 // PUT: Personel güncelle
-router.put('/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documents', maxCount: 10 }]), async (req, res) => {
+router.put('/:id', authMiddleware, uploadMiddleware, async (req, res) => {
     const { id } = req.params;
     const { full_name, department, position, phone, email, start_date, salary, tckn, address, blood_type, emergency_contact, work_status } = req.body;
-    
+
     if (!full_name || !safeStr(full_name)) {
         return res.status(400).json({ success: false, message: 'Ad Soyad zorunludur.' });
     }
@@ -338,6 +350,9 @@ router.put('/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'docum
     try {
         const [oldRows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
         const oldData = oldRows.length > 0 ? oldRows[0] : null;
+        if (!oldData) {
+            return res.status(404).json({ success: false, message: 'Personel bulunamadı.' });
+        }
 
         if (req.files && req.files.photo) {
             const photo_path = `/uploads/${req.files.photo[0].filename}`;
@@ -362,7 +377,7 @@ router.put('/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'docum
             }
         }
 
-        await logActivity(req.headers['x-user-id'] || '', 'UPDATE', 'employees', id, `"${full_name}" adlı personeli güncelledi.`, oldData);
+        await logActivity(req.user?.id, 'UPDATE', 'employees', id, `"${full_name}" adlı personeli güncelledi.`, oldData);
 
         res.json({ success: true, message: 'Personel güncellendi.' });
     } catch (error) {
@@ -372,10 +387,10 @@ router.put('/:id', upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'docum
 });
 
 // POST: Çıkış Talebi Başlat (Offboard Request)
-router.post('/:id/offboard-request', async (req, res) => {
+router.post('/:id/offboard-request', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { sgk_code, end_date, exit_reason, severance_pay } = req.body;
-    
+
     if (!end_date || !exit_reason || !sgk_code) {
         return res.status(400).json({ success: false, message: 'Çıkış tarihi, SGK Kodu ve nedeni zorunludur.' });
     }
@@ -394,11 +409,14 @@ router.post('/:id/offboard-request', async (req, res) => {
     };
 
     try {
-        await db.query(
+        const [result] = await db.query(
             'UPDATE employees SET offboarding_status=?, offboarding_details=? WHERE id=?',
             ['PENDING', JSON.stringify(initialDetails), id]
         );
-        await logActivity(req.headers['x-user-id'], 'UPDATE', 'employees', id, `Personel için ${sgk_code} koduyla Çıkış Talebi başlattı.`, null);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Personel bulunamadı.' });
+        }
+        await logActivity(req.user?.id, 'UPDATE', 'employees', id, `Personel için ${sgk_code} koduyla Çıkış Talebi başlattı.`, null);
         res.json({ success: true, message: 'Çıkış talebi başarıyla başlatıldı.' });
     } catch (error) {
         console.error('Çıkış talebi başlatılırken hata:', error);
@@ -407,7 +425,7 @@ router.post('/:id/offboard-request', async (req, res) => {
 });
 
 // PUT: Departman Onayı Ver (Offboard Approve)
-router.put('/:id/offboard-approve', async (req, res) => {
+router.put('/:id/offboard-approve', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { department, status } = req.body; // department: 'it', 'idari', 'finans', 'hukuk'
 
@@ -424,8 +442,8 @@ router.put('/:id/offboard-approve', async (req, res) => {
             'UPDATE employees SET offboarding_details=? WHERE id=?',
             [JSON.stringify(details), id]
         );
-        
-        await logActivity(req.headers['x-user-id'], 'UPDATE', 'employees', id, `Çıkış talebi için ${department.toUpperCase()} onayını ${status ? 'verdi' : 'kaldırdı'}.`, null);
+
+        await logActivity(req.user?.id, 'UPDATE', 'employees', id, `Çıkış talebi için ${department.toUpperCase()} onayını ${status ? 'verdi' : 'kaldırdı'}.`, null);
         res.json({ success: true, message: 'Onay durumu güncellendi.' });
     } catch (error) {
         console.error('Onay güncellenirken hata:', error);
@@ -434,13 +452,13 @@ router.put('/:id/offboard-approve', async (req, res) => {
 });
 
 // PUT: Personel çıkışını kesinleştir (Offboard Finalize)
-router.put('/:id/offboard', async (req, res) => {
+router.put('/:id/offboard', authMiddleware, async (req, res) => {
     const { id } = req.params;
 
     try {
         const [rows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
         const oldData = rows.length > 0 ? rows[0] : null;
-        
+
         if (!oldData || oldData.offboarding_status !== 'PENDING') {
             return res.status(404).json({ success: false, message: 'Onay bekleyen personel bulunamadı.' });
         }
@@ -456,7 +474,7 @@ router.put('/:id/offboard', async (req, res) => {
             ['İşten Ayrıldı', details.end_date, details.exit_reason, details.severance_pay, 'COMPLETED', id]
         );
 
-        await logActivity(req.headers['x-user-id'], 'UPDATE', 'employees', id, `"${oldData.full_name}" adlı personelin çıkış işlemini (SGK ${details.sgk_code}) kesinleştirdi.`, oldData);
+        await logActivity(req.user?.id, 'UPDATE', 'employees', id, `"${oldData.full_name}" adlı personelin çıkış işlemini (SGK ${details.sgk_code}) kesinleştirdi.`, oldData);
 
         res.json({ success: true, message: 'Personel çıkışı kesinleştirildi.' });
     } catch (error) {
@@ -467,7 +485,7 @@ router.put('/:id/offboard', async (req, res) => {
 
 
 // DELETE: Personel sil
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
         const [oldRows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
@@ -475,7 +493,7 @@ router.delete('/:id', async (req, res) => {
 
         await db.query('DELETE FROM employees WHERE id = ?', [id]);
 
-        await logActivity(req.headers['x-user-id'], 'DELETE', 'employees', id, `"${oldData ? oldData.full_name : 'Bilinmeyen'}" adlı personeli listeden çıkardı.`, oldData);
+        await logActivity(req.user?.id, 'DELETE', 'employees', id, `"${oldData ? oldData.full_name : 'Bilinmeyen'}" adlı personeli listeden çıkardı.`, oldData);
 
         res.json({ success: true, message: 'Personel silindi.' });
     } catch (error) {
@@ -487,10 +505,10 @@ router.delete('/:id', async (req, res) => {
 // Yardımcı fonksiyon: İSG kurallarına göre hakedilen toplam izni hesapla
 function calculateTotalLeaveEntitlement(startDateStr) {
     if (!startDateStr) return 0;
-    
+
     const startDate = new Date(startDateStr);
     const today = new Date();
-    
+
     if (isNaN(startDate.getTime())) return 0;
 
     let totalDays = 0;
@@ -502,7 +520,7 @@ function calculateTotalLeaveEntitlement(startDateStr) {
 
     while (checkDate <= today) {
         yearsOfService++;
-        
+
         if (yearsOfService >= 1 && yearsOfService <= 5) {
             totalDays += 14;
         } else if (yearsOfService >= 6 && yearsOfService <= 15) {
@@ -510,30 +528,30 @@ function calculateTotalLeaveEntitlement(startDateStr) {
         } else if (yearsOfService >= 16) {
             totalDays += 26;
         }
-        
+
         checkDate.setFullYear(checkDate.getFullYear() + 1);
     }
-    
+
     return totalDays;
 }
 
 // GET: İzin bakiyesini getir (hem leave-balance hem leave-summary uyumluluğu)
-router.get(['/:id/leave-balance', '/:id/leave-summary'], async (req, res) => {
+router.get(['/:id/leave-balance', '/:id/leave-summary'], authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
         const [empRows] = await db.query('SELECT start_date FROM employees WHERE id = ?', [id]);
         if (empRows.length === 0) return res.status(404).json({ success: false, message: 'Personel bulunamadı.' });
-        
+
         const startDate = empRows[0].start_date;
         const hakedilen = calculateTotalLeaveEntitlement(startDate);
-        
+
         const [leaveRows] = await db.query(
             "SELECT COALESCE(SUM(total_days), 0) AS kullanilan FROM employee_leaves WHERE employee_id = ? AND payment_status = 'Ücretli' AND (status = 'Onaylandı' OR status IS NULL OR status = '')",
             [id]
         );
         const kullanilan = leaveRows[0].kullanilan;
         const kalan = hakedilen - kullanilan;
-        
+
         res.json({ success: true, hakedilen, kullanilan, kalan });
     } catch (error) {
         console.error('İzin özeti alınırken hata:', error);
@@ -542,7 +560,7 @@ router.get(['/:id/leave-balance', '/:id/leave-summary'], async (req, res) => {
 });
 
 // GET: İzin geçmişini getir
-router.get('/:id/leaves', async (req, res) => {
+router.get('/:id/leaves', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
         const [rows] = await db.query('SELECT * FROM employee_leaves WHERE employee_id = ? ORDER BY start_date DESC, id DESC', [id]);
@@ -554,10 +572,10 @@ router.get('/:id/leaves', async (req, res) => {
 });
 
 // POST: Personel için yeni izin ekle
-router.post('/:id/leaves', async (req, res) => {
+router.post('/:id/leaves', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { leave_type, payment_status, start_date, end_date, total_days, description } = req.body;
-    
+
     if (!leave_type || !payment_status || !start_date || !end_date || !total_days) {
         return res.status(400).json({ success: false, message: 'Gerekli alanlar eksik.' });
     }
@@ -567,14 +585,14 @@ router.post('/:id/leaves', async (req, res) => {
             'INSERT INTO employee_leaves (employee_id, leave_type, payment_status, start_date, end_date, total_days, status, description) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [id, leave_type, payment_status, start_date, end_date, total_days, 'Onaylandı', description || null]
         );
-        
+
         // Eğer eklenen izin/rapor tarihi bugün ile kesişiyorsa (şu an izinliyse), personel tablosundaki çalışma durumunu otomatik güncelleyelim:
         const todayStr = new Date().toISOString().split('T')[0];
         if (start_date <= todayStr && end_date >= todayStr) {
             await db.query("UPDATE employees SET work_status = 'İzinli' WHERE id = ?", [id]);
         }
 
-        await logActivity(req.headers['x-user-id'] || '', 'INSERT', 'employee_leaves', id, `Personel için ${total_days} günlük ${leave_type} kaydedildi.`, null);
+        await logActivity(req.user?.id, 'INSERT', 'employee_leaves', id, `Personel için ${total_days} günlük ${leave_type} kaydedildi.`, null);
         res.json({ success: true, message: 'İzin başarıyla kaydedildi.' });
     } catch (error) {
         console.error('İzin eklenirken hata:', error);
@@ -586,14 +604,15 @@ router.post('/:id/leaves', async (req, res) => {
 // ==========================================
 
 // Bir veya birden fazla personel için mesai ekle
-router.post('/overtimes', async (req, res) => {
+router.post('/overtimes', authMiddleware, async (req, res) => {
+    let conn;
     try {
         const { employee_ids, overtime_date, hours, month, year } = req.body;
-        
+
         if (!employee_ids || !Array.isArray(employee_ids) || employee_ids.length === 0) {
             return res.status(400).json({ success: false, message: 'Personel seçilmedi.' });
         }
-        
+
         if (!overtime_date || !hours || !month || !year) {
             return res.status(400).json({ success: false, message: 'Gerekli alanlar eksik.' });
         }
@@ -603,30 +622,40 @@ router.post('/overtimes', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Geçersiz mesai saati.' });
         }
 
+        conn = await db.getConnection();
+        await conn.beginTransaction();
+
         // Saatlik ücretleri hesaplamak için personelleri getir
         const placeholders = employee_ids.map(() => '?').join(',');
-        const [employees] = await db.query(`SELECT id, salary FROM employees WHERE id IN (${placeholders})`, employee_ids);
+        const [employees] = await conn.query(`SELECT id, salary, full_name FROM employees WHERE id IN (${placeholders})`, employee_ids);
 
         for (const emp of employees) {
             const salary = parseFloat(emp.salary) || 0;
             const hourly_wage = salary > 0 ? (salary / 225) : 0;
             const total_amount = hourly_wage * 1.5 * h;
 
-            await db.query(
+            await conn.query(
                 `INSERT INTO employee_overtimes (employee_id, overtime_date, hours, hourly_wage, total_amount, month, year) VALUES (?, ?, ?, ?, ?, ?, ?)`,
                 [emp.id, overtime_date, h, hourly_wage, total_amount, month, year]
             );
+            
+            // req.user?.id veya opsiyonel fallback loglama
+            await logActivity(req.user?.id, 'INSERT', 'employee_overtimes', emp.id, `"${emp.full_name}" için ${h} saat mesai eklendi.`, null);
         }
 
+        await conn.commit();
         res.json({ success: true, message: 'Mesai başarıyla eklendi.' });
     } catch (error) {
+        if (conn) await conn.rollback();
         console.error('Mesai ekleme hatası:', error);
         res.status(500).json({ success: false, message: 'Mesai eklenirken sunucu hatası oluştu.' });
+    } finally {
+        if (conn) conn.release();
     }
 });
 
 // Belirli bir ay ve yıl için maaşları ve mesaileri getir
-router.get('/salaries', async (req, res) => {
+router.get('/salaries', authMiddleware, async (req, res) => {
     try {
         const month = parseInt(req.query.month);
         const year = parseInt(req.query.year);
@@ -652,7 +681,7 @@ router.get('/salaries', async (req, res) => {
         `;
 
         const [rows] = await db.query(query, [month, year]);
-        
+
         const data = rows.map(r => ({
             ...r,
             total_salary: parseFloat(r.base_salary || 0) + parseFloat(r.total_overtime_pay || 0)

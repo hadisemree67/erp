@@ -1,9 +1,18 @@
+/*
+ * ÖZET:
+ * Bu modül, depo personelinin el terminalleri (mobil cihazlar) üzerinden sipariş 
+ * toplama (picking), barkod okutma, sipariş atama ve kutu/kargo süreçlerini 
+ * yönettiği API uç noktalarını barındırır.
+ * (Prisma ORM ile yeniden yazılmıştır)
+ */
+
 const express = require('express');
 const router = express.Router();
-const db = require('../db');
+const prisma = require('../prisma');
+const { toFrontendStatus, toPrismaStatus } = require('../utils/enumMapper');
+const authMiddleware = require('../middleware/auth');
+const { logActivity } = require('../utils/logger');
 
-// Basit bir "AI" rota sıralama fonksiyonu
-// Koridor-A-Raf-3 gibi bir metni anlamlı bir şekilde sıralar.
 function sortLocation(a, b) {
     const locA = a.Location ? String(a.Location) : '';
     const locB = b.Location ? String(b.Location) : '';
@@ -13,94 +22,190 @@ function sortLocation(a, b) {
     return locA.localeCompare(locB, undefined, { numeric: true, sensitivity: 'base' });
 }
 
-// Kutu hesaplama mantığı (orders.js'den uyarlandı)
-async function calculateBoxes(totalWeight, totalVolume, maxWeightParam = null) {
-    // Burada basitçe, hacme ve ağırlığa göre bir kutu seçimi yapılabilir
-    // Şimdilik orders.js'deki mantığı taklit ediyoruz:
-    const [boxes] = await db.query('SELECT * FROM packaging_boxes WHERE IsActive = 1 ORDER BY Width * Height * Depth ASC');
-    if (boxes.length === 0) {
-        return { boxesUsed: [], totalFinalWeight: totalWeight, error: 'Aktif kutu bulunamadı.' };
-    }
-    let selectedBox = boxes[boxes.length - 1]; // En büyük kutuyu varsayılan yap (hiçbirine sığmazsa)
-    
-    // Hacim (volume) ve Ağırlık (weight) kontrolü (Küçükten büyüğe sırayla)
-    for (const box of boxes) {
-        const boxVolume = parseFloat(box.Width || 0) * parseFloat(box.Height || 0) * parseFloat(box.Depth || 0);
-        const maxCap = parseFloat(box.MaxWeightCapacity) || 99999;
-        
-        if (totalWeight <= maxCap && totalVolume <= boxVolume) {
-            selectedBox = box;
-            break; // Sığan ilk (en küçük) kutuyu bulduk!
+async function getOrderItemsWithRoute(orderId) {
+    const rawItems = await prisma.orderitems.findMany({
+        where: { OrderId: orderId },
+        include: { products: true }
+    });
+
+    let routeSteps = [];
+
+    for (const item of rawItems) {
+        let remainingQty = item.Quantity;
+        const product = item.products;
+        if (!product) continue;
+
+        const stocks = await prisma.wms_stock_balances.findMany({
+            where: { product_id: product.Id, quantity: { gt: 0 } },
+            orderBy: [{ expiration_date: 'asc' }, { id: 'asc' }]
+        });
+
+        for (const stock of stocks) {
+            if (remainingQty <= 0) break;
+            const takeQty = Math.min(remainingQty, Number(stock.quantity));
+            remainingQty -= takeQty;
+
+            routeSteps.push({
+                OrderItemId: item.Id,
+                Quantity: takeQty,
+                ProductId: product.Id,
+                ProductName: product.ProductName,
+                Barcode: product.Barcode,
+                Weight: product.Weight,
+                ImagePath: product.ImagePath,
+                DefaultLocation: product.Location,
+                Location: stock.shelf_code,
+                StockBalanceId: stock.id
+            });
+        }
+
+        if (remainingQty > 0) {
+            routeSteps.push({
+                OrderItemId: item.Id,
+                Quantity: remainingQty,
+                ProductId: product.Id,
+                ProductName: product.ProductName,
+                Barcode: product.Barcode,
+                Weight: product.Weight,
+                ImagePath: product.ImagePath,
+                DefaultLocation: product.Location,
+                Location: product.Location || 'Raf Belirsiz'
+            });
         }
     }
 
-    return {
-        boxesUsed: [{ boxId: selectedBox.Id, boxName: selectedBox.BoxName }],
-        totalFinalWeight: totalWeight + (parseFloat(selectedBox.EmptyWeight) || 0),
-        boxDetails: selectedBox
-    };
+    routeSteps.sort(sortLocation);
+    return routeSteps;
 }
 
 // GET: Onaylanmış siparişlerin listesini al
-router.get('/orders/pending', async (req, res) => {
+router.get('/orders/pending', authMiddleware, async (req, res) => {
     try {
-        const [orders] = await db.query(`
-            SELECT Id, OrderNumber FROM orders 
-            WHERE OrderStatus = 'Onaylandı' AND PickerId IS NULL 
-            ORDER BY Id ASC
-        `);
-        res.json({ success: true, data: orders });
+        const userId = req.user?.id;
+        
+        const orders = await prisma.orders.findMany({
+            where: {
+                OR: [
+                    { OrderStatus: 'Onayland_', PickerId: null },
+                    { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
+                ]
+            },
+            include: { shippers: true },
+        });
+        
+        // IsMyOngoing sorting logic
+        const formattedOrders = orders.map(o => ({
+            Id: o.Id,
+            OrderNumber: o.OrderNumber,
+            CargoCompanyName: o.shippers?.CompanyName || null,
+            IsMyOngoing: toFrontendStatus(o.OrderStatus) === 'Hazırlanıyor' ? 1 : 0
+        })).sort((a, b) => b.IsMyOngoing - a.IsMyOngoing || a.Id - b.Id);
+        
+        res.json({ success: true, data: formattedOrders });
     } catch (error) {
         console.error('Bekleyen siparişleri alma hatası:', error);
+        try { require('fs').appendFileSync('error.log', new Date().toISOString() + ' [MOBILE API HATASI] ' + (error.stack || error) + '\n'); } catch(e) {}
         res.status(500).json({ success: false, message: 'Siparişler getirilemedi.' });
     }
 });
 
 // POST: Belirli bir siparişi al (atama)
-router.post('/orders/assign/:id', async (req, res) => {
-    const { id } = req.params;
-    const { userId } = req.body;
+router.post('/orders/assign/:id', authMiddleware, async (req, res) => {
+    const id = Number(req.params.id);
+    const userId = req.user?.id;
     
-    if (!userId) return res.status(400).json({ success: false, message: 'Kullanıcı ID gerekli.' });
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
 
     try {
-        // Atomic update ile race condition (aynı anda sipariş alınması) önlenir
-        const [updateResult] = await db.query(`
-            UPDATE orders SET OrderStatus = 'Hazırlanıyor', PickerId = ? 
-            WHERE Id = ? AND OrderStatus = 'Onaylandı' AND PickerId IS NULL
-        `, [userId, id]);
+        const orderToUpdate = await prisma.orders.findFirst({
+            where: {
+                Id: id,
+                OR: [
+                    { OrderStatus: 'Onayland_', PickerId: null },
+                    { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
+                ]
+            }
+        });
 
-        if (updateResult.affectedRows === 0) {
+        if (!orderToUpdate) {
             return res.json({ success: false, message: 'Bu sipariş zaten alınmış veya bulunamıyor.' });
         }
 
-        // Sipariş başarıyla bu personele kilitlendi, şimdi bilgilerini çekelim
-        const [orders] = await db.query(`
-            SELECT * FROM orders WHERE Id = ?
-        `, [id]);
+        const { cart_barcode, section_barcodes } = req.body;
+        let cartId = null;
+        let cartSectionIds = null;
 
-        const order = orders[0];
+        if (section_barcodes && Array.isArray(section_barcodes) && section_barcodes.length > 0) {
+            // Find sections first
+            const sections = await prisma.picking_cart_sections.findMany({
+                where: {
+                    barcode: { in: section_barcodes }
+                },
+                include: { cart: true } // Need to get cart info
+            });
 
-        // Sipariş kalemlerini ve ürün detaylarını getir
-        const [items] = await db.query(`
-            SELECT oi.*, p.ProductName, p.Barcode, p.Weight, p.ImagePath,
-                   COALESCE(
-                       (SELECT GROUP_CONCAT(DISTINCT shelf_code SEPARATOR ', ') 
-                        FROM wms_stock_balances 
-                        WHERE product_id = p.Id AND quantity > 0),
-                       p.Location
-                   ) AS Location
-            FROM orderitems oi
-            JOIN products p ON oi.ProductId = p.Id
-            WHERE oi.OrderId = ?
-        `, [order.Id]);
+            if (sections.length !== section_barcodes.length) {
+                return res.status(400).json({ success: false, message: 'Bazı bölüm barkodları bulunamadı veya geçersiz.' });
+            }
 
-        // Rota Optimizasyonu
-        items.sort(sortLocation);
+            // Verify all sections belong to the same active cart
+            const firstCartId = sections[0].cart_id;
+            const allSameCart = sections.every(s => s.cart_id === firstCartId);
+            
+            if (!allSameCart) {
+                return res.status(400).json({ success: false, message: 'Seçilen bölümler aynı taşıma arabasına ait olmalıdır.' });
+            }
+
+            const cart = sections[0].cart;
+            if (!cart.is_active) {
+                return res.status(400).json({ success: false, message: 'Bu taşıma arabası aktif değil.' });
+            }
+
+            // Verify cart_barcode matches if it was provided (for backward compatibility)
+            if (cart_barcode && cart.barcode !== cart_barcode) {
+                 return res.status(400).json({ success: false, message: 'Bölümler belirtilen taşıma arabasına ait değil.' });
+            }
+
+            cartId = cart.id;
+            cartSectionIds = sections.map(s => s.id);
+
+            // Update cart status to PICKING if it's IDLE
+            if (cart.status === 'IDLE') {
+                await prisma.picking_carts.update({
+                    where: { id: cart.id },
+                    data: { status: 'PICKING' }
+                });
+            }
+        }
+
+        await prisma.orders.update({
+            where: { Id: id },
+            data: { 
+                OrderStatus: 'Haz_rlan_yor', 
+                PickerId: userId,
+                ...(cartId ? { CartId: cartId } : {}),
+                ...(cartSectionIds ? { CartSectionIds: cartSectionIds } : {})
+            }
+        });
+
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi toplamaya başladı.`, null);
+
+        const order = await prisma.orders.findUnique({
+            where: { Id: id },
+            include: { customers: true }
+        });
+
+        const formattedOrder = {
+            ...order,
+            CustomerName: order.customers?.CustomerName
+        };
+
+        const items = await getOrderItemsWithRoute(order.Id);
 
         res.json({
             success: true,
-            order: order,
+            message: 'Sipariş başarıyla atandı.',
+            order: formattedOrder,
             items: items
         });
 
@@ -110,60 +215,111 @@ router.post('/orders/assign/:id', async (req, res) => {
     }
 });
 
-// GET: Sonraki rastgele siparişi al
-router.get('/orders/next', async (req, res) => {
-    const { userId } = req.query; // Mobile app'den giriş yapan personelin ID'si gelmeli
-    
-    if (!userId) return res.status(400).json({ success: false, message: 'Kullanıcı ID gerekli.' });
+// POST: Siparişe yeni bölüm (raf) ekle
+router.post('/orders/:id/add-section', authMiddleware, async (req, res) => {
+    const id = Number(req.params.id);
+    const userId = req.user?.id;
+    const { section_barcode } = req.body;
+
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
+    if (!section_barcode) return res.status(400).json({ success: false, message: 'Bölüm barkodu gerekli.' });
 
     try {
-        // Önce kullanıcının üzerinde halihazırda 'Hazırlanıyor' olan bir sipariş var mı kontrol edelim
-        const [existingOrders] = await db.query(`
-            SELECT * FROM orders WHERE OrderStatus = 'Hazırlanıyor' AND PickerId = ? LIMIT 1
-        `, [userId]);
+        const order = await prisma.orders.findUnique({
+            where: { Id: id }
+        });
 
-        let order = existingOrders.length > 0 ? existingOrders[0] : null;
-
-        if (!order) {
-            // Yoksa en eski 'Onaylandı' siparişini atomic update ile kendine kilitle (Race condition engellemek için)
-            const [updateResult] = await db.query(`
-                UPDATE orders SET OrderStatus = 'Hazırlanıyor', PickerId = ? 
-                WHERE OrderStatus = 'Onaylandı' AND PickerId IS NULL 
-                ORDER BY Id ASC LIMIT 1
-            `, [userId]);
-            
-            if (updateResult.affectedRows === 0) {
-                return res.json({ success: false, message: 'Toplanacak sipariş bulunmuyor.' });
-            }
-
-            // Kilitlenen siparişi çek
-            const [newOrders] = await db.query(`
-                SELECT * FROM orders WHERE OrderStatus = 'Hazırlanıyor' AND PickerId = ? ORDER BY Id DESC LIMIT 1
-            `, [userId]);
-            
-            order = newOrders[0];
+        if (!order || order.PickerId !== userId || order.OrderStatus !== 'Haz_rlan_yor') {
+            return res.json({ success: false, message: 'Sipariş size atanmamış veya durumu uygun değil.' });
+        }
+        if (!order.CartId) {
+            return res.json({ success: false, message: 'Bu sipariş henüz bir taşıma arabasına atanmamış.' });
         }
 
-        // Sipariş kalemlerini ve ürün detaylarını (gerçek depo raf konumlarıyla) getir
-        const [items] = await db.query(`
-            SELECT oi.*, p.ProductName, p.Barcode, p.Weight, p.ImagePath,
-                   COALESCE(
-                       (SELECT GROUP_CONCAT(DISTINCT shelf_code SEPARATOR ', ') 
-                        FROM wms_stock_balances 
-                        WHERE product_id = p.Id AND quantity > 0),
-                       p.Location
-                   ) AS Location
-            FROM orderitems oi
-            JOIN products p ON oi.ProductId = p.Id
-            WHERE oi.OrderId = ?
-        `, [order.Id]);
+        // Find the section by barcode and cart_id
+        const section = await prisma.picking_cart_sections.findFirst({
+            where: {
+                cart_id: order.CartId,
+                barcode: section_barcode
+            }
+        });
 
-        // "AI" Rota Optimizasyonu: Konuma göre sıralama
-        items.sort(sortLocation);
+        if (!section) {
+            return res.json({ success: false, message: 'Bu bölüm, bulunduğunuz arabaya ait değil veya bulunamadı.' });
+        }
+
+        // Append to CartSectionIds
+        let currentSections = Array.isArray(order.CartSectionIds) ? order.CartSectionIds : [];
+        if (!currentSections.includes(section.id)) {
+            currentSections.push(section.id);
+            await prisma.orders.update({
+                where: { Id: id },
+                data: { CartSectionIds: currentSections }
+            });
+        }
 
         res.json({
             success: true,
-            order: order,
+            message: 'Bölüm siparişe başarıyla eklendi.',
+            section: section,
+            cartSectionIds: currentSections
+        });
+
+    } catch (error) {
+        console.error('Bölüm ekleme hatası:', error);
+        res.status(500).json({ success: false, message: 'Bölüm eklenemedi.' });
+    }
+});
+
+// GET: Sonraki rastgele siparişi al
+router.get('/orders/next', authMiddleware, async (req, res) => {
+    const userId = req.user?.id;
+    
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
+
+    try {
+        let order = await prisma.orders.findFirst({
+            where: { OrderStatus: 'Haz_rlan_yor', PickerId: userId },
+            include: { customers: true }
+        });
+
+        if (!order) {
+            const availableOrder = await prisma.orders.findFirst({
+                where: { OrderStatus: 'Onayland_', PickerId: null },
+                orderBy: { Id: 'asc' }
+            });
+
+            if (!availableOrder) {
+                return res.json({ success: false, message: 'Toplanacak sipariş bulunmuyor.' });
+            }
+
+            const updated = await prisma.orders.updateMany({
+                where: { Id: availableOrder.Id, OrderStatus: 'Onayland_', PickerId: null },
+                data: { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
+            });
+
+            if (updated.count === 0) {
+                 return res.json({ success: false, message: 'Sipariş başkası tarafından alınmış olabilir. Lütfen tekrar deneyin.' });
+            }
+
+            order = await prisma.orders.findUnique({
+                where: { Id: availableOrder.Id },
+                include: { customers: true }
+            });
+
+            await logActivity(userId, 'UPDATE', 'orders', order.Id, `Mobil uygulama "Sıradakini Al" butonu ile #${order.Id} numaralı siparişi toplamaya başladı.`, null);
+        }
+
+        const formattedOrder = {
+            ...order,
+            CustomerName: order.customers?.CustomerName
+        };
+
+        const items = await getOrderItemsWithRoute(order.Id);
+
+        res.json({
+            success: true,
+            order: formattedOrder,
             items: items
         });
 
@@ -174,17 +330,23 @@ router.get('/orders/next', async (req, res) => {
 });
 
 // POST: Toplama işlemini iptal et (Geri Dön)
-router.post('/orders/cancel/:id', async (req, res) => {
-    const { id } = req.params;
-    const { userId } = req.body;
+router.post('/orders/cancel/:id', authMiddleware, async (req, res) => {
+    const id = Number(req.params.id);
+    const userId = req.user?.id;
 
-    if (!userId) return res.status(400).json({ success: false, message: 'Kullanıcı ID gerekli.' });
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
 
     try {
-        await db.query(`
-            UPDATE orders SET OrderStatus = 'Onaylandı', PickerId = NULL 
-            WHERE Id = ? AND PickerId = ? AND OrderStatus = 'Hazırlanıyor'
-        `, [id, userId]);
+        const updated = await prisma.orders.updateMany({
+            where: { Id: id, PickerId: userId, OrderStatus: 'Haz_rlan_yor' },
+            data: { OrderStatus: 'Onayland_', PickerId: null }
+        });
+
+        if (updated.count === 0) {
+            return res.status(400).json({ success: false, message: 'İptal edilemedi. Bu sipariş size atanmamış veya zaten iptal edilmiş olabilir.' });
+        }
+
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişin toplama işlemini iptal etti.`, null);
 
         res.json({ success: true, message: 'Sipariş başarıyla iptal edildi ve geri alındı.' });
     } catch (error) {
@@ -194,44 +356,37 @@ router.post('/orders/cancel/:id', async (req, res) => {
 });
 
 // POST: Siparişi tamamla
-router.post('/orders/complete/:id', async (req, res) => {
-    const { id } = req.params;
-    const { userId, totalCalculatedWeight } = req.body; // Cihazdan toplam ağırlık hesaplanıp gönderilebilir veya backend'de hesaplanabilir
+router.post('/orders/complete/:id', authMiddleware, async (req, res) => {
+    const id = Number(req.params.id);
+    const userId = req.user?.id;
+
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
 
     try {
-        // Siparişin kalemlerini alıp toplam ağırlığını bulalım
-        const [items] = await db.query(`
-            SELECT oi.Quantity, p.Weight, p.Volume 
-            FROM orderitems oi
-            JOIN products p ON oi.ProductId = p.Id
-            WHERE oi.OrderId = ?
-        `, [id]);
-
-        let totalWeight = 0;
-        let totalVolume = 0;
-        items.forEach(item => {
-            totalWeight += (parseFloat(item.Weight) || 0.5) * item.Quantity;
-            totalVolume += (parseFloat(item.Volume) || 1.0) * item.Quantity;
+        const updated = await prisma.orders.updateMany({
+            where: { Id: id, PickerId: userId, OrderStatus: 'Haz_rlan_yor' },
+            data: { OrderStatus: 'Haz_r', PickedDate: new Date() }
         });
 
-        // Kutu hesaplama
-        const boxResult = await calculateBoxes(totalWeight, totalVolume);
-        const finalWeight = boxResult.totalFinalWeight;
-        const cargoBarcode = 'CRG-' + id + '-' + Math.floor(Math.random() * 10000); // Basit barkod üretimi
+        if (updated.count === 0) {
+            // Check if it's already completed by this user
+            const existing = await prisma.orders.findFirst({
+                where: { Id: id, PickerId: userId, OrderStatus: 'Haz_r' }
+            });
+            if (existing) {
+                return res.json({
+                    success: true,
+                    message: 'Sipariş zaten başarıyla toplanmış.'
+                });
+            }
+            return res.status(400).json({ success: false, message: 'Sipariş tamamlanamadı. Size atanmamış olabilir veya durumu uygun değil.' });
+        }
 
-        // Siparişi Paketlendi durumuna getir
-        await db.query(`
-            UPDATE orders 
-            SET OrderStatus = 'Paketlendi', PickedDate = NOW(), CargoBarcode = ?, TotalWeight = ?, packaging_info = ?
-            WHERE Id = ? AND PickerId = ?
-        `, [cargoBarcode, finalWeight, JSON.stringify(boxResult), id, userId]);
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi topladı.`, null);
 
         res.json({
             success: true,
-            message: 'Sipariş başarıyla tamamlandı.',
-            cargoBarcode: cargoBarcode,
-            finalWeight: finalWeight,
-            boxInfo: boxResult
+            message: 'Sipariş başarıyla toplandı.'
         });
 
     } catch (error) {
@@ -240,10 +395,87 @@ router.post('/orders/complete/:id', async (req, res) => {
     }
 });
 
-// GET: Günlük istatistikler (Liderlik Tablosu)
-router.get('/stats/daily', async (req, res) => {
+// POST: Siparişi paketle (Kargo etiketini oluştur ve doğrula)
+router.post('/orders/package/complete/:id', authMiddleware, async (req, res) => {
+    const id = Number(req.params.id);
+    const { scannedBarcode } = req.body; // Yeni üretilen kargo barkodu
+    const userId = req.user?.id;
+
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
+    if (!scannedBarcode) return res.status(400).json({ success: false, message: 'Barkod bilgisi eksik.' });
+
     try {
-        const [stats] = await db.query(`
+        const updated = await prisma.orders.updateMany({
+            where: { Id: id, PackerId: userId, OrderStatus: 'Paketleniyor' },
+            data: { 
+                OrderStatus: 'Paketlendi', 
+                CargoBarcode: scannedBarcode,
+                PackedDate: new Date() 
+            }
+        });
+
+        if (updated.count === 0) {
+            return res.status(400).json({ success: false, message: 'Paketleme tamamlanamadı. Sipariş size atanmamış veya yanlış durumda olabilir.' });
+        }
+
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketledi ve ${scannedBarcode} barkodunu oluşturdu.`, null);
+
+        res.json({ success: true, message: 'Sipariş başarıyla paketlendi.' });
+
+    } catch (error) {
+        console.error('Paketleme tamamlama hatası:', error);
+        res.status(500).json({ success: false, message: 'Paketleme tamamlanamadı.' });
+    }
+});
+
+// POST: Kargoya Ver (Kargo Barkodu ile)
+router.post('/orders/ship', authMiddleware, async (req, res) => {
+    const { cargoBarcode } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
+    if (!cargoBarcode) return res.status(400).json({ success: false, message: 'Barkod okutulmadı.' });
+
+    try {
+        const order = await prisma.orders.findFirst({
+            where: { CargoBarcode: cargoBarcode }
+        });
+
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Bu barkoda ait sipariş bulunamadı.' });
+        }
+
+        if (order.OrderStatus === 'Kargoya_Verildi') {
+            return res.status(400).json({ success: false, message: 'Bu sipariş zaten kargoya verilmiş.' });
+        }
+
+        if (order.OrderStatus !== 'Paketlendi') {
+            return res.status(400).json({ success: false, message: 'Bu sipariş henüz paketlenmemiş. Şu anki durumu: ' + order.OrderStatus });
+        }
+
+        await prisma.orders.update({
+            where: { Id: order.Id },
+            data: { 
+                OrderStatus: 'Kargoya_Verildi', 
+                ShipUserId: userId,
+                ShippedDate: new Date()
+            }
+        });
+
+        await logActivity(userId, 'UPDATE', 'orders', order.Id, `Mobil uygulama üzerinden kargo barkodu (${cargoBarcode}) okutularak kargoya verildi.`, null);
+
+        res.json({ success: true, message: 'Sipariş başarıyla kargoya verildi.', orderId: order.Id, orderNumber: order.OrderNumber });
+
+    } catch (error) {
+        console.error('Kargoya verme hatası:', error);
+        res.status(500).json({ success: false, message: 'Kargoya verme işlemi başarısız oldu.' });
+    }
+});
+
+// GET: Günlük istatistikler (Liderlik Tablosu)
+router.get('/stats/daily', authMiddleware, async (req, res) => {
+    try {
+        const stats = await prisma.$queryRaw`
             SELECT 
                 u.id as UserId, 
                 u.name as UserName,
@@ -252,15 +484,232 @@ router.get('/stats/daily', async (req, res) => {
             FROM users u
             JOIN orders o ON u.id = o.PickerId
             JOIN orderitems oi ON o.Id = oi.OrderId
-            WHERE DATE(o.PickedDate) = CURDATE() AND o.OrderStatus IN ('Onaylandı', 'Kargoya Verildi', 'Teslim Edildi')
+            WHERE DATE(o.PickedDate) = CURDATE() AND o.OrderStatus IN ('Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
             GROUP BY u.id, u.name
             ORDER BY TotalProductsPicked DESC
-        `);
+        `;
+        
+        const serializedStats = stats.map(s => ({
+            ...s,
+            TotalOrdersPicked: Number(s.TotalOrdersPicked),
+            TotalProductsPicked: Number(s.TotalProductsPicked)
+        }));
 
-        res.json({ success: true, stats: stats });
+        res.json({ success: true, stats: serializedStats });
     } catch (error) {
         console.error('İstatistik getirme hatası:', error);
+        try { require('fs').appendFileSync('error.log', new Date().toISOString() + ' [MOBILE API HATASI] ' + (error.stack || error) + '\n'); } catch(e) {}
         res.status(500).json({ success: false, message: 'İstatistikler getirilemedi.' });
+    }
+});
+
+// GET: Paketlenecek siparişleri (Hazır) listele
+router.get('/orders/ready-for-packaging', authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const orders = await prisma.orders.findMany({
+            where: {
+                OR: [
+                    { OrderStatus: 'Haz_r' },
+                    { OrderStatus: 'Paketleniyor', PackerId: userId }
+                ]
+            },
+            include: { customers: true },
+            orderBy: { PickedDate: 'asc' }
+        });
+        
+        const formattedOrders = orders.map(o => ({
+            ...o,
+            CustomerName: o.customers?.CustomerName
+        }));
+
+        res.json({ success: true, orders: formattedOrders });
+    } catch (error) {
+        console.error('Paketlenecek siparişleri getirme hatası:', error);
+        res.status(500).json({ success: false, message: 'Siparişler getirilemedi.' });
+    }
+});
+
+// POST: Paketleme görevini al (Assign)
+router.post('/orders/package/assign/:id', authMiddleware, async (req, res) => {
+    const id = Number(req.params.id);
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
+
+    try {
+        const updated = await prisma.orders.updateMany({
+            where: {
+                Id: id,
+                OR: [
+                    { OrderStatus: 'Haz_r', PackerId: null },
+                    { OrderStatus: 'Paketleniyor', PackerId: userId }
+                ]
+            },
+            data: { OrderStatus: 'Paketleniyor', PackerId: userId }
+        });
+
+        if (updated.count === 0) {
+            return res.json({ success: false, message: 'Bu sipariş zaten başkası tarafından paketleniyor veya bulunamadı.' });
+        }
+
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketlemeye başladı.`, null);
+
+        const order = await prisma.orders.findUnique({
+            where: { Id: id },
+            include: { customers: true }
+        });
+        
+        const items = await getOrderItemsWithRoute(id);
+        
+        res.json({ success: true, message: 'Paketleme görevi alındı.', order: { ...order, CustomerName: order.customers?.CustomerName }, items: items });
+    } catch (error) {
+        console.error('Paketleme atama hatası:', error);
+        res.status(500).json({ success: false, message: 'Atama işlemi başarısız.' });
+    }
+});
+
+// POST: Paketlemeyi iptal et (Geri bırak)
+router.post('/orders/package/cancel/:id', authMiddleware, async (req, res) => {
+    const id = Number(req.params.id);
+    const userId = req.user?.id;
+    try {
+        const updated = await prisma.orders.updateMany({
+            where: { Id: id, PackerId: userId, OrderStatus: 'Paketleniyor' },
+            data: { OrderStatus: 'Haz_r', PackerId: null }
+        });
+        
+        if (updated.count > 0) {
+            await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketlemeyi iptal etti.`, null);
+        }
+        res.json({ success: true, message: 'Paketleme iptal edildi.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'İptal işlemi başarısız.' });
+    }
+});
+
+// POST: Arabayı paketlemeye gönder
+router.post('/picking_carts/finish-picking', authMiddleware, async (req, res) => {
+    const { cart_barcode } = req.body;
+    if (!cart_barcode) return res.status(400).json({ success: false, message: 'Araba barkodu gerekli.' });
+
+    try {
+        const cart = await prisma.picking_carts.findFirst({
+            where: { barcode: cart_barcode, is_active: true }
+        });
+
+        if (!cart) {
+            return res.status(404).json({ success: false, message: 'Araba bulunamadı.' });
+        }
+
+        await prisma.picking_carts.update({
+            where: { id: cart.id },
+            data: { status: 'READY_FOR_PACKAGING' }
+        });
+
+        res.json({ success: true, message: 'Taşıma arabası paketlemeye gönderildi.' });
+    } catch (error) {
+        console.error('Araba bitirme hatası:', error);
+        res.status(500).json({ success: false, message: 'İşlem başarısız.' });
+    }
+});
+
+// GET: Paketleme için arabayı okut ve bölümleri/siparişleri getir
+router.get('/picking_carts/scan-for-packaging', authMiddleware, async (req, res) => {
+    const { cart_barcode } = req.query;
+    if (!cart_barcode) return res.status(400).json({ success: false, message: 'Araba barkodu gerekli.' });
+
+    try {
+        // Try finding by cart barcode first
+        let cart = await prisma.picking_carts.findFirst({
+            where: { barcode: cart_barcode, is_active: true },
+            include: {
+                sections: true,
+                orders: {
+                    where: { OrderStatus: 'Haz_r' }, // Picked and ready to pack
+                    include: { customers: true }
+                }
+            }
+        });
+
+        // If not found, try finding by section barcode
+        if (!cart) {
+            const section = await prisma.picking_cart_sections.findFirst({
+                where: { barcode: cart_barcode }
+            });
+            if (section) {
+                cart = await prisma.picking_carts.findFirst({
+                    where: { id: section.cart_id, is_active: true },
+                    include: {
+                        sections: true,
+                        orders: {
+                            where: { OrderStatus: 'Haz_r' }, // Picked and ready to pack
+                            include: { customers: true }
+                        }
+                    }
+                });
+            }
+        }
+
+        if (!cart) {
+            return res.status(404).json({ success: false, message: 'Geçerli bir araba veya bölüm barkodu bulunamadı.' });
+        }
+
+        // Group orders by their exact CartSectionIds combination
+        const orderGroups = {};
+        
+        cart.orders.forEach(order => {
+            if (!order.CartSectionIds || order.CartSectionIds.length === 0) return;
+            
+            // Sort to ensure same combination yields same key
+            const sortedIds = [...order.CartSectionIds].sort();
+            const groupKey = sortedIds.join('_');
+            
+            if (!orderGroups[groupKey]) {
+                orderGroups[groupKey] = {
+                    sectionIds: sortedIds,
+                    orders: []
+                };
+            }
+            orderGroups[groupKey].orders.push(order);
+        });
+
+        const mergedSections = [];
+        const usedSectionIds = new Set();
+
+        // Create virtual sections for each order group
+        Object.values(orderGroups).forEach(group => {
+            const groupSections = cart.sections.filter(s => group.sectionIds.includes(s.id));
+            
+            if (groupSections.length > 0) {
+                mergedSections.push({
+                    id: group.sectionIds.join('_'),
+                    section_name: groupSections.map(s => s.section_name).join(' + '),
+                    barcode: groupSections.map(s => s.barcode).join(' + '),
+                    orders: group.orders
+                });
+                
+                group.sectionIds.forEach(id => usedSectionIds.add(id));
+            }
+        });
+
+        // Add the remaining empty sections
+        cart.sections.forEach(section => {
+            if (!usedSectionIds.has(section.id)) {
+                mergedSections.push({
+                    ...section,
+                    orders: []
+                });
+            }
+        });
+
+        res.json({ 
+            success: true, 
+            cart: { id: cart.id, name: cart.name, barcode: cart.barcode },
+            sections: mergedSections
+        });
+    } catch (error) {
+        console.error('Araba okutma hatası:', error);
+        res.status(500).json({ success: false, message: 'Araba bilgileri alınamadı.' });
     }
 });
 

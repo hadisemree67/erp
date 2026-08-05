@@ -13,6 +13,7 @@
     "desktop": "concurrently \"vite\" \"wait-on http://localhost:3002 && cross-env NODE_ENV=development electron .\""
   },
   "dependencies": {
+    "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-barcode": "^1.6.1",
     "react-dom": "^19.2.7",

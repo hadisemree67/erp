@@ -209,6 +209,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
                 <a href="#mal-kabul" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('mal-kabul'); }}>Mal Kabul (Depo Onayı)</a>
                 <a href="#depo-kabulleri" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-kabulleri'); }}>Depo Kabulleri</a>
                 <a href="#depo-listesi" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-listesi'); }}>Depolar & Raflar</a>
+                <a href="#tasima-arabalari" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('tasima-arabalari'); }}>Taşıma Arabaları</a>
                 <a href="#depo-transfer" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-transfer'); }}>Depo Transferleri</a>
                 <a href="#depo-krokisi" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-krokisi'); }}>Depo Krokisi</a>
                 <a href="#whatsapp-onaylari" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('whatsapp-onaylari'); }}>WhatsApp Onayları</a>

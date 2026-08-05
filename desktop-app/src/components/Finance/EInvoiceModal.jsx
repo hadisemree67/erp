@@ -9,11 +9,14 @@ const EInvoiceModal = ({ isOpen, onClose, invoiceData }) => {
     if (!isOpen || !invoiceData) return null;
 
     // Sayısal hesaplamalar - Eski veriler veya alan gelmediğinde subtitle içerisinden çıkar
-    let parsedQty = Number(invoiceData.received_quantity || invoiceData.quantity);
+    const rawReceived = Number(invoiceData.received_quantity);
+    const rawOrdered = Number(invoiceData.quantity);
+    let parsedQty = rawReceived > 0 ? rawReceived : rawOrdered;
+    
     let parsedUnitPrice = Number(invoiceData.unit_price);
     let parsedUnitType = invoiceData.unit_type;
 
-    if ((!parsedQty || !parsedUnitPrice) && typeof invoiceData.subtitle === 'string') {
+    if (!parsedQty && typeof invoiceData.subtitle === 'string') {
         const match = invoiceData.subtitle.match(/\(([\d,.]+)\s*([a-zA-ZğüşıöçĞÜŞİÖÇ]+)\s*[×xX]\s*([\d,.]+)\s*₺/);
         if (match) {
             if (!parsedQty || isNaN(parsedQty)) {
@@ -29,16 +32,21 @@ const EInvoiceModal = ({ isOpen, onClose, invoiceData }) => {
     }
 
     const qty = parsedQty || 1;
+    
+    const supplierPrice = Number(invoiceData.supplier_unit_price);
+    const productPrice = Number(invoiceData.product_price);
+    
+    // Birim Fiyat (Öncelik: Siparişteki unit_price, sonra Tedarikçi Anlaşma Fiyatı, sonra Ürün PurchasePrice)
     const unitPrice = (parsedUnitPrice && parsedUnitPrice > 0) 
         ? parsedUnitPrice 
-        : ((invoiceData.amount && Number(invoiceData.amount) > 0 && qty > 0) 
-            ? (Number(invoiceData.amount) / qty) 
-            : (Number(invoiceData.default_price) || 0));
-    const totalWithoutKDV = (invoiceData.total_price && Number(invoiceData.total_price) > 0) 
+        : (supplierPrice > 0 ? supplierPrice : (productPrice > 0 ? productPrice : 0));
+        
+    const totalWithoutKDV = (invoiceData.total_price && Number(invoiceData.total_price) > 0 && Number(invoiceData.unit_price) > 0) 
         ? Number(invoiceData.total_price) 
-        : (invoiceData.amount && Number(invoiceData.amount) > 0 ? Number(invoiceData.amount) : (qty * unitPrice));
+        : (qty * unitPrice);
+        
     const kdvRate = 20; // Standart %20 KDV
-    const kdvAmount = totalWithoutKDV * 0.20;
+    const kdvAmount = totalWithoutKDV * (kdvRate / 100);
     const grandTotal = totalWithoutKDV + kdvAmount;
 
     // TL Formatter

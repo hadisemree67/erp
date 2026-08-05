@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: suppliers.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Tedarikçi Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Malzeme ve hizmet satın alınan dış tedarikçi firmaların iletişim bilgileri, bakiye/alacak durumları ve firma profillerinin yönetildiği API uç noktalarıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, SQL Sorgulama ve CRUD İşlemleri
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki SupplierList bileşeni tarafından ve satınalma modülleri tarafından tedarikçi seçimi için kullanılır.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, malzeme ve hizmet satın alınan dış tedarikçi firmaların iletişim bilgileri, 
@@ -23,9 +7,11 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const authMiddleware = require('../middleware/auth');
+const { logActivity } = require('../utils/logger');
 
 // Tüm tedarikçileri getir
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM suppliers ORDER BY SupplierName ASC');
         res.json({ success: true, data: rows });
@@ -36,7 +22,7 @@ router.get('/', async (req, res) => {
 });
 
 // Yeni tedarikçi ekle
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
     const { SupplierName, ContactPerson, Phone, Email, Address, supplier_type } = req.body;
 
     if (!SupplierName) {
@@ -48,6 +34,7 @@ router.post('/', async (req, res) => {
             'INSERT INTO suppliers (SupplierName, ContactPerson, Phone, Email, Address, supplier_type) VALUES (?, ?, ?, ?, ?, ?)',
             [SupplierName, ContactPerson || null, Phone || null, Email || null, Address || null, supplier_type || 'Tedarikçi']
         );
+        await logActivity(req.user?.id, 'INSERT', 'suppliers', result.insertId, `Yeni tedarikçi eklendi: ${SupplierName}`);
         res.status(201).json({ success: true, message: 'Tedarikçi başarıyla eklendi.', data: { id: result.insertId } });
     } catch (error) {
         console.error('Tedarikçi eklenirken hata:', error);
@@ -56,7 +43,7 @@ router.post('/', async (req, res) => {
 });
 
 // Tedarikçi güncelle
-router.put('/:id', async (req, res) => {
+router.put('/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { SupplierName, ContactPerson, Phone, Email, Address, supplier_type } = req.body;
 
@@ -73,6 +60,7 @@ router.put('/:id', async (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Tedarikçi bulunamadı.' });
         }
+        await logActivity(req.user?.id, 'UPDATE', 'suppliers', id, `Tedarikçi güncellendi: ${SupplierName}`);
 
         res.json({ success: true, message: 'Tedarikçi başarıyla güncellendi.' });
     } catch (error) {
@@ -82,7 +70,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // Tedarikçi sil
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -91,7 +79,7 @@ router.delete('/:id', async (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(404).json({ success: false, message: 'Tedarikçi bulunamadı.' });
         }
-
+        await logActivity(req.user?.id, 'DELETE', 'suppliers', id, `Tedarikçi silindi.`);
         res.json({ success: true, message: 'Tedarikçi başarıyla silindi.' });
     } catch (error) {
         console.error('Tedarikçi silinirken hata:', error);

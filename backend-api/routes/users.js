@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: users.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Sistem Kullanıcıları ve Yetkilendirme
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   ERP sistemine giriş yapabilen kullanıcı hesaplarının yönetimi, rol atamaları (yönetici, personel vb.), şifre işlemleri ve sistem erişim izinlerinin (permissions) yapılandırıldığı API uç noktalarıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Şifreli Veri İşleme, Rol ve İzin Kontrolü
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki StaffList ve StaffForm bileşenleri ile sistem genelindeki yetkilendirme mekanizmasını destekler.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, ERP sistemine giriş yapabilen kullanıcı hesaplarının yönetimi, rol atamaları, 
@@ -24,10 +8,19 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const bcrypt = require('bcrypt');
+const authMiddleware = require('../middleware/auth');
 const { logActivity } = require('../utils/logger');
 
+const requireAdminOrManager = (req, res, next) => {
+    if (req.user && (req.user.role === 'admin' || req.user.permissions?.includes('staff_manage'))) {
+        return next();
+    }
+    return res.status(403).json({ success: false, message: 'GÜVENLİK İHLALİ: Bu işlem için Yönetici yetkisi gereklidir.' });
+};
+
+
 // GET: Tüm yetkileri (permissions) getir
-router.get('/permissions', async (req, res) => {
+router.get('/permissions', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM permissions');
         res.json(rows);
@@ -38,10 +31,10 @@ router.get('/permissions', async (req, res) => {
 });
 
 // GET: Tüm personelleri getir (şifreler hariç) ve atanmış yetkilerini al
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const [users] = await db.query('SELECT id, username, name, email, role, created_at FROM users');
-        
+
         // Her kullanıcı için yetkilerini çek (daha optimize bir JOIN de yazılabilir ama basitlik için loop)
         for (let user of users) {
             const [perms] = await db.query(`
@@ -52,7 +45,7 @@ router.get('/', async (req, res) => {
             `, [user.id]);
             user.permissions = perms.map(p => p.permission_key);
         }
-        
+
         res.json(users);
     } catch (error) {
         console.error('Personel listesi çekilirken hata:', error);
@@ -61,9 +54,9 @@ router.get('/', async (req, res) => {
 });
 
 // POST: Yeni personel ekle
-router.post('/', async (req, res) => {
+router.post('/', authMiddleware, requireAdminOrManager, async (req, res) => {
     const { username, name, email, password, role, permissions } = req.body;
-    
+
     if (!username || !name || !email || !password) {
         return res.status(400).json({ success: false, message: 'Gerekli alanları doldurun.' });
     }
@@ -76,12 +69,12 @@ router.post('/', async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        
+
         const [result] = await db.query(
             'INSERT INTO users (username, name, email, password, role) VALUES (?, ?, ?, ?, ?)',
             [username, name, email, hashedPassword, role || 'kullanici']
         );
-        
+
         const newUserId = result.insertId;
 
         // Yetkileri ekle
@@ -97,7 +90,7 @@ router.post('/', async (req, res) => {
             }
         }
 
-        await logActivity(req.headers['x-user-id'], 'INSERT', 'users', newUserId, `"${name}" adlı personeli ekledi.`, null);
+        await logActivity(req.user?.id, 'INSERT', 'users', newUserId, `"${name}" adlı personeli ekledi.`, null);
 
         res.status(201).json({ success: true, message: 'Personel başarıyla eklendi.' });
     } catch (error) {
@@ -107,10 +100,10 @@ router.post('/', async (req, res) => {
 });
 
 // PUT: Personel güncelle
-router.put('/:id', async (req, res) => {
+router.put('/:id', authMiddleware, requireAdminOrManager, async (req, res) => {
     const { id } = req.params;
     const { username, name, email, role, permissions } = req.body; // Şifreyi almadık (sadece SQLden demiştik)
-    
+
     if (!username || !name || !email) {
         return res.status(400).json({ success: false, message: 'Kullanıcı adı, isim ve e-posta zorunludur.' });
     }
@@ -124,6 +117,7 @@ router.put('/:id', async (req, res) => {
 
         const [oldRows] = await db.query('SELECT * FROM users WHERE id = ?', [id]);
         const oldData = oldRows.length > 0 ? oldRows[0] : null;
+        if (!oldData) return res.status(404).json({ success: false, message: 'Personel bulunamadı.' });
 
         await db.query(
             'UPDATE users SET username=?, name=?, email=?, role=? WHERE id=?',
@@ -146,7 +140,7 @@ router.put('/:id', async (req, res) => {
             }
         }
 
-        await logActivity(req.headers['x-user-id'], 'UPDATE', 'users', id, `"${name}" adlı personeli güncelledi.`, oldData);
+        await logActivity(req.user?.id, 'UPDATE', 'users', id, `"${name}" adlı personeli güncelledi.`, oldData);
 
         res.json({ success: true, message: 'Personel güncellendi.' });
     } catch (error) {
@@ -156,16 +150,17 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE: Personel sil
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, requireAdminOrManager, async (req, res) => {
     const { id } = req.params;
     try {
         const [oldRows] = await db.query('SELECT * FROM users WHERE id = ?', [id]);
         const oldData = oldRows.length > 0 ? oldRows[0] : null;
+        if (!oldData) return res.status(404).json({ success: false, message: 'Personel bulunamadı.' });
 
         await db.query('DELETE FROM user_permissions WHERE user_id = ?', [id]);
         await db.query('DELETE FROM users WHERE id = ?', [id]);
 
-        await logActivity(req.headers['x-user-id'], 'DELETE', 'users', id, `"${oldData ? oldData.name : 'Bilinmeyen'}" adlı personeli sildi.`, oldData);
+        await logActivity(req.user?.id, 'DELETE', 'users', id, `"${oldData ? oldData.name : 'Bilinmeyen'}" adlı personeli sildi.`, oldData);
 
         res.json({ success: true, message: 'Personel silindi.' });
     } catch (error) {

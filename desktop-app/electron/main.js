@@ -17,6 +17,8 @@ const __dirname = path.dirname(__filename);
 // liste seçimlerinin (select) açılmaması, yazıların yazılamaması veya arayüzün
 // donması sorununu engellemek için Chromium motor ayarları:
 // ============================================================================
+app.disableHardwareAcceleration(); // Donanım hızlandırmasını kapatmak Windows focus/click hatalarını genelde çözer
+
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');

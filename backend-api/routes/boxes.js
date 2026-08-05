@@ -1,5 +1,4 @@
 /*
- * ÖZET:
  * Bu modül, sistemde kullanılan kargo/ambalaj kutularının tanımlanması, 
  * çoklu tedarikçi bilgileri ve stok ekleme/düşme işlemlerini yöneten API rotalarıdır.
  */
@@ -9,6 +8,8 @@ const db = require('../db');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const authMiddleware = require('../middleware/auth');
+const { logActivity } = require('../utils/logger');
 
 // Sözleşme dosyaları için multer ayarı
 const storage = multer.diskStorage({
@@ -26,14 +27,14 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // GET /api/boxes - Tüm kutuları getir
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const [boxes] = await db.query(`
             SELECT * FROM packaging_boxes
             WHERE IsActive = 1 
             ORDER BY Id DESC
         `);
-        
+
         // Her bir kutu için tedarikçilerini getir
         for (let box of boxes) {
             const [suppliers] = await db.query(`
@@ -57,10 +58,10 @@ const saveBoxSuppliers = async (boxId, suppliersRaw, files) => {
     if (!suppliersRaw) return;
     try {
         let suppliers = JSON.parse(suppliersRaw);
-        
+
         // Önce mevcutları alalım ki contract_file tutulsun (Eğer silinmemişse)
         const [existing] = await db.query('SELECT supplier_id, contract_file FROM box_suppliers WHERE box_id = ?', [boxId]);
-        
+
         await db.query('DELETE FROM box_suppliers WHERE box_id = ?', [boxId]);
 
         for (let i = 0; i < suppliers.length; i++) {
@@ -88,12 +89,12 @@ const saveBoxSuppliers = async (boxId, suppliersRaw, files) => {
                 INSERT INTO box_suppliers (box_id, supplier_id, lead_time_days, unit_price, contract_start_date, contract_end_date, contract_file)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `, [
-                boxId, 
-                s.supplier_id, 
-                s.lead_time_days || null, 
-                s.unit_price || null, 
-                s.contract_start_date || null, 
-                s.contract_end_date || null, 
+                boxId,
+                s.supplier_id,
+                s.lead_time_days || null,
+                s.unit_price || null,
+                s.contract_start_date || null,
+                s.contract_end_date || null,
                 contract_file
             ]);
         }
@@ -103,9 +104,9 @@ const saveBoxSuppliers = async (boxId, suppliersRaw, files) => {
 };
 
 // POST /api/boxes - Yeni kutu ekle
-router.post('/', upload.any(), async (req, res) => {
+router.post('/', authMiddleware, upload.any(), async (req, res) => {
     const { BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost, MinStockLevel, suppliers } = req.body;
-    
+
     if (!BoxName || !Width || !Height || !Depth || !EmptyWeight || !MaxWeightCapacity) {
         return res.status(400).json({ success: false, message: 'Tüm kutu ebat ve ağırlık bilgileri zorunludur.' });
     }
@@ -115,9 +116,10 @@ router.post('/', upload.any(), async (req, res) => {
             INSERT INTO packaging_boxes (BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost, MinStockLevel)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `, [BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost || 0, MinStockLevel || 0]);
-        
+
         await saveBoxSuppliers(result.insertId, suppliers, req.files || []);
 
+        await logActivity(req.user?.id, 'INSERT', 'packaging_boxes', result.insertId, `Yeni kutu eklendi: ${BoxName}`);
         res.status(201).json({ success: true, message: 'Kutu başarıyla eklendi.', data: { id: result.insertId } });
     } catch (err) {
         console.error('Kutu eklenirken hata:', err);
@@ -126,19 +128,24 @@ router.post('/', upload.any(), async (req, res) => {
 });
 
 // PUT /api/boxes/:id - Kutu güncelle
-router.put('/:id', upload.any(), async (req, res) => {
+router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
     const { BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost, IsActive, MinStockLevel, suppliers } = req.body;
     const { id } = req.params;
 
     try {
-        await db.query(`
+        const [result] = await db.query(`
             UPDATE packaging_boxes 
             SET BoxName = ?, Width = ?, Height = ?, Depth = ?, EmptyWeight = ?, MaxWeightCapacity = ?, Cost = ?, IsActive = ?, MinStockLevel = ?
             WHERE Id = ?
         `, [BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost, IsActive, MinStockLevel || 0, id]);
-        
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Kutu bulunamadı.' });
+        }
+
         await saveBoxSuppliers(id, suppliers, req.files || []);
 
+        await logActivity(req.user?.id, 'UPDATE', 'packaging_boxes', id, `Kutu bilgileri güncellendi: ${BoxName}`);
         res.json({ success: true, message: 'Kutu başarıyla güncellendi.' });
     } catch (err) {
         console.error('Kutu güncellenirken hata:', err);
@@ -147,10 +154,14 @@ router.put('/:id', upload.any(), async (req, res) => {
 });
 
 // DELETE /api/boxes/:id - Kutu sil (Pasife al)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
     try {
-        await db.query('UPDATE packaging_boxes SET IsActive = 0 WHERE Id = ?', [id]);
+        const [result] = await db.query('UPDATE packaging_boxes SET IsActive = 0 WHERE Id = ?', [id]);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Kutu bulunamadı.' });
+        }
+        await logActivity(req.user?.id, 'DELETE', 'packaging_boxes', id, `Kutu silindi (pasife alındı).`);
         res.json({ success: true, message: 'Kutu silindi (pasife alındı).' });
     } catch (err) {
         console.error('Kutu silinirken hata:', err);
@@ -159,7 +170,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /api/boxes/:id/add-stock - Kutu stok ekle (veya eksilt)
-router.post('/:id/add-stock', async (req, res) => {
+router.post('/:id/add-stock', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { Quantity, SupplierId } = req.body;
 
@@ -191,7 +202,7 @@ router.post('/:id/add-stock', async (req, res) => {
 
         const [supplierRows] = await db.query(supplierQuery, queryParams);
         const mainSupplier = supplierRows.length > 0 ? supplierRows[0] : null;
-        
+
         const priceToSave = mainSupplier ? mainSupplier.unit_price : null;
 
         // 3. İşlem kaydını at
@@ -213,7 +224,7 @@ router.post('/:id/add-stock', async (req, res) => {
             const supName = mainSupplier ? mainSupplier.SupplierName : 'Bilinmeyen Tedarikçi';
             const boxName = box.BoxName || 'Kutu/Ambalaj';
             const desc = `${boxName} malzemesi için ${supName} adlı tedarikçiden ${Quantity} adet alım yapıldı.`;
-            
+
             await db.query(`
                 INSERT INTO finance_transactions 
                 (type, amount, category, description, transaction_date) 
@@ -229,6 +240,7 @@ router.post('/:id/add-stock', async (req, res) => {
             sendLowBoxStockEmail({ Email: mainSupplier.Email, ContactPerson: mainSupplier.ContactPerson, SupplierName: mainSupplier.SupplierName }, box).catch(console.error);
         }
 
+        await logActivity(req.user?.id, 'INSERT', 'box_stock_entries', id, `${Quantity} adet kutu stoğu eklendi. Tedarikçi: ${mainSupplier ? mainSupplier.SupplierName : 'Yok'}`);
         res.status(201).json({ success: true, message: 'Stok başarıyla eklendi/güncellendi.' });
     } catch (err) {
         console.error('Stok eklenirken hata:', err);

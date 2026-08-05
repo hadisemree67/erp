@@ -1,0 +1,752 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model activity_logs {
+  id           Int       @id @default(autoincrement())
+  user_id      Int?
+  action_type  String    @db.VarChar(50)
+  target_table String    @db.VarChar(100)
+  target_id    Int
+  description  String    @db.Text
+  created_at   DateTime? @default(now()) @db.Timestamp(0)
+  old_data     Json?
+  is_undone    Boolean?  @default(false)
+  users        users?    @relation(fields: [user_id], references: [id], onUpdate: NoAction, map: "activity_logs_ibfk_1")
+
+  @@index([user_id], map: "activity_logs_ibfk_1")
+}
+
+model box_stock_entries {
+  Id              Int             @id @default(autoincrement())
+  BoxId           Int
+  Quantity        Int
+  SupplierName    String?         @db.VarChar(255)
+  Price           Decimal?        @db.Decimal(10, 2)
+  ContractNo      String?         @db.VarChar(100)
+  EntryDate       DateTime?       @default(now()) @db.DateTime(0)
+  packaging_boxes packaging_boxes @relation(fields: [BoxId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "box_stock_entries_ibfk_1")
+
+  @@index([BoxId], map: "BoxId")
+}
+
+model box_suppliers {
+  id                  Int             @id @default(autoincrement())
+  box_id              Int
+  supplier_id         Int
+  lead_time_days      Int?
+  unit_price          Decimal?        @db.Decimal(10, 2)
+  contract_start_date DateTime?       @db.Date
+  contract_end_date   DateTime?       @db.Date
+  contract_file       String?         @db.VarChar(255)
+  packaging_boxes     packaging_boxes @relation(fields: [box_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "box_suppliers_ibfk_1")
+  suppliers           suppliers       @relation(fields: [supplier_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "box_suppliers_ibfk_2")
+
+  @@index([box_id], map: "box_id")
+  @@index([supplier_id], map: "supplier_id")
+}
+
+model brands {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique(map: "name") @db.VarChar(100)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+}
+
+model campaigns {
+  id                 Int       @id @default(autoincrement())
+  title              String    @db.VarChar(255)
+  campaign_type      String    @db.VarChar(100)
+  discount_rate      Decimal?  @db.Decimal(10, 2)
+  min_amount         Decimal?  @db.Decimal(10, 2)
+  buy_quantity       Int?
+  pay_quantity       Int?
+  gift_quantity      Int?
+  gift_product_name  String?   @db.VarChar(255)
+  start_date         DateTime? @db.Date
+  end_date           DateTime? @db.Date
+  status             String?   @default("Aktif") @db.VarChar(50)
+  cover_image_path   String?   @db.VarChar(255)
+  description        String?   @db.Text
+  created_at         DateTime? @default(now()) @db.Timestamp(0)
+  target_product_id  Int?
+  target_barcode     String?   @db.VarChar(100)
+  target_product_ids Json?
+}
+
+model crm_accounts {
+  id           Int                        @id @default(autoincrement())
+  customer_id  Int
+  account_type crm_accounts_account_type? @default(B2C)
+  tax_office   String?                    @db.VarChar(100)
+  tax_number   String?                    @db.VarChar(50)
+  balance      Decimal?                   @default(0.00) @db.Decimal(18, 2)
+  created_at   DateTime?                  @default(now()) @db.Timestamp(0)
+  customers    customers                  @relation(fields: [customer_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "crm_accounts_ibfk_1")
+
+  @@index([customer_id], map: "customer_id")
+}
+
+model crm_tickets {
+  id          Int                 @id @default(autoincrement())
+  customer_id Int
+  subject     String              @db.VarChar(200)
+  description String?             @db.Text
+  status      crm_tickets_status? @default(A__k)
+  created_at  DateTime?           @default(now()) @db.Timestamp(0)
+  resolved_at DateTime?           @db.Timestamp(0)
+  customers   customers           @relation(fields: [customer_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "crm_tickets_ibfk_1")
+
+  @@index([customer_id], map: "customer_id")
+}
+
+model customers {
+  Id           Int            @id @default(autoincrement())
+  CustomerName String         @db.VarChar(150)
+  Phone        String?        @db.VarChar(20)
+  Email        String?        @db.VarChar(100)
+  Address      String?        @db.VarChar(255)
+  crm_accounts crm_accounts[]
+  crm_tickets  crm_tickets[]
+  orders       orders[]
+}
+
+model employee_documents {
+  id          Int       @id @default(autoincrement())
+  employee_id Int
+  file_name   String    @db.VarChar(255)
+  file_path   String    @db.VarChar(255)
+  uploaded_at DateTime? @default(now()) @db.Timestamp(0)
+  employees   employees @relation(fields: [employee_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "employee_documents_ibfk_1")
+
+  @@index([employee_id], map: "employee_id")
+}
+
+model employee_leaves {
+  id             Int       @id @default(autoincrement())
+  employee_id    Int
+  leave_type     String    @db.VarChar(100)
+  payment_status String    @db.VarChar(50)
+  start_date     DateTime  @db.Date
+  end_date       DateTime  @db.Date
+  total_days     Int
+  status         String?   @default("Onaylandı") @db.VarChar(50)
+  description    String?   @db.Text
+  created_at     DateTime? @default(now()) @db.Timestamp(0)
+  employees      employees @relation(fields: [employee_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "employee_leaves_ibfk_1")
+
+  @@index([employee_id], map: "employee_id")
+}
+
+model employee_overtimes {
+  id            Int       @id @default(autoincrement())
+  employee_id   Int
+  overtime_date DateTime  @db.Date
+  hours         Decimal   @db.Decimal(5, 2)
+  hourly_wage   Decimal   @db.Decimal(10, 2)
+  total_amount  Decimal   @db.Decimal(10, 2)
+  month         Int
+  year          Int
+  created_at    DateTime? @default(now()) @db.Timestamp(0)
+  employees     employees @relation(fields: [employee_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "employee_overtimes_ibfk_1")
+
+  @@index([employee_id], map: "employee_id")
+}
+
+model employees {
+  work_status           String?              @default("Çalışıyor") @db.VarChar(50)
+  id                    Int                  @id @default(autoincrement())
+  full_name             String               @db.VarChar(100)
+  department            String?              @db.VarChar(100)
+  position              String?              @db.VarChar(100)
+  phone                 String?              @db.VarChar(50)
+  start_date            DateTime?            @db.Date
+  created_at            DateTime?            @default(now()) @db.Timestamp(0)
+  salary                Decimal?             @db.Decimal(10, 2)
+  tckn                  String?              @db.VarChar(11)
+  address               String?              @db.Text
+  blood_type            String?              @db.VarChar(10)
+  emergency_contact     String?              @db.VarChar(100)
+  is_active             Boolean?             @default(true)
+  end_date              DateTime?            @db.Date
+  exit_reason           String?              @db.VarChar(100)
+  severance_pay         Decimal?             @db.Decimal(10, 2)
+  exit_documents        Json?
+  email                 String?              @db.VarChar(100)
+  photo_path            String?              @db.VarChar(255)
+  offboarding_status    String?              @default("NONE") @db.VarChar(20)
+  offboarding_details   Json?
+  hakedilen_yillik_izin Int?                 @default(14)
+  employee_documents    employee_documents[]
+  employee_leaves       employee_leaves[]
+  employee_overtimes    employee_overtimes[]
+}
+
+model finance_bank_accounts {
+  id                   Int                    @id @default(autoincrement())
+  account_name         String                 @db.VarChar(100)
+  iban                 String?                @db.VarChar(50)
+  currency             String?                @default("TRY") @db.VarChar(10)
+  balance              Decimal?               @default(0.00) @db.Decimal(18, 2)
+  created_at           DateTime?              @default(now()) @db.Timestamp(0)
+  finance_transactions finance_transactions[]
+}
+
+model finance_invoices {
+  id         Int                      @id @default(autoincrement())
+  order_id   Int?
+  invoice_no String                   @unique(map: "invoice_no") @db.VarChar(50)
+  amount     Decimal                  @db.Decimal(18, 2)
+  status     finance_invoices_status? @default(Taslak)
+  issue_date DateTime                 @db.Date
+  created_at DateTime?                @default(now()) @db.Timestamp(0)
+}
+
+model finance_transactions {
+  id                    Int                       @id @default(autoincrement())
+  bank_account_id       Int?
+  type                  finance_transactions_type
+  amount                Decimal                   @db.Decimal(18, 2)
+  category              String?                   @db.VarChar(100)
+  description           String?                   @db.VarChar(255)
+  transaction_date      DateTime                  @db.Date
+  created_at            DateTime?                 @default(now()) @db.Timestamp(0)
+  finance_bank_accounts finance_bank_accounts?    @relation(fields: [bank_account_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "finance_transactions_ibfk_1")
+
+  @@index([bank_account_id], map: "bank_account_id")
+}
+
+model kategori {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique(map: "name") @db.VarChar(100)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+}
+
+model orderitems {
+  Id        Int      @id @default(autoincrement())
+  OrderId   Int
+  ProductId Int
+  Quantity  Int
+  UnitPrice Decimal  @db.Decimal(18, 2)
+  orders    orders   @relation(fields: [OrderId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "orderitems_ibfk_1")
+  products  products @relation(fields: [ProductId], references: [Id], onUpdate: NoAction, map: "orderitems_ibfk_2")
+
+  @@index([OrderId], map: "OrderId")
+  @@index([ProductId], map: "ProductId")
+}
+
+model orders {
+  Id                             Int                 @id @default(autoincrement())
+  CustomerId                     Int
+  OrderNumber                    String              @unique(map: "OrderNumber") @db.VarChar(50)
+  OrderDate                      DateTime?           @default(now()) @db.DateTime(0)
+  OrderStatus                    orders_OrderStatus? @default(Onayland_)
+  TotalAmount                    Decimal             @default(0.00) @db.Decimal(18, 2)
+  ShippingAddress                String?             @db.VarChar(500)
+  ShipperId                      Int?
+  TrackingNumber                 String?             @db.VarChar(100)
+  CargoBarcode                   String?             @db.VarChar(255)
+  TotalWeight                    Decimal?            @db.Decimal(10, 2)
+  packaging_info                 Json?
+  BoxId                          Int?
+  CargoStatus                    String?             @default("Bekliyor") @db.VarChar(255)
+  PaymentMethod                  String?             @default("Belirtilmedi") @db.VarChar(50)
+  CampaignId                     Int?
+  CampaignName                   String?             @db.VarChar(255)
+  DiscountAmount                 Decimal?            @default(0.00) @db.Decimal(18, 2)
+  deducted_batches               Json?
+  PickerId                       Int?
+  PickedDate                     DateTime?           @db.DateTime(0)
+  PackerId                       Int?
+  PackedDate                     DateTime?           @db.DateTime(0)
+  ShipUserId                     Int?
+  ShippedDate                    DateTime?           @db.DateTime(0)
+  CartId                         Int?
+  CartSectionIds                 Json?
+  picking_carts                  picking_carts?      @relation(fields: [CartId], references: [id], onDelete: SetNull, onUpdate: Cascade, map: "fk_orders_cart")
+  orderitems                     orderitems[]
+  shippers                       shippers?           @relation(fields: [ShipperId], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "FK_Orders_Shippers")
+  users_orders_PackerIdTousers   users?              @relation("orders_PackerIdTousers", fields: [PackerId], references: [id], onUpdate: NoAction, map: "fk_orders_packer")
+  users_orders_PickerIdTousers   users?              @relation("orders_PickerIdTousers", fields: [PickerId], references: [id], onUpdate: NoAction, map: "fk_orders_picker")
+  users_orders_ShipUserIdTousers users?              @relation("orders_ShipUserIdTousers", fields: [ShipUserId], references: [id], onUpdate: NoAction, map: "fk_orders_shipper_user")
+  customers                      customers           @relation(fields: [CustomerId], references: [Id], onUpdate: NoAction, map: "orders_ibfk_1")
+
+  @@index([CustomerId], map: "CustomerId")
+  @@index([ShipperId], map: "FK_Orders_Shippers")
+  @@index([PackerId], map: "fk_orders_packer")
+  @@index([PickerId], map: "fk_orders_picker")
+  @@index([ShipUserId], map: "fk_orders_shipper_user")
+  @@index([CartId], map: "fk_orders_cart")
+}
+
+model packaging_boxes {
+  Id                Int                 @id @default(autoincrement())
+  BoxName           String              @db.VarChar(255)
+  Width             Decimal             @db.Decimal(10, 2)
+  Height            Decimal             @db.Decimal(10, 2)
+  Depth             Decimal             @db.Decimal(10, 2)
+  EmptyWeight       Decimal             @db.Decimal(10, 2)
+  MaxWeightCapacity Decimal             @db.Decimal(10, 2)
+  Cost              Decimal             @default(0.00) @db.Decimal(10, 2)
+  IsActive          Boolean?            @default(true)
+  CreatedAt         DateTime?           @default(now()) @db.Timestamp(0)
+  StockQuantity     Int?                @default(0)
+  MinStockLevel     Int?                @default(0)
+  box_stock_entries box_stock_entries[]
+  box_suppliers     box_suppliers[]
+}
+
+model permissions {
+  id               Int                @id @default(autoincrement())
+  permission_key   String             @unique(map: "permission_key") @db.VarChar(50)
+  description      String             @db.VarChar(255)
+  user_permissions user_permissions[]
+}
+
+model product_barcodes {
+  id         Int       @id @default(autoincrement())
+  product_id Int
+  barcode    String    @unique(map: "barcode") @db.VarChar(100)
+  created_at DateTime? @default(now()) @db.Timestamp(0)
+  products   products  @relation(fields: [product_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "product_barcodes_ibfk_1")
+
+  @@index([product_id], map: "product_id")
+}
+
+model product_suppliers {
+  id                  Int       @id @default(autoincrement())
+  product_id          Int
+  supplier_id         Int
+  contract_file       String?   @db.VarChar(255)
+  contract_start_date DateTime? @db.Date
+  contract_end_date   DateTime? @db.Date
+  is_primary          Boolean?  @default(false)
+  created_at          DateTime? @default(now()) @db.Timestamp(0)
+  unit_price          Decimal?  @db.Decimal(10, 2)
+  lead_time_days      Int?      @default(0)
+  products            products  @relation(fields: [product_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "product_suppliers_ibfk_1")
+  suppliers           suppliers @relation(fields: [supplier_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "product_suppliers_ibfk_2")
+
+  @@unique([product_id, supplier_id], map: "unique_product_supplier")
+  @@index([supplier_id], map: "supplier_id")
+}
+
+model production_machines {
+  id                        Int                         @id @default(autoincrement())
+  name                      String                      @db.VarChar(150)
+  last_maintenance          DateTime?                   @db.Date
+  status                    production_machines_status? @default(Bo_)
+  busy_until                DateTime?                   @db.DateTime(0)
+  created_at                DateTime?                   @default(now()) @db.Timestamp(0)
+  machine_code              String?                     @db.VarChar(100)
+  max_capacity              Decimal?                    @db.Decimal(18, 2)
+  min_capacity              Decimal?                    @db.Decimal(18, 2)
+  allowed_categories        Json?
+  prep_time_minutes         Int?                        @default(0)
+  alternative_machine_id    Int?
+  supplier_name             String?                     @db.VarChar(150)
+  supplier_email            String?                     @db.VarChar(150)
+  supplier_phone            String?                     @db.VarChar(50)
+  maintenance_period_months Int?                        @default(12)
+  next_maintenance          DateTime?                   @db.Date
+  maintenance_reminder_sent Boolean?                    @default(false)
+  production_order_steps    production_order_steps[]
+}
+
+model production_materials {
+  id                  Int               @id @default(autoincrement())
+  production_order_id Int
+  material_product_id Int
+  required_quantity   Decimal           @db.Decimal(18, 4)
+  location_id         Int?
+  warehouse_id        Int?
+  shelf_code          String?           @db.VarChar(100)
+  is_picked           Boolean?          @default(false)
+  picked_at           DateTime?         @db.DateTime(0)
+  actual_quantity     Decimal?          @db.Decimal(10, 4)
+  production_orders   production_orders @relation(fields: [production_order_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "production_materials_ibfk_1")
+
+  @@index([production_order_id], map: "production_order_id")
+}
+
+model production_order_steps {
+  id                  Int                            @id @default(autoincrement())
+  production_order_id Int
+  step_number         Int
+  operation_name      String                         @db.VarChar(255)
+  machine_id          Int
+  duration_minutes    Int
+  status              production_order_steps_status? @default(Bekliyor)
+  started_at          DateTime?                      @db.DateTime(0)
+  completed_at        DateTime?                      @db.DateTime(0)
+  verified_materials  Json?
+  production_orders   production_orders              @relation(fields: [production_order_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "production_order_steps_ibfk_1")
+  production_machines production_machines            @relation(fields: [machine_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "production_order_steps_ibfk_2")
+
+  @@index([machine_id], map: "machine_id")
+  @@index([production_order_id], map: "production_order_id")
+}
+
+model production_orders {
+  id                     Int                      @id @default(autoincrement())
+  product_id             Int
+  machine_id             Int
+  assigned_user_id       Int?
+  planned_quantity       Decimal                  @db.Decimal(18, 2)
+  waste_percentage       Decimal?                 @default(0.00) @db.Decimal(5, 2)
+  status                 String?                  @default("Bekliyor") @db.VarChar(50)
+  actual_quantity        Decimal?                 @db.Decimal(18, 2)
+  waste_reason           String?                  @db.Text
+  manager_explanation    String?                  @db.Text
+  start_time             DateTime?                @db.DateTime(0)
+  end_time               DateTime?                @db.DateTime(0)
+  created_at             DateTime?                @default(now()) @db.Timestamp(0)
+  delivered_to_user_id   Int?
+  production_materials   production_materials[]
+  production_order_steps production_order_steps[]
+}
+
+model production_requests {
+  id                 Int       @id @default(autoincrement())
+  product_id         Int
+  requested_quantity Int
+  source             String    @db.VarChar(50)
+  creator            String?   @db.VarChar(150)
+  reason             String?   @db.VarChar(500)
+  status             String?   @default("Bekleyen") @db.VarChar(50)
+  priority           String?   @default("Normal") @db.VarChar(50)
+  created_at         DateTime? @default(now()) @db.Timestamp(0)
+  products           products  @relation(fields: [product_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "production_requests_ibfk_1")
+
+  @@index([product_id], map: "product_id")
+}
+
+model products {
+  Id                          Int                   @id @default(autoincrement())
+  Barcode                     String?               @db.Text
+  ProductName                 String                @db.VarChar(150)
+  Brand                       String                @db.VarChar(100)
+  Category                    String                @db.VarChar(100)
+  unit_type                   String?               @default("Adet") @db.VarChar(50)
+  package_capacity            Decimal?              @default(1.00) @db.Decimal(18, 2)
+  package_name                String?               @default("Kutu") @db.VarChar(100)
+  PurchasePrice               Decimal               @default(0.00) @db.Decimal(18, 2)
+  SalePrice                   Decimal               @default(0.00) @db.Decimal(18, 2)
+  StockQuantity               Int                   @default(0)
+  ExpirationDate              DateTime?             @db.Date
+  BatchNumber                 String?               @db.VarChar(50)
+  Description                 String?               @db.VarChar(500)
+  ImagePath                   String?               @db.Text
+  Location                    String?               @db.VarChar(50)
+  Formula                     String?               @db.Text
+  ProductionTime              Int?                  @default(0)
+  Width                       Decimal?              @default(0.00) @db.Decimal(10, 2)
+  Height                      Decimal?              @default(0.00) @db.Decimal(10, 2)
+  Depth                       Decimal?              @default(0.00) @db.Decimal(10, 2)
+  Diameter                    Decimal?              @db.Decimal(10, 2)
+  Volume                      Decimal?              @default(0.00) @db.Decimal(18, 2)
+  Weight                      Decimal?              @default(0.00) @db.Decimal(10, 2)
+  is_stackable                Int?                  @default(0) @db.TinyInt
+  max_stack_limit             Int?                  @default(1)
+  critical_stock_level        Int?                  @default(0)
+  minimum_production_quantity Int?                  @default(0)
+  supplier_id                 Int?
+  contract_file               String?               @db.VarChar(255)
+  contract_start_date         DateTime?             @db.Date
+  contract_end_date           DateTime?             @db.Date
+  shelf_life_months           Int?                  @default(0)
+  lead_time_days              Int?                  @default(0)
+  supply_type                 products_supply_type? @default(MANUFACTURE)
+  orderitems                  orderitems[]
+  product_barcodes            product_barcodes[]
+  product_suppliers           product_suppliers[]
+  production_requests         production_requests[]
+  stockmovements              stockmovements[]
+  wms_stock_balances          wms_stock_balances[]
+}
+
+model purchase_orders {
+  id                Int                     @id @default(autoincrement())
+  supplier_id       Int
+  product_name      String                  @db.VarChar(150)
+  quantity          Int
+  unit_price        Decimal                 @db.Decimal(18, 2)
+  total_price       Decimal                 @db.Decimal(18, 2)
+  status            purchase_orders_status? @default(Bekliyor)
+  created_at        DateTime?               @default(now()) @db.Timestamp(0)
+  action_token      String?                 @db.VarChar(64)
+  received_quantity Int?                    @default(0)
+  suppliers         suppliers               @relation(fields: [supplier_id], references: [Id], onDelete: NoAction, onUpdate: NoAction, map: "purchase_orders_ibfk_1")
+
+  @@index([supplier_id], map: "supplier_id")
+}
+
+model purchase_requests {
+  id           Int                       @id @default(autoincrement())
+  employee_id  Int?
+  product_name String                    @db.VarChar(150)
+  quantity     Int
+  description  String?                   @db.Text
+  status       purchase_requests_status? @default(Bekliyor)
+  created_at   DateTime?                 @default(now()) @db.Timestamp(0)
+  supplier_id  Int?
+  product_id   Int?
+
+  @@index([product_name], map: "idx_product_name")
+}
+
+model shippers {
+  Id          Int      @id @default(autoincrement())
+  CompanyName String   @db.VarChar(100)
+  Phone       String?  @db.VarChar(20)
+  orders      orders[]
+}
+
+model stockmovements {
+  Id              Int                         @id @default(autoincrement())
+  ProductId       Int
+  UserId          Int?
+  MovementType    stockmovements_MovementType
+  Quantity        Int
+  location_id     Int?
+  batch_number    String?                     @db.VarChar(100)
+  expiration_date DateTime?                   @db.Date
+  MovementDate    DateTime?                   @default(now()) @db.DateTime(0)
+  RelatedId       Int?
+  Description     String?                     @db.VarChar(255)
+  warehouse_id    Int?
+  shelf_code      String?                     @db.VarChar(100)
+  supplier_id     Int?
+  unit_price      Decimal?                    @db.Decimal(10, 2)
+  products        products                    @relation(fields: [ProductId], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "stockmovements_ibfk_1")
+  users           users?                      @relation(fields: [UserId], references: [id], onUpdate: NoAction, map: "stockmovements_ibfk_2")
+
+  @@index([ProductId], map: "ProductId")
+  @@index([location_id], map: "location_id")
+  @@index([UserId], map: "stockmovements_ibfk_2")
+}
+
+model suppliers {
+  Id                Int                      @id @default(autoincrement())
+  SupplierName      String                   @db.VarChar(150)
+  ContactPerson     String?                  @db.VarChar(100)
+  Phone             String?                  @db.VarChar(20)
+  Email             String?                  @db.VarChar(100)
+  Address           String?                  @db.VarChar(255)
+  supplier_type     suppliers_supplier_type? @default(Tedarik_i)
+  box_suppliers     box_suppliers[]
+  product_suppliers product_suppliers[]
+  purchase_orders   purchase_orders[]
+}
+
+model system_settings {
+  setting_key   String  @id @db.VarChar(50)
+  setting_value String? @db.VarChar(255)
+  description   String? @db.Text
+}
+
+model user_permissions {
+  user_id       Int
+  permission_id Int
+  users         users       @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "user_permissions_ibfk_1")
+  permissions   permissions @relation(fields: [permission_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "user_permissions_ibfk_2")
+
+  @@id([user_id, permission_id])
+  @@index([permission_id], map: "permission_id")
+}
+
+model users {
+  id                              Int                @id @default(autoincrement())
+  username                        String?            @unique(map: "username") @db.VarChar(50)
+  name                            String             @db.VarChar(100)
+  email                           String             @unique(map: "email") @db.VarChar(100)
+  password                        String             @db.VarChar(255)
+  role                            String?            @default("manager") @db.VarChar(50)
+  created_at                      DateTime?          @default(now()) @db.Timestamp(0)
+  permissions                     Json?
+  is_active                       Boolean?           @default(true)
+  activity_logs                   activity_logs[]
+  orders_orders_PackerIdTousers   orders[]           @relation("orders_PackerIdTousers")
+  orders_orders_PickerIdTousers   orders[]           @relation("orders_PickerIdTousers")
+  orders_orders_ShipUserIdTousers orders[]           @relation("orders_ShipUserIdTousers")
+  stockmovements                  stockmovements[]
+  user_permissions                user_permissions[]
+}
+
+model warehouse_shelves {
+  id           Int        @id @default(autoincrement())
+  warehouse_id Int
+  shelf_code   String     @db.VarChar(100)
+  max_volume   Decimal?   @default(0.00) @db.Decimal(18, 2)
+  width        Float?     @default(0) @db.Float
+  height       Float?     @default(0) @db.Float
+  depth        Float?     @default(0) @db.Float
+  barcode      String?    @db.VarChar(150)
+  warehouses   warehouses @relation(fields: [warehouse_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "warehouse_shelves_ibfk_1")
+
+  @@index([warehouse_id], map: "warehouse_id")
+}
+
+model warehouses {
+  id                Int                 @id @default(autoincrement())
+  name              String              @db.VarChar(150)
+  barcode           String?             @db.VarChar(100)
+  location          String?             @db.VarChar(200)
+  warehouse_type    String?             @default("STOK") @db.VarChar(20)
+  address           String?             @db.Text
+  created_at        DateTime?           @default(now()) @db.Timestamp(0)
+  max_capacity      Int?
+  layout_data       String?             @db.LongText
+  warehouse_shelves warehouse_shelves[]
+  picking_carts     picking_carts[]
+}
+
+model whatsapp_pending_entries {
+  id              Int                              @id @default(autoincrement())
+  phone_number    String                           @db.VarChar(50)
+  product_barcode String?                          @db.VarChar(100)
+  warehouse_name  String?                          @db.VarChar(150)
+  shelf_barcode   String?                          @db.VarChar(100)
+  quantity        Int
+  photo_url       String?                          @db.Text
+  status          whatsapp_pending_entries_status? @default(Bekliyor)
+  created_at      DateTime?                        @default(now()) @db.Timestamp(0)
+  processed_at    DateTime?                        @db.Timestamp(0)
+  processor_id    Int?
+}
+
+model wms_stock_balances {
+  id              Int       @id @default(autoincrement())
+  product_id      Int
+  location_id     Int?
+  quantity        Int?      @default(0)
+  last_counted_at DateTime? @default(now()) @db.Timestamp(0)
+  batch_number    String    @default("") @db.VarChar(100)
+  expiration_date DateTime? @db.Date
+  warehouse_id    Int?
+  shelf_code      String?   @db.VarChar(100)
+  supplier_id     Int?
+  unit_price      Decimal?  @db.Decimal(10, 2)
+  products        products  @relation(fields: [product_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "wms_stock_balances_ibfk_1")
+
+  @@index([product_id], map: "idx_product_id")
+  @@index([location_id], map: "location_id")
+}
+
+enum crm_accounts_account_type {
+  B2B
+  B2C
+}
+
+enum finance_transactions_type {
+  GEL_R @map("GELİR")
+  G_DER @map("GİDER")
+}
+
+enum production_machines_status {
+  Bo_     @map("Boş")
+  Dolu
+  Bak_mda @map("Bakımda")
+  Ar_zal_ @map("Arızalı")
+}
+
+enum stockmovements_MovementType {
+  IN
+  OUT
+}
+
+enum crm_tickets_status {
+  A__k       @map("Açık")
+  nceleniyor @map("İnceleniyor")
+  z_ld_      @map("Çözüldü")
+  ptal       @map("İptal")
+}
+
+enum finance_invoices_status {
+  Taslak
+  Kesildi
+  ptal    @map("İptal")
+}
+
+enum orders_OrderStatus {
+  Beklemede
+  Onayland_       @map("Onaylandı")
+  Haz_rlan_yor    @map("Hazırlanıyor")
+  Toplamada
+  Haz_r           @map("Hazır")
+  Paketleniyor
+  Paketlendi
+  Kargoya_Verildi @map("Kargoya Verildi")
+  Teslim_Edildi   @map("Teslim Edildi")
+  ptal            @map("İptal")
+  ptal_Edildi     @map("İptal Edildi")
+}
+
+enum purchase_requests_status {
+  Bekliyor
+  Onayland_  @map("Onaylandı")
+  Reddedildi
+}
+
+enum production_order_steps_status {
+  Bekliyor
+  al___yor   @map("Çalışıyor")
+  Tamamland_ @map("Tamamlandı")
+}
+
+enum purchase_orders_status {
+  Bekliyor
+  Onayland_           @map("Onaylandı")
+  Haz_rlan_yor        @map("Hazırlanıyor")
+  Haz_rland_          @map("Hazırlandı")
+  Kargoya_Verildi     @map("Kargoya Verildi")
+  Teslim_Edildi       @map("Teslim Edildi")
+  Depo_Kabul_Bekliyor @map("Depo Kabul Bekliyor")
+  Depoya_Al_nd_       @map("Depoya Alındı")
+  ptal                @map("İptal")
+}
+
+enum suppliers_supplier_type {
+  Tedarik_i @map("Tedarikçi")
+  Fason
+}
+
+enum whatsapp_pending_entries_status {
+  Bekliyor
+  Onayland_  @map("Onaylandı")
+  Reddedildi
+  Hatal_     @map("Hatalı")
+}
+
+enum products_supply_type {
+  MANUFACTURE
+  PURCHASE
+  OUTSOURCED
+}
+
+model picking_carts {
+  id              Int                     @id @default(autoincrement())
+  warehouse_id    Int
+  name            String                  @db.VarChar(100)
+  is_active       Boolean                 @default(true)
+  created_at      DateTime?               @default(now()) @db.Timestamp(0)
+  barcode         String?                 @db.VarChar(150)
+  status          String                  @default("IDLE") @db.VarChar(50)
+  
+  warehouse       warehouses              @relation(fields: [warehouse_id], references: [id], onDelete: Cascade)
+  sections        picking_cart_sections[]
+  orders          orders[]
+}
+
+model picking_cart_sections {
+  id              Int            @id @default(autoincrement())
+  cart_id         Int
+  section_name    String         @db.VarChar(50)
+  barcode         String?        @db.VarChar(150)
+  
+  cart            picking_carts  @relation(fields: [cart_id], references: [id], onDelete: Cascade)
+}

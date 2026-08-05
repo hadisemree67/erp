@@ -1,5 +1,4 @@
 /*
- * ÖZET:
  * Bu modül, sistemdeki indirim kampanyalarının (2 al 1 öde, tutar indirimi vb.), 
  * kapak resimlerinin ve geçerlilik tarihlerinin yönetildiği CRUD uç noktalarıdır.
  */
@@ -8,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { logActivity } = require('../utils/logger');
+const authMiddleware = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
 
@@ -22,10 +22,29 @@ const storage = multer.diskStorage({
     }
 });
 
-const upload = multer({ 
+const fileFilter = (req, file, cb) => {
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Sadece resim dosyaları yüklenebilir (jpeg, png, webp, gif).'), false);
+    }
+};
+
+const upload = multer({
     storage: storage,
-    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+    fileFilter: fileFilter
 });
+
+const uploadMiddleware = (req, res, next) => {
+    upload.single('cover_image')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ success: false, message: err.message });
+        }
+        next();
+    });
+};
 
 // Veritabanı Tablosu Kontrolü ve Örnek Veri Ekleme
 const ensureCampaignsTable = async () => {
@@ -41,7 +60,7 @@ const ensureCampaignsTable = async () => {
                 pay_quantity INT NULL,
                 gift_quantity INT NULL,
                 gift_product_name VARCHAR(255) NULL,
-                target_product_id INT NULL,
+                target_product_ids TEXT NULL,
                 target_barcode VARCHAR(100) NULL,
                 start_date DATE NULL,
                 end_date DATE NULL,
@@ -51,17 +70,6 @@ const ensureCampaignsTable = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-
-        try { 
-            await db.query('ALTER TABLE campaigns ADD COLUMN target_product_id INT NULL'); 
-        } catch(e) { 
-            if (e.errno !== 1060 && e.code !== 'ER_DUP_FIELDNAME') console.warn('Kolon ekleme hatası (target_product_id):', e.message); 
-        }
-        try { 
-            await db.query('ALTER TABLE campaigns ADD COLUMN target_barcode VARCHAR(100) NULL'); 
-        } catch(e) { 
-            if (e.errno !== 1060 && e.code !== 'ER_DUP_FIELDNAME') console.warn('Kolon ekleme hatası (target_barcode):', e.message); 
-        }
 
         const [rows] = await db.query('SELECT COUNT(*) as count FROM campaigns');
         if (rows[0].count === 0) {
@@ -109,7 +117,7 @@ const ensureCampaignsTable = async () => {
 ensureCampaignsTable();
 
 // GET: Tüm kampanyaları getir
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         const { search, status } = req.query;
         let query = 'SELECT * FROM campaigns';
@@ -118,7 +126,8 @@ router.get('/', async (req, res) => {
 
         if (search) {
             conditions.push('(title LIKE ? OR description LIKE ? OR gift_product_name LIKE ?)');
-            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+            const escapedSearch = search.replace(/[%_]/g, '\\$&'); // % ve _ karakterlerini escape et
+            params.push(`%${escapedSearch}%`, `%${escapedSearch}%`, `%${escapedSearch}%`);
         }
 
         if (status && status !== 'All') {
@@ -141,7 +150,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET: Tek kampanya detayı
-router.get('/:id', async (req, res) => {
+router.get('/:id', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [req.params.id]);
         if (rows.length === 0) {
@@ -154,7 +163,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST: Yeni kampanya ekle
-router.post('/', upload.single('cover_image'), async (req, res) => {
+router.post('/', authMiddleware, uploadMiddleware, async (req, res) => {
     try {
         const {
             title, campaign_type, discount_rate, min_amount, buy_quantity,
@@ -190,7 +199,7 @@ router.post('/', upload.single('cover_image'), async (req, res) => {
             description || null
         ]);
 
-        await logActivity(req.headers['x-user-id'] || '', 'INSERT', 'campaigns', result.insertId, `"${title}" kampanyası oluşturuldu.`, null);
+        await logActivity(req.user?.id, 'INSERT', 'campaigns', result.insertId, `"${title}" kampanyası oluşturuldu.`, null);
 
         res.json({ success: true, message: 'Kampanya başarıyla oluşturuldu.', id: result.insertId });
     } catch (error) {
@@ -200,7 +209,7 @@ router.post('/', upload.single('cover_image'), async (req, res) => {
 });
 
 // PUT: Kampanya güncelle
-router.put('/:id', upload.single('cover_image'), async (req, res) => {
+router.put('/:id', authMiddleware, uploadMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const {
@@ -240,7 +249,7 @@ router.put('/:id', upload.single('cover_image'), async (req, res) => {
             id
         ]);
 
-        await logActivity(req.headers['x-user-id'] || '', 'UPDATE', 'campaigns', id, `"${title}" kampanyası güncellendi.`, oldRows[0]);
+        await logActivity(req.user?.id, 'UPDATE', 'campaigns', id, `"${title}" kampanyası güncellendi.`, oldRows[0]);
 
         res.json({ success: true, message: 'Kampanya başarıyla güncellendi.' });
     } catch (error) {
@@ -254,16 +263,16 @@ const updateStatusHandler = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body;
-        
+
         const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
         if (oldRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Güncellenecek kampanya bulunamadı (ID: ' + id + ').' });
         }
 
         await db.query('UPDATE campaigns SET status = ? WHERE id = ?', [status, id]);
-        
+
         try {
-            await logActivity(req.headers['x-user-id'] || '', 'UPDATE', 'campaigns', id, `"${oldRows[0].title}" kampanyasının durumu "${status}" yapıldı.`, oldRows[0]);
+            await logActivity(req.user?.id, 'UPDATE', 'campaigns', id, `"${oldRows[0].title}" kampanyasının durumu "${status}" yapıldı.`, oldRows[0]);
         } catch (logErr) {
             console.warn('Kampanya durum güncellerken loglama hatası (önemsiz):', logErr.message);
         }
@@ -275,11 +284,11 @@ const updateStatusHandler = async (req, res) => {
     }
 };
 
-router.patch('/:id/status', updateStatusHandler);
-router.put('/:id/status', updateStatusHandler);
+router.patch('/:id/status', authMiddleware, updateStatusHandler);
+router.put('/:id/status', authMiddleware, updateStatusHandler);
 
 // DELETE: Kampanya sil
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
@@ -288,7 +297,7 @@ router.delete('/:id', async (req, res) => {
         }
 
         await db.query('DELETE FROM campaigns WHERE id = ?', [id]);
-        await logActivity(req.headers['x-user-id'] || '', 'DELETE', 'campaigns', id, `"${oldRows[0].title}" kampanyası silindi.`, oldRows[0]);
+        await logActivity(req.user?.id, 'DELETE', 'campaigns', id, `"${oldRows[0].title}" kampanyası silindi.`, oldRows[0]);
 
         res.json({ success: true, message: 'Kampanya başarıyla silindi.' });
     } catch (error) {

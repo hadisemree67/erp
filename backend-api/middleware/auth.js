@@ -1,29 +1,13 @@
-/**
- * ============================================================================
- * DOSYA ADI: auth.js
- * MODÜL / KATMAN: Arkayüz - Ara Katman (Middleware)
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Kullanıcıların kimlik doğrulamasını (authentication) ve yetki denetimini (authorization) gerçekleştirir. Gelen isteklerdeki JWT (JSON Web Token) veya oturum bilgilerini kontrol ederek yetkisiz erişimleri engeller.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Middleware, JWT / Oturum Yönetimi
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Tüm güvenli API rotalarının (routes) önünde çalışır; yetki kontrolü başarılı olursa isteği ilgili rotaya iletir.
- * ============================================================================
- */
-
 /*
- * ÖZET:
  * Bu modül, gelen API isteklerindeki JSON Web Token (JWT) bilgisini kontrol ederek 
  * kimlik doğrulamasını (authentication) gerçekleştiren bir ara katmandır (middleware).
  */
 
 // JWT (JSON Web Token) kütüphanesi içeri aktarılıyor
 const jwt = require('jsonwebtoken');
+const db = require('../db');
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     // İstek başlığında (header) 'Authorization' (yetkilendirme) bilgisi olup olmadığı kontrol ediliyor
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -35,11 +19,23 @@ const authMiddleware = (req, res, next) => {
 
     try {
         // Token'ın geçerliliği gizli anahtar (JWT_SECRET) kullanılarak doğrulanıyor
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'gizli_anahtar_degistir_lutfen_123!');
+        const secretKey = process.env.JWT_SECRET;
+        if (!secretKey) throw new Error("JWT_SECRET is not defined!");
+        const decoded = jwt.verify(token, secretKey);
+
+        // EK GÜVENLİK: Veritabanına gidip bu kullanıcı hala var mı diye kontrol ediyoruz
+        const [users] = await db.query('SELECT id FROM users WHERE id = ?', [decoded.id]);
         
+        if (users.length === 0) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Güvenlik İhlali: Hesabınız sistemden silinmiş veya bulunamadı.' 
+            });
+        }
+
         // Doğrulanmış kullanıcı verisi, sonraki işlemlerde kullanılmak üzere isteğe (req.user) ekleniyor
-        req.user = decoded; 
-        
+        req.user = decoded;
+
         // Kimlik doğrulama başarılı, istek ilgili rotaya (route) iletiliyor
         next();
     } catch (error) {

@@ -1,6 +1,8 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const db = require('../db');
+const { logActivity } = require('../utils/logger');
+const { calculateShelf3D } = require('../utils/wmsUtils');
 
 let client;
 let isReady = false;
@@ -144,14 +146,96 @@ async function processEntry(sender, text, msg, photoUrl) {
              return;
         }
 
-        // Veritabanından ürünü ve rafı teyit et (İsteğe bağlı)
+        // Veritabanından ürünü ve rafı teyit et ile Kapasite Kontrolü
         let productName = 'Bilinmeyen Ürün (' + productBarcode + ')';
+        let hasCapacityError = false;
+        let errorMsg = '';
+        
         try {
-            const [rows] = await db.query('SELECT ProductName FROM products WHERE Barcode LIKE ?', [`%${productBarcode}%`]);
-            if (rows && rows.length > 0) {
-                productName = rows[0].ProductName;
+            const [pData] = await db.query('SELECT Id, ProductName, Width, Height, Depth, Volume, package_capacity, is_stackable, max_stack_limit FROM products WHERE Barcode LIKE ?', [`%${productBarcode}%`]);
+            if (pData && pData.length > 0) {
+                const prod = pData[0];
+                productName = prod.ProductName;
+                
+                const cleanShelf = shelfBarcode.replace(/[\s\-]/g, '').toLowerCase();
+                const [sData] = await db.query(`
+                    SELECT ws.id, ws.warehouse_id, ws.shelf_code, ws.width, ws.height, ws.depth, ws.max_volume, w.name as warehouse_name
+                    FROM warehouse_shelves ws
+                    JOIN warehouses w ON ws.warehouse_id = w.id
+                    WHERE 
+                      (LOWER(REPLACE(REPLACE(ws.barcode, ' ', ''), '-', '')) = ? OR LOWER(REPLACE(REPLACE(ws.shelf_code, ' ', ''), '-', '')) = ?) 
+                      AND w.name LIKE ?
+                `, [cleanShelf, cleanShelf, `%${warehouseName}%`]);
+                
+                if (sData && sData.length > 0) {
+                    const shelf = sData[0];
+                    
+                    const [filledData] = await db.query(`
+                        SELECT b.product_id, b.quantity, p.Volume as pVol, p.Width as pW, p.Height as pH, p.Depth as pD, p.package_capacity as pCap
+                        FROM wms_stock_balances b
+                        JOIN products p ON b.product_id = p.Id
+                        WHERE b.warehouse_id = ? AND b.shelf_code = ?
+                    `, [shelf.warehouse_id, shelf.shelf_code]);
+                    
+                    let currentFilledVol = 0;
+                    let currentPackages = 0;
+                    for (const f of filledData) {
+                        let fPW = parseFloat(f.pW) || 0;
+                        let fPH = parseFloat(f.pH) || 0;
+                        let fPD = parseFloat(f.pD) || 0;
+                        let vol = parseFloat(f.pVol) || 0;
+                        if (fPW * fPH * fPD > 0) vol = fPW * fPH * fPD;
+                        
+                        let fCap = parseFloat(f.pCap) || 1;
+                        let pkgs = Math.ceil((parseFloat(f.quantity) || 0) / fCap);
+                        currentPackages += pkgs;
+                        currentFilledVol += pkgs * vol;
+                    }
+                    
+                    const calc = calculateShelf3D({
+                        sW: parseFloat(shelf.width) || 0,
+                        sH: parseFloat(shelf.height) || 0,
+                        sD: parseFloat(shelf.depth) || 0,
+                        maxVolume: parseFloat(shelf.max_volume) || 0,
+                        pW: parseFloat(prod.Width) || 0,
+                        pH: parseFloat(prod.Height) || 0,
+                        pD: parseFloat(prod.Depth) || 0,
+                        productVolume: parseFloat(prod.Volume) || 0,
+                        isStackable: (prod.is_stackable === 1 || prod.is_stackable === true || prod.is_stackable === '1'),
+                        maxStackLimit: parseInt(prod.max_stack_limit) || 1,
+                        pCap: parseFloat(prod.package_capacity) || 1,
+                        currentPackages, 
+                        currentFilledVol
+                    });
+                    
+                    if (calc.maxItems !== Infinity && quantity > calc.maxItems) {
+                        hasCapacityError = true;
+                        errorMsg = `⚠️ *HATA: KAPASİTE AŞIMI*\n\nBelirttiğiniz *${shelf.shelf_code}* rafına ${quantity} adet ürün sığmaz. Rafa maksimum *${calc.maxItems} adet* daha ürün koyabilirsiniz.\n\n`;
+                        
+                        const [otherShelves] = await db.query(`
+                            SELECT shelf_code, quantity 
+                            FROM wms_stock_balances 
+                            WHERE product_id = ? AND shelf_code != ? AND quantity > 0
+                            ORDER BY quantity DESC LIMIT 3
+                        `, [prod.Id, shelf.shelf_code]);
+                        
+                        if (otherShelves && otherShelves.length > 0) {
+                            errorMsg += `💡 *Önerilen Diğer Raflar (Aynı Ürün Var):*\n`;
+                            otherShelves.forEach(os => {
+                                errorMsg += `- ${os.shelf_code} (Mevcut: ${os.quantity})\n`;
+                            });
+                        } else {
+                            errorMsg += `💡 *Önerilen Diğer Raflar:*\nBu ürünün halihazırda bulunduğu başka bir raf bulunamadı.`;
+                        }
+                    }
+                }
             }
-        } catch(e) {}
+        } catch(e) { console.error('WhatsApp Bot Capacity Error:', e); }
+
+        if (hasCapacityError) {
+            msg.reply(errorMsg);
+            return;
+        }
 
         userSessions[sender] = {
             step: 'awaiting_confirmation',
@@ -192,9 +276,12 @@ const getPendingEntries = async () => {
 };
 
 const approveEntry = async (id, processorId, approverName) => {
+    let connection;
     try {
+        connection = await db.getConnection();
+        await connection.beginTransaction();
         // 1. Kaydı al
-        const [rows] = await db.query(`
+        const [rows] = await connection.query(`
             SELECT 
                 wpe.*, 
                 e.full_name as sender_name 
@@ -210,7 +297,7 @@ const approveEntry = async (id, processorId, approverName) => {
         if (entry.status !== 'Bekliyor') throw new Error('Bu kayıt zaten işlenmiş.');
 
         // 2. Ürünü bul
-        const [products] = await db.query('SELECT Id, shelf_life_months FROM products WHERE Barcode LIKE ?', [`%${entry.product_barcode}%`]);
+        const [products] = await connection.query('SELECT Id, shelf_life_months FROM products WHERE Barcode LIKE ?', [`%${entry.product_barcode}%`]);
         if (products.length === 0) throw new Error('Ürün barkodu sistemde bulunamadı.');
         const productId = products[0].Id;
         const shelfLifeMonths = products[0].shelf_life_months || 0;
@@ -224,12 +311,12 @@ const approveEntry = async (id, processorId, approverName) => {
             const deductQty = Math.abs(entry.quantity);
             
             // Toplam stok kontrolü
-            const [productData] = await db.query('SELECT StockQuantity FROM products WHERE Id = ?', [productId]);
+            const [productData] = await connection.query('SELECT StockQuantity FROM products WHERE Id = ?', [productId]);
             if (!productData || productData[0].StockQuantity < deductQty) {
                 throw new Error(`Yetersiz stok! Mevcut: ${productData ? productData[0].StockQuantity : 0}`);
             }
 
-            const [balances] = await db.query(
+            const [balances] = await connection.query(
                 'SELECT * FROM wms_stock_balances WHERE product_id = ? AND quantity > 0 ORDER BY ISNULL(expiration_date), expiration_date ASC, id ASC FOR UPDATE',
                 [productId]
             );
@@ -242,12 +329,12 @@ const approveEntry = async (id, processorId, approverName) => {
                 remainingToDeduct -= qtyToTake;
 
                 if (balance.quantity === qtyToTake) {
-                    await db.query('DELETE FROM wms_stock_balances WHERE id = ?', [balance.id]);
+                    await connection.query('DELETE FROM wms_stock_balances WHERE id = ?', [balance.id]);
                 } else {
-                    await db.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [qtyToTake, balance.id]);
+                    await connection.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [qtyToTake, balance.id]);
                 }
 
-                await db.query(
+                await connection.query(
                     'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     [
                         productId, 
@@ -264,7 +351,7 @@ const approveEntry = async (id, processorId, approverName) => {
             }
 
             // Genel stoğu düşür
-            await db.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [deductQty, productId]);
+            await connection.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [deductQty, productId]);
             
             // Düşük stok uyarısı (Asenkron)
             const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
@@ -274,7 +361,7 @@ const approveEntry = async (id, processorId, approverName) => {
             // Normal Giriş Mantığı
             const cleanShelf = entry.shelf_barcode.replace(/[\s\-]/g, '').toLowerCase();
             
-            const [shelves] = await db.query(`
+            const [shelves] = await connection.query(`
                 SELECT ws.id, ws.warehouse_id, ws.shelf_code 
                 FROM warehouse_shelves ws
                 JOIN warehouses w ON ws.warehouse_id = w.id
@@ -306,7 +393,7 @@ const approveEntry = async (id, processorId, approverName) => {
                     batch_number, expiration_date
                 ) VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?, ?)
             `;
-            await db.query(inventorySql, [
+            await connection.query(inventorySql, [
                 productId, 
                 locationId, 
                 entry.quantity, 
@@ -318,17 +405,17 @@ const approveEntry = async (id, processorId, approverName) => {
                 expirationDate
             ]);
 
-            await db.query('UPDATE products SET StockQuantity = StockQuantity + ? WHERE Id = ?', [entry.quantity, productId]);
+            await connection.query('UPDATE products SET StockQuantity = StockQuantity + ? WHERE Id = ?', [entry.quantity, productId]);
 
-            const [existingBalances] = await db.query(
+            const [existingBalances] = await connection.query(
                 'SELECT id FROM wms_stock_balances WHERE product_id = ? AND warehouse_id = ? AND shelf_code = ? AND COALESCE(batch_number, "") = ?',
                 [productId, warehouseId, shelfCode, batchNum]
             );
 
             if (existingBalances.length > 0) {
-                await db.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [entry.quantity, existingBalances[0].id]);
+                await connection.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [entry.quantity, existingBalances[0].id]);
             } else {
-                await db.query(
+                await connection.query(
                     'INSERT INTO wms_stock_balances (product_id, warehouse_id, shelf_code, batch_number, quantity, location_id, expiration_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
                     [productId, warehouseId, shelfCode, batchNum, entry.quantity, locationId, expirationDate]
                 );
@@ -336,8 +423,10 @@ const approveEntry = async (id, processorId, approverName) => {
         }
 
         // WhatsApp statüsünü güncelle
-        await db.query('UPDATE whatsapp_pending_entries SET status = "Onaylandı", processed_at = NOW(), processor_id = ? WHERE id = ?', [processorId, id]);
+        await connection.query('UPDATE whatsapp_pending_entries SET status = "Onaylandı", processed_at = NOW(), processor_id = ? WHERE id = ?', [processorId, id]);
         
+        await logActivity(processorId, 'UPDATE', 'whatsapp_pending_entries', id, `WhatsApp stok talebi onaylandı. Ürün: ${entry.product_barcode}, Miktar: ${entry.quantity}`);
+
         // Bota mesaj attır
         if (isReady && client) {
             try {
@@ -349,9 +438,15 @@ const approveEntry = async (id, processorId, approverName) => {
             } catch(e) { console.error('Kullanıcıya mesaj atılamadı:', e); }
         }
 
+        await connection.commit();
+        connection.release();
         return { success: true, isDeduction: entry.quantity < 0 };
     } catch (e) {
-        await db.query('UPDATE whatsapp_pending_entries SET status = "Hatalı", processed_at = NOW(), processor_id = ? WHERE id = ?', [processorId, id]);
+        if (connection) {
+            await connection.rollback();
+            connection.release();
+        }
+        await connection.query('UPDATE whatsapp_pending_entries SET status = "Hatalı", processed_at = NOW(), processor_id = ? WHERE id = ?', [processorId, id]);
         throw e;
     }
 };
@@ -360,8 +455,11 @@ const rejectEntry = async (id, processorId) => {
     try {
         const [rows] = await db.query('SELECT phone_number FROM whatsapp_pending_entries WHERE id = ?', [id]);
         
-        await db.query('UPDATE whatsapp_pending_entries SET status = "Reddedildi", processed_at = NOW(), processor_id = ? WHERE id = ?', [processorId, id]);
-        
+        const [result] = await db.query('UPDATE whatsapp_pending_entries SET status = "Reddedildi", processed_at = NOW(), processor_id = ? WHERE id = ?', [processorId, id]);
+        if (result.affectedRows === 0) throw new Error('Talep bulunamadı.');
+
+        await logActivity(processorId, 'UPDATE', 'whatsapp_pending_entries', id, `WhatsApp stok talebi reddedildi.`);
+
         if (rows.length > 0 && isReady && client) {
              client.sendMessage(rows[0].phone_number, `❌ Gönderdiğiniz giriş talebi ERP yöneticisi tarafından REDDEDİLDİ.`);
         }

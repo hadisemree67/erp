@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: server.js
- * MODÜL / KATMAN: Arkayüz Çekirdeği - Ana Sunucu ve Giriş Noktası (Entry Point)
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Express.js HTTP sunucusunu başlatır, CORS ayarlarını yapılandırır, JSON gövde ayrıştırıcılarını (body parser) ekler, tüm API rotalarını (`/api/products`, `/api/wms` vb.) sisteme bağlar ve sunucuyu belirtilen portta dinlemeye alır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js, HTTP Sunucu Yönetimi, Middleware Yapılandırması
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Arkayüz uygulamasının başlama noktasıdır. Tüm yönlendiricileri (routes) ve genel ara katmanları (middleware) bütünleştirir.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu dosya arkayüz (backend) uygulamasının başlangıç noktasıdır. Express.js sunucusunu başlatır, 
@@ -22,6 +6,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const db = require('./db');
 const bcrypt = require('bcrypt');
@@ -46,14 +31,69 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const app = express();
 
+// A simple access logger
+app.use((req, res, next) => {
+    console.log(`[REQUEST] ${req.method} ${req.url}`);
+    const originalSend = res.send;
+    res.send = function (data) {
+        if (res.statusCode >= 400) {
+            console.error(`[RESPONSE ERROR] ${req.method} ${req.url} -> Status: ${res.statusCode}`);
+        }
+        return originalSend.apply(res, arguments);
+    };
+    next();
+});
+
+app.locals.system_paused = false;
+db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'system_paused'")
+  .then(([rows]) => { if (rows.length > 0) app.locals.system_paused = (rows[0].setting_value === 'true'); })
+  .catch(e => console.error("system_paused fetch error:", e));
+
+
 app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+    'http://localhost:19006',
+    'http://localhost:8081',
+    'exp://localhost:8081',
+    'http://192.168.10.144:3000',
+    'http://192.168.10.144:8081',
+    'exp://192.168.10.144:8081',
+    process.env.BASE_URL,  // ngrok veya production URL
+].filter(Boolean);
+
 app.use(cors({
-    origin: (origin, callback) => callback(null, true),
+    origin: (origin, callback) => {
+        // Geliştirme aşamasında tüm originlere izin ver
+        return callback(null, true);
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true
 }));
+
+// GÜVENLİK: Genel API Rate Limiter (her IP için dakikada max 200 istek)
+const generalLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Çok fazla istek gönderdiniz. Lütfen biraz bekleyin.' }
+});
+app.use('/api/', generalLimiter);
+
+// GÜVENLİK: Login için sıkı Rate Limiter (brute-force koruması: 5 dakikada max 10 deneme)
+const loginLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Çok fazla başarısız giriş denemesi. Lütfen 5 dakika bekleyin.' }
+});
+app.use('/api/login', loginLimiter);
 
 // JSON gövde sınırı (Denial of Service koruması) ve Syntax Error kalkanı
 app.use(express.json({ limit: '20mb' }));
@@ -74,19 +114,19 @@ app.get('/', (req, res) => {
 const authMiddleware = require('./middleware/auth');
 app.use((req, res, next) => {
     // console.log(`[AUTH] Method: ${req.method}, Path: ${req.path}`);
-    
+
     // CORS preflight isteklerine izin ver
     if (req.method === 'OPTIONS') {
         return next();
     }
     // Login isteği, public mail linkleri veya sistem durumunu soruyorsa güvenliği atla
     if (
-        req.path.includes('/login') || 
-        req.path.includes('/settings/status') || 
-        req.path.startsWith('/uploads') ||
-        req.path.startsWith('/api/purchasing/orders/action') ||
-        req.path.startsWith('/api/supplier-approval') ||
-        req.path.startsWith('/api/whatsapp-entries/') // if whatsapp uses direct API links too
+        req.path === '/api/login' || req.path === '/api/login/' || 
+        req.path === '/api/settings/status' || req.path === '/api/settings/status/' || 
+        req.path.startsWith('/uploads/') ||
+        // Tedarikçi onay linkleri - sadece GET (e-posta linkleri) ve POST (form gönderimi) izni
+        (req.path.startsWith('/api/purchasing/orders/action') && ['GET', 'POST'].includes(req.method)) ||
+        (req.path.startsWith('/api/supplier-approval') && ['GET', 'POST'].includes(req.method))
     ) {
         return next();
     }
@@ -102,22 +142,17 @@ app.use(async (req, res, next) => {
     // Sadece veri değiştiren istekleri engelle (POST, PUT, DELETE, PATCH)
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
         // İstisna yollar
-        const isExempt = 
+        const isExempt =
             req.path.startsWith('/api/settings') || 
-            req.path.includes('/login') ||
+            req.path === '/api/login' || req.path === '/api/login/' ||
             req.path.startsWith('/api/purchasing/orders/action') ||
             req.path.startsWith('/api/supplier-approval');
         if (!isExempt) {
-            try {
-                const [rows] = await db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'system_paused'");
-                if (rows.length > 0 && rows[0].setting_value === 'true') {
-                    return res.status(503).json({ 
-                        success: false, 
-                        message: 'Sistem şu anda depo sayımı veya bakım nedeniyle duraklatılmıştır. Veri değişikliği yapılamaz.' 
-                    });
-                }
-            } catch (err) {
-                console.error("Sistem durumu kontrol edilirken hata:", err);
+            if (req.app.locals.system_paused) {
+                return res.status(503).json({ 
+                    success: false, 
+                    message: 'Sistem şu anda depo sayımı veya bakım nedeniyle duraklatılmıştır. Veri değişikliği yapılamaz.' 
+                });
             }
         }
     }
@@ -146,6 +181,9 @@ app.use('/api/warehouses', warehousesRouter);
 const suppliersRouter = require('./routes/suppliers');
 app.use('/api/suppliers', suppliersRouter);
 
+const shippersRouter = require('./routes/shippers');
+app.use('/api/shippers', shippersRouter);
+
 const customersRouter = require('./routes/customers');
 app.use('/api/customers', customersRouter);
 
@@ -172,8 +210,10 @@ app.use('/api/boxes', boxesRouter);
 
 const whatsappRoutes = require('./routes/whatsappEntries');
 const mobileRoutes = require('./routes/mobile');
+const pickingCartsRouter = require('./routes/picking_carts');
 app.use('/api/whatsapp-entries', whatsappRoutes);
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/picking_carts', pickingCartsRouter);
 
 app.get('/api/brands', async (req, res) => {
     try {
@@ -188,14 +228,14 @@ app.get('/api/brands', async (req, res) => {
 app.post('/api/brands', async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Marka adı gereklidir.' });
-    
+
     try {
         const [existing] = await db.query('SELECT id FROM brands WHERE name = ?', [name]);
         if (existing.length > 0) {
             return res.status(400).json({ success: false, message: 'Bu marka zaten var.' });
         }
         const [result] = await db.query('INSERT INTO brands (name) VALUES (?)', [name]);
-        await logActivity(req.headers['x-user-id'], 'INSERT', 'brands', result.insertId, `"${name}" markasını ekledi.`, null);
+        await logActivity(req.user?.id, 'INSERT', 'brands', result.insertId, `"${name}" markasını ekledi.`, null);
         res.status(201).json({ success: true, id: result.insertId, name });
     } catch (error) {
         console.error('Marka eklenirken hata:', error);
@@ -216,14 +256,14 @@ app.get('/api/categories', async (req, res) => {
 app.post('/api/categories', async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Kategori adı gereklidir.' });
-    
+
     try {
         const [existing] = await db.query('SELECT id FROM kategori WHERE name = ?', [name]);
         if (existing.length > 0) {
             return res.status(400).json({ success: false, message: 'Bu kategori zaten var.' });
         }
         const [result] = await db.query('INSERT INTO kategori (name) VALUES (?)', [name]);
-        await logActivity(req.headers['x-user-id'], 'INSERT', 'kategori', result.insertId, `"${name}" kategorisini ekledi.`, null);
+        await logActivity(req.user?.id, 'INSERT', 'kategori', result.insertId, `"${name}" kategorisini ekledi.`, null);
         res.status(201).json({ success: true, id: result.insertId, name });
     } catch (error) {
         console.error('Kategori eklenirken hata:', error);
@@ -233,11 +273,11 @@ app.post('/api/categories', async (req, res) => {
 
 app.get('/api/dashboard-stats', async (req, res) => {
     try {
-        const [products] = await db.query('SELECT COUNT(Id) as count FROM products');
+        const [products] = await db.query("SELECT COUNT(Id) as count FROM products WHERE Category != 'Hammadde' OR Category IS NULL");
         const [brands] = await db.query('SELECT COUNT(id) as count FROM brands');
         const [categories] = await db.query('SELECT COUNT(id) as count FROM kategori');
         const [lowStock] = await db.query('SELECT COUNT(Id) as count FROM products WHERE StockQuantity <= 10');
-        
+
         res.json({
             success: true,
             totalProducts: products[0].count,
@@ -255,25 +295,30 @@ app.get('/api/dashboard-stats', async (req, res) => {
 
 app.post('/api/login', async (req, res) => {
     const { username, password, role } = req.body;
-    
+
     if (!username || !password) {
         return res.status(400).json({ success: false, message: 'Kullanıcı adı ve şifre gereklidir.' });
     }
 
     try {
         const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
-        
+
         if (rows.length === 0) {
             return res.status(401).json({ success: false, message: 'Kullanıcı bulunamadı.' });
         }
 
         const user = rows[0];
+        
+        // GÜVENLİK: Pasif veya kovulmuş kullanıcı kontrolü
+        if (user.is_active === 0 || user.is_active === false || user.is_active === '0') {
+            return res.status(403).json({ success: false, message: 'Hesabınız askıya alınmış veya pasif duruma getirilmiştir.' });
+        }
 
         const dbRole = user.role;
         const employeeRoles = ['kullanici', 'depo', 'uretim'];
 
         if (role === 'admin' && employeeRoles.includes(dbRole)) {
-             return res.status(403).json({ success: false, message: 'Bu hesap Yönetici girişine yetkili değildir.' });
+            return res.status(403).json({ success: false, message: 'Bu hesap Yönetici girişine yetkili değildir.' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
@@ -347,6 +392,10 @@ app.use((err, req, res, next) => {
     }
 
     // Genel Hata Dönüşü
+    try {
+        require('fs').appendFileSync('error.log', new Date().toISOString() + ' [API HATASI] ' + req.url + ' : ' + (err.stack || err.message || err) + '\n');
+    } catch(e) {}
+
     res.status(err.status || 500).json({
         success: false,
         message: err.message || 'Sunucu işlem sırasında bir hata ile karşılaştı.'
@@ -356,13 +405,16 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Sunucu http://localhost:${PORT} adresinde çalışıyor`);
-    
+
     // Arka plan otomatik bakım hatırlatması kontrolü (İlk açılışta ve her 6 saatte bir)
     setTimeout(checkUpcomingMaintenances, 5000);
     setInterval(checkUpcomingMaintenances, 1000 * 60 * 60 * 6);
 
     // WhatsApp Bot'u başlat
-    setTimeout(() => {
-        initializeWhatsAppBot();
-    }, 2000);
+    try {
+        // initializeWhatsAppBot(); // KULLANICI İSTEĞİ ÜZERİNE GEÇİCİ OLARAK DURDURULDU
+        console.log('WhatsApp Botu kullanıcı isteği üzerine durduruldu (pasif).');
+    } catch (err) { }
 });
+
+// triggered restart

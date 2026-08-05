@@ -8,23 +8,61 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { logActivity } = require('../utils/logger');
+const authMiddleware = require('../middleware/auth');
 
 // Tüm müşterileri listele
-router.get('/', async (req, res, next) => {
+router.get('/', authMiddleware, async (req, res, next) => {
     try {
-        const [rows] = await db.query('SELECT * FROM customers ORDER BY Id DESC');
-        res.json({ success: true, data: rows });
+        const { search, page, limit } = req.query;
+        let query = 'SELECT * FROM customers';
+        let countQuery = 'SELECT COUNT(*) as total FROM customers';
+        let params = [];
+
+        if (search) {
+            query += ' WHERE CustomerName LIKE ? OR Phone LIKE ?';
+            countQuery += ' WHERE CustomerName LIKE ? OR Phone LIKE ?';
+            const escapedSearch = search.replace(/[%_]/g, '\\$&');
+            params.push(`%${escapedSearch}%`, `%${escapedSearch}%`);
+        }
+        query += ' ORDER BY Id DESC';
+
+        if (page && limit) {
+            const pageNum = parseInt(page, 10) || 1;
+            const limitNum = parseInt(limit, 10) || 50;
+            const offset = (pageNum - 1) * limitNum;
+            query += ` LIMIT ${limitNum} OFFSET ${offset}`;
+        }
+
+        const [rows] = await db.query(query, params);
+
+        if (page && limit) {
+            const countParams = search ? params.slice(0, 2) : [];
+            const [countRows] = await db.query(countQuery, countParams);
+            res.json({
+                success: true,
+                data: rows,
+                total: countRows[0].total,
+                page: parseInt(page, 10) || 1,
+                limit: parseInt(limit, 10) || 50
+            });
+        } else {
+            res.json({ success: true, data: rows });
+        }
     } catch (error) {
         next(error);
     }
 });
 
 // Yeni müşteri ekle
-router.post('/', async (req, res, next) => {
+router.post('/', authMiddleware, async (req, res, next) => {
     const { CustomerName, Phone, Email, Address } = req.body;
-    
+
     if (!CustomerName || !CustomerName.trim()) {
         return res.status(400).json({ success: false, message: 'Müşteri adı / ünvanı zorunludur.' });
+    }
+
+    if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email.trim())) {
+        return res.status(400).json({ success: false, message: 'Geçersiz e-posta formatı.' });
     }
 
     try {
@@ -34,7 +72,7 @@ router.post('/', async (req, res, next) => {
         );
 
         await logActivity(
-            req.headers['x-user-id'] || 1,
+            req.user?.id,
             'INSERT',
             'customers',
             result.insertId,
@@ -53,12 +91,16 @@ router.post('/', async (req, res, next) => {
 });
 
 // Müşteri bilgisini güncelle
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', authMiddleware, async (req, res, next) => {
     const { id } = req.params;
     const { CustomerName, Phone, Email, Address } = req.body;
 
     if (!CustomerName || !CustomerName.trim()) {
         return res.status(400).json({ success: false, message: 'Müşteri adı / ünvanı zorunludur.' });
+    }
+
+    if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email.trim())) {
+        return res.status(400).json({ success: false, message: 'Geçersiz e-posta formatı.' });
     }
 
     try {
@@ -73,12 +115,12 @@ router.put('/:id', async (req, res, next) => {
         );
 
         await logActivity(
-            req.headers['x-user-id'] || 1,
+            req.user?.id,
             'UPDATE',
             'customers',
             id,
             `"${CustomerName}" isimli müşteri bilgileri güncellendi.`,
-            null
+            existing[0]
         );
 
         res.json({ success: true, message: 'Müşteri bilgileri güncellendi.' });
@@ -88,7 +130,7 @@ router.put('/:id', async (req, res, next) => {
 });
 
 // Müşteri sil
-router.delete('/:id', async (req, res, next) => {
+router.delete('/:id', authMiddleware, async (req, res, next) => {
     const { id } = req.params;
 
     try {
@@ -97,15 +139,30 @@ router.delete('/:id', async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Müşteri bulunamadı.' });
         }
 
+        // Satış/sipariş geçmişi kontrolü (Hard delete riskine karşı)
+        try {
+            const [orderCheck] = await db.query('SELECT COUNT(*) as orderCount FROM orders WHERE CustomerId = ?', [id]);
+            if (orderCheck[0].orderCount > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Bu müşteriye ait geçmiş satış/sipariş kayıtları bulunmaktadır. Finansal tutarlılığın bozulmaması için müşteriyi silemezsiniz. Lütfen pasife almayı tercih edin.'
+                });
+            }
+        } catch (tableErr) {
+            if (tableErr.code !== 'ER_NO_SUCH_TABLE') {
+                console.warn('Sipariş kontrolü sırasında beklenmeyen hata:', tableErr.message);
+            }
+        }
+
         await db.query('DELETE FROM customers WHERE Id = ?', [id]);
 
         await logActivity(
-            req.headers['x-user-id'] || 1,
+            req.user?.id,
             'DELETE',
             'customers',
             id,
             `"${existing[0].CustomerName}" isimli müşteri silindi.`,
-            null
+            existing[0]
         );
 
         res.json({ success: true, message: 'Müşteri başarıyla silindi.' });

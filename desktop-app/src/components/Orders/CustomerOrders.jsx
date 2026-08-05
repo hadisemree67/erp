@@ -4,9 +4,11 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import Barcode from 'react-barcode';
+import { QRCodeSVG } from 'qrcode.react';
 import { apiFetch } from '../../utils/api';
 
-const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' }) => {
+const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', customerId = null }) => {
     const hasPerm = (key) => currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(key);
     // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [orders, setOrders] = useState([]);
@@ -14,8 +16,9 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
     const [products, setProducts] = useState([]);
     const [boxes, setBoxes] = useState([]);
     const [campaigns, setCampaigns] = useState([]);
+    const [shippers, setShippers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState(statusFilter === 'tumu' ? 'Beklemede' : statusFilter);
+    const [activeTab, setActiveTab] = useState(statusFilter === 'tumu' ? 'Tümü' : statusFilter);
     const [globalSearchTerm, setGlobalSearchTerm] = useState('');
 
     // Order Create Modal state
@@ -23,6 +26,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
     const [selectedCustomerId, setSelectedCustomerId] = useState('');
     const [shippingAddress, setShippingAddress] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('Nakit');
+    const [selectedShipperId, setSelectedShipperId] = useState('');
     const [orderItems, setOrderItems] = useState([
         { productId: '', quantity: 1, unitPrice: 0 }
     ]);
@@ -53,6 +57,11 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
     // Prompt Modal for Quantity
     const [qtyPrompt, setQtyPrompt] = useState({ isOpen: false, foundItem: null, remaining: 0, inputVal: '' });
 
+    // Stats Modal
+    const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
+    const [statsData, setStatsData] = useState([]);
+    const [statsLoading, setStatsLoading] = useState(false);
+
     // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
     useEffect(() => {
@@ -68,12 +77,13 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
     const fetchInitialData = async (showLoading = true) => {
         if (showLoading) setLoading(true);
         try {
-            const [ordersRes, customersRes, productsRes, boxesRes, campaignsRes] = await Promise.all([
+            const [ordersRes, customersRes, productsRes, boxesRes, campaignsRes, shippersRes] = await Promise.all([
                 apiFetch('http://localhost:3000/api/orders'),
                 apiFetch('http://localhost:3000/api/customers'),
                 apiFetch('http://localhost:3000/api/products'),
                 apiFetch('http://localhost:3000/api/boxes'),
-                apiFetch('http://localhost:3000/api/campaigns')
+                apiFetch('http://localhost:3000/api/campaigns'),
+                apiFetch('http://localhost:3000/api/shippers')
             ]);
 
             const ordersData = await ordersRes.json();
@@ -81,6 +91,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             const productsData = await productsRes.json();
             const boxesData = await boxesRes.json();
             const campaignsData = await campaignsRes.json();
+            const shippersData = await shippersRes.json();
 
             console.log("Orders Data:", ordersData);
             console.log("Customers Data:", customersData);
@@ -90,17 +101,38 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             const allProducts = productsData.data || (Array.isArray(productsData) ? productsData : []);
             const allBoxes = boxesData.data || (Array.isArray(boxesData) ? boxesData : []);
             const allCampaigns = campaignsData.data || (Array.isArray(campaignsData) ? campaignsData : []);
+            const allShippers = shippersData.data || (Array.isArray(shippersData) ? shippersData : []);
 
             setOrders(allOrders);
             setCustomers(allCustomers);
             setProducts(allProducts);
             setBoxes(allBoxes.filter(b => b.IsActive));
             setCampaigns(allCampaigns.filter(c => c.status === 'Aktif'));
+            setShippers(allShippers);
             
         } catch (err) {
             console.error('Veri yükleme hatası:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleOpenStatsModal = async () => {
+        setIsStatsModalOpen(true);
+        setStatsLoading(true);
+        try {
+            const res = await apiFetch('http://localhost:3000/api/mobile/stats/daily');
+            const data = await res.json();
+            if (data.success) {
+                setStatsData(data.stats || []);
+            } else {
+                alert('İstatistikler yüklenemedi.');
+            }
+        } catch (err) {
+            console.error('Stats error:', err);
+            alert('Sunucu bağlantı hatası.');
+        } finally {
+            setStatsLoading(false);
         }
     };
 
@@ -197,6 +229,10 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             alert('Lütfen sevkiyat adresi giriniz.');
             return;
         }
+        if (!selectedShipperId) {
+            alert('Lütfen kargo şirketi seçiniz.');
+            return;
+        }
 
         const validItems = orderItems.filter(i => i.productId && i.quantity > 0);
         if (validItems.length === 0) {
@@ -219,7 +255,8 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                     userId: currentUser?.id,
                     campaignId: calcResult.campaignId,
                     campaignName: calcResult.campaignName,
-                    discountAmount: calcResult.discount
+                    discountAmount: calcResult.discount,
+                    shipperId: selectedShipperId
                 })
             });
 
@@ -231,6 +268,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                 setSelectedCustomerId('');
                 setShippingAddress('');
                 setPaymentMethod('Nakit');
+                setSelectedShipperId('');
                 setOrderItems([{ productId: '', quantity: 1, unitPrice: 0 }]);
                 fetchInitialData();
             } else {
@@ -518,8 +556,10 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
     };
 
     const filteredOrders = orders.filter(o => {
+        if (customerId && o.CustomerId !== customerId) return false;
+
         // 1. Siparişin aktif sekmeye ait olup olmadığını kontrol et
-        const matchesTab = o.OrderStatus?.toLowerCase() === activeTab.toLowerCase();
+        const matchesTab = activeTab === 'Tümü' || o.OrderStatus?.toLowerCase() === activeTab.toLowerCase();
         if (!matchesTab) return false;
 
         // 2. Eğer arama terimi varsa filtrele
@@ -545,6 +585,8 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             case 'Beklemede': return { bg: '#f1f5f9', color: '#475569', label: 'Beklemede' };
             case 'Onaylandı': return { bg: '#e2e8f0', color: '#334155', label: 'Onaylandı' };
             case 'Hazırlanıyor': return { bg: '#f1f5f9', color: '#475569', label: 'Hazırlanıyor' };
+            case 'Hazır': return { bg: '#dcfce3', color: '#16a34a', label: 'Toplandı (Hazır)' };
+              case 'Paketleniyor': return { bg: '#fef3c7', color: '#d97706', label: 'Paketleniyor' };
             case 'Paketlendi': return { bg: '#e2e8f0', color: '#334155', label: 'Paketlendi' };
             case 'Kargoya Verildi': return { bg: '#f1f5f9', color: '#475569', label: 'Kargoya Verildi' };
             case 'Teslim Edildi': return { bg: '#dcfce3', color: '#166534', label: 'Teslim Edildi' };
@@ -567,6 +609,15 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
+                    {currentUser?.role === 'admin' && (
+                        <button 
+                            onClick={handleOpenStatsModal}
+                            style={{ padding: '12px 20px', backgroundColor: '#8b5cf6', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(139, 92, 246, 0.2)' }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                            Toplayıcı Liderlik Tablosu
+                        </button>
+                    )}
                     {hasPerm('order_create') && (
                         <button 
                             onClick={() => {
@@ -595,7 +646,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                 <div style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                     <div style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Bekleyen / Hazırlanan</div>
                     <div style={{ fontSize: '24px', fontWeight: '800', color: '#0f172a', marginTop: '6px' }}>
-                        {orders.filter(o => ['Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Paketlendi'].includes(o.OrderStatus)).length}
+                        {orders.filter(o => ['Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Hazır', 'Paketleniyor', 'Paketlendi'].includes(o.OrderStatus)).length}
                     </div>
                 </div>
                 <div style={{ backgroundColor: 'white', padding: '18px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -616,9 +667,12 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {[
+                        { id: 'Tümü', label: 'Tümü' },
                         { id: 'Beklemede', label: 'Beklemede (Yeni)' },
                         { id: 'Onaylandı', label: 'Onaylandı' },
                         { id: 'Hazırlanıyor', label: 'Hazırlanıyor' },
+                        { id: 'Hazır', label: 'Toplandı (Hazır)' },
+                        { id: 'Paketleniyor', label: 'Paketleniyor' },
                         { id: 'Paketlendi', label: 'Paketlendi' },
                         { id: 'Kargoya Verildi', label: 'Kargoya Verildi' },
                         { id: 'Teslim Edildi', label: 'Teslim Edildi' },
@@ -671,6 +725,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '18%' }}>Müşteri Bilgisi</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '35%' }}>Sipariş Kalemleri (Ürünler)</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '15%' }}>Sevkiyat Adresi</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '10%' }}>Kargo Şirketi</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'right', width: '10%' }}>Toplam Tutar</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'center', width: '10%' }}>Durum</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'right' }}>İşlemler</th>
@@ -733,6 +788,9 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                         <td style={{ padding: '16px', fontSize: '13px', color: '#475569', wordBreak: 'break-word' }}>
                                             {order.ShippingAddress || '-'}
                                         </td>
+                                        <td style={{ padding: '16px', fontSize: '13px', color: '#0f172a', fontWeight: '600' }}>
+                                            {order.CargoCompanyName || <span style={{color: '#94a3b8', fontSize: '12px'}}>Seçilmedi</span>}
+                                        </td>
                                         <td style={{ padding: '16px', textAlign: 'right' }}>
                                             {parseFloat(order.DiscountAmount) > 0 && (
                                                 <div style={{ textDecoration: 'line-through', color: '#94a3b8', fontSize: '12px', marginBottom: '2px' }}>
@@ -770,13 +828,22 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                 {order.OrderStatus === 'Hazırlanıyor' && hasPerm('order_prepare') && (
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                                                         <button 
-                                                            onClick={(e) => { e.stopPropagation(); handleOpenPackingModal(order); }} 
-                                                            style={{ padding: '6px 14px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                                            title="Siparişi Paketle (Barkod Doğrulama)"
+                                                            onClick={(e) => { e.stopPropagation(); if(window.confirm('Siparişi toplamayı iptal edip havuzda Onaylandı durumuna geri çekmek istediğinize emin misiniz?')) handleUpdateStatus(order.Id, 'Onaylandı'); }} 
+                                                            style={{ padding: '6px 14px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                            title="Toplamayı iptal et ve siparişi genel havuza (Onaylandı) geri döndür"
                                                         >
-                                                            Paketlemeye Başla
+                                                            Toplamayı İptal Et
                                                         </button>
                                                     </div>
+                                                )}
+                                                {order.OrderStatus === 'Hazır' && hasPerm('order_ship') && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleOpenPackingModal(order); }} 
+                                                        style={{ padding: '6px 14px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                        title="Siparişi Paketle (Barkod Doğrulama)"
+                                                    >
+                                                        Paketlemeye Başla
+                                                    </button>
                                                 )}
                                                 {order.OrderStatus === 'Paketlendi' && hasPerm('order_ship') && (
                                                     <>
@@ -838,15 +905,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                         İptal Et
                                                     </button>
                                                 )}
-                                                {hasPerm('order_delete') && order.OrderStatus !== 'Onaylandı' && (
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleDeleteOrder(order.Id, order.OrderNumber); }} 
-                                                        style={{ padding: '5px 10px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fca5a5', borderRadius: '6px', fontSize: '12px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                        title="Siparişi Kalıcı Olarak Sil"
-                                                    >
-                                                        Siparişi Sil
-                                                    </button>
-                                                )}
+
                                             </div>
                                         </td>
                                     </tr>
@@ -911,6 +970,20 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                         placeholder="Örn: Organize Sanayi Bölgesi 2. Cadde..."
                                         style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', color: '#0f172a' }}
                                     />
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Kargo Şirketi *</label>
+                                    <select
+                                        value={selectedShipperId}
+                                        onChange={e => setSelectedShipperId(e.target.value)}
+                                        required
+                                        style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', color: '#0f172a', backgroundColor: 'white' }}
+                                    >
+                                        <option value="">-- Kargo Seçiniz --</option>
+                                        {shippers.map(s => (
+                                            <option key={s.Id} value={s.Id}>{s.CompanyName}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div style={{ gridColumn: '1 / -1' }}>
                                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Ödeme Şekli</label>
@@ -1014,8 +1087,11 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                                                             }
                                                                         }
                                                                         
+                                                                        const pIdStr = String(p.Id || p.id);
+                                                                        const isSelectedElsewhere = orderItems.some((oi, oiIdx) => oiIdx !== index && String(oi.productId) === pIdStr);
+                                                                        
                                                                         return (
-                                                                            <option key={p.Id || p.id} value={p.Id || p.id}>
+                                                                            <option key={p.Id || p.id} value={p.Id || p.id} disabled={isSelectedElsewhere}>
                                                                                 {p.ProductName || p.name} {barcodeStr ? `(${barcodeStr})` : ''} | Stokta: {s} Adet
                                                                             </option>
                                                                         );
@@ -1255,15 +1331,49 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
             {/* Kargo Etiketi Yazdırma Modalı */}
             {isLabelModalOpen && selectedOrderForLabel && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }}>
-                    <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '400px', padding: '30px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', textAlign: 'center' }}>
-                        <div style={{ border: '2px dashed #cbd5e1', padding: '20px', borderRadius: '12px', marginBottom: '20px' }}>
-                            <h2 style={{ margin: '0 0 10px 0', fontSize: '22px', fontWeight: '900', color: '#0f172a' }}>KARGO ETİKETİ</h2>
-                            <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#475569', fontWeight: 'bold' }}>{selectedOrderForLabel.CustomerName}</p>
-                            <p style={{ margin: '0 0 20px 0', fontSize: '13px', color: '#64748b' }}>{selectedOrderForLabel.ShippingAddress || 'Adres Belirtilmemiş'}</p>
+                    <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', padding: '30px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', textAlign: 'center' }}>
+                        <div style={{ border: '2px dashed #cbd5e1', padding: '20px', borderRadius: '12px', marginBottom: '20px', position: 'relative' }}>
+                            <h2 style={{ margin: '0 0 16px 0', fontSize: '22px', fontWeight: '900', color: '#0f172a', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>KARGO ETİKETİ</h2>
                             
-                            <div style={{ display: 'inline-block', padding: '10px 20px', backgroundColor: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px' }}>
-                                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Kargo Takip No</span>
-                                <strong style={{ fontSize: '18px', color: '#0f172a', letterSpacing: '1px' }}>{selectedOrderForLabel.TrackingNumber}</strong>
+                            <div style={{ position: 'absolute', top: '15px', right: '15px', padding: '4px', backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <QRCodeSVG 
+                                    value={`Sipariş No: ${selectedOrderForLabel.OrderNumber}\nMüşteri: ${selectedOrderForLabel.CustomerName}\n\nÜrünler:\n${selectedOrderForLabel.items?.map(i => `${parseInt(i.Quantity)}x ${i.ProductName}`).join('\n') || 'Ürün bilgisi yok'}`} 
+                                    size={80} 
+                                    level="L"
+                                />
+                            </div>
+                            
+                            <div style={{ textAlign: 'left', marginBottom: '20px', padding: '0 10px', paddingRight: '100px' }}>
+                                <p style={{ margin: '0 0 8px 0', fontSize: '15px', color: '#0f172a', fontWeight: '800' }}>{selectedOrderForLabel.CustomerName}</p>
+                                <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#475569' }}>
+                                    <strong style={{color:'#64748b'}}>Adres:</strong> {selectedOrderForLabel.ShippingAddress || 'Adres Belirtilmemiş'}
+                                </p>
+                                {selectedOrderForLabel.customers?.Phone && (
+                                    <p style={{ margin: '0 0 4px 0', fontSize: '13px', color: '#475569' }}>
+                                        <strong style={{color:'#64748b'}}>Tel:</strong> {selectedOrderForLabel.customers.Phone}
+                                    </p>
+                                )}
+                                {selectedOrderForLabel.customers?.Email && (
+                                    <p style={{ margin: '0 0 0 0', fontSize: '13px', color: '#475569' }}>
+                                        <strong style={{color:'#64748b'}}>E-Posta:</strong> {selectedOrderForLabel.customers.Email}
+                                    </p>
+                                )}
+                            </div>
+                            
+                            <div style={{ display: 'inline-block', width: '100%', padding: '15px 10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                                <span style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '8px', fontWeight: '600' }}>Kargo Barkodu</span>
+                                {selectedOrderForLabel.CargoBarcode ? (
+                                    <Barcode 
+                                        value={selectedOrderForLabel.CargoBarcode} 
+                                        format="CODE128" 
+                                        width={2} 
+                                        height={60} 
+                                        displayValue={true} 
+                                        fontSize={16}
+                                    />
+                                ) : (
+                                    <strong style={{ fontSize: '18px', color: '#ef4444', letterSpacing: '1px' }}>Barkod Bulunamadı</strong>
+                                )}
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
@@ -1369,7 +1479,33 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                                             </span>
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Ödeme Şekli:</div>
+                                            
+                                          <div style={{ gridColumn: '1 / -1', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
+                                              <div style={{ fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>İşlem Geçmişi</div>
+                                              
+                                              {selectedOrderDetail.PickerName && (
+                                                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                      <span style={{ fontSize: '12px', color: '#64748b' }}>Toplayan: <b>{selectedOrderDetail.PickerName}</b></span>
+                                                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{selectedOrderDetail.PickedDate ? new Date(selectedOrderDetail.PickedDate).toLocaleString('tr-TR') : '-'}</span>
+                                                  </div>
+                                              )}
+                                              {selectedOrderDetail.PackerName && (
+                                                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                      <span style={{ fontSize: '12px', color: '#64748b' }}>Paketleyen: <b>{selectedOrderDetail.PackerName}</b></span>
+                                                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{selectedOrderDetail.PackedDate ? new Date(selectedOrderDetail.PackedDate).toLocaleString('tr-TR') : '-'}</span>
+                                                  </div>
+                                              )}
+                                              {selectedOrderDetail.ShipUserName && (
+                                                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                      <span style={{ fontSize: '12px', color: '#64748b' }}>Kargoya Veren: <b>{selectedOrderDetail.ShipUserName}</b></span>
+                                                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>{selectedOrderDetail.ShippedDate ? new Date(selectedOrderDetail.ShippedDate).toLocaleString('tr-TR') : '-'}</span>
+                                                  </div>
+                                              )}
+                                              {!selectedOrderDetail.PickerName && !selectedOrderDetail.PackerName && !selectedOrderDetail.ShipUserName && (
+                                                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Henüz işlem yapılmamış.</span>
+                                              )}
+                                          </div>
+<div style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '600', marginBottom: '2px' }}>Ödeme Şekli:</div>
                                             <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{selectedOrderDetail.PaymentMethod || 'Belirtilmedi'}</div>
                                         </div>
                                         <div>
@@ -1456,6 +1592,45 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede' })
                             >
                                 Kapat
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* İSTATİSTİKLER (LİDERLİK) MODALI */}
+            {isStatsModalOpen && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1200, padding: '20px' }} onClick={() => setIsStatsModalOpen(false)}>
+                    <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: '16px 16px 0 0' }}>
+                            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>🏆 Günlük Toplayıcı Liderlik Tablosu</h2>
+                            <button onClick={() => setIsStatsModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
+                        </div>
+                        
+                        <div style={{ padding: '24px' }}>
+                            {statsLoading ? (
+                                <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>Yükleniyor...</div>
+                            ) : statsData.length === 0 ? (
+                                <div style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>
+                                    Bugün henüz sipariş toplanmamış.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {statsData.map((stat, idx) => (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: idx === 0 ? '#fef3c7' : idx === 1 ? '#f1f5f9' : idx === 2 ? '#ffedd5' : '#e2e8f0', color: idx === 0 ? '#b45309' : idx === 1 ? '#475569' : idx === 2 ? '#9a3412' : '#64748b', display: 'flex', justifyContent: 'center', alignItems: 'center', fontWeight: '800', fontSize: '18px', marginRight: '16px' }}>
+                                                {idx + 1}
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>{stat.UserName}</div>
+                                                <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                                                    <span style={{ backgroundColor: '#e0e7ff', color: '#4f46e5', padding: '2px 8px', borderRadius: '12px', fontWeight: '600', marginRight: '8px' }}>📦 {stat.TotalOrdersPicked} Sipariş</span>
+                                                    <span style={{ backgroundColor: '#dcfce3', color: '#166534', padding: '2px 8px', borderRadius: '12px', fontWeight: '600' }}>🛒 {stat.TotalProductsPicked} Ürün</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

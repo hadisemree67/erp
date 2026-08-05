@@ -2,8 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Use 192.168.10.108 for physical device on same WiFi or ngrok URL
-const API_URL = 'https://glandular-synergy-erasure.ngrok-free.dev/api';
+// Use 192.168.10.144 for physical device on same WiFi or ngrok URL
+const API_URL = 'http://192.168.10.144:3000/api';
 
 const api = axios.create({
     baseURL: API_URL,

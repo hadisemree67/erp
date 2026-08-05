@@ -41,6 +41,7 @@ import InventoryList from './components/WMS/InventoryList';
 import WhatsAppApprovals from './components/WMS/WhatsAppApprovals';
 import WarehouseList from './components/Warehouses/WarehouseList';
 import WarehouseForm from './components/Warehouses/WarehouseForm';
+import PickingCarts from './components/Warehouses/PickingCarts';
 import WarehouseTransfer from './components/WMS/WarehouseTransfer';
 import WarehouseAcceptance from './components/WMS/WarehouseAcceptance';
 import WarehouseLayout from './components/Warehouses/WarehouseLayout';
@@ -297,6 +298,7 @@ function App() {
           
           {currentView === 'depo-listesi' && <WarehouseList onNavigate={setCurrentView} onEdit={setSelectedWarehouse} />}
           {currentView === 'depo-ekle' && <WarehouseForm onNavigate={setCurrentView} warehouse={selectedWarehouse} />}
+          {currentView === 'tasima-arabalari' && <PickingCarts currentUser={currentUser} />}
           {currentView === 'depo-transfer' && <WarehouseTransfer currentUser={currentUser} />}
           {currentView === 'depo-kabulleri' && <WarehouseAcceptance currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'mal-kabul' && <GoodsReceipt currentUser={currentUser} onNavigate={setCurrentView} />}
@@ -320,6 +322,7 @@ function App() {
           {currentView === 'gelir-gider' && <FinanceAccounts onNavigate={setCurrentView} />}
           {(currentView === 'musteri-listesi' || currentView === 'b2b-b2c-cari') && <CustomerList currentUser={currentUser} onNavigate={setCurrentView} onEdit={setSelectedCustomer} />}
           {currentView === 'musteri-ekle' && <CustomerForm currentUser={currentUser} customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onNavigate={setCurrentView} />}
+          {currentView === 'musteri-siparisleri' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="tumu" customerId={selectedCustomer?.Id} />}
           {currentView === 'aktif-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="aktif" />}
           {currentView === 'gecmis-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="gecmis" />}
           {currentView === 'kutu-tanim' && <PackagingBoxes />}

@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: products.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Ürün ve Katalog Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemdeki tüm ürünlerin, kategorilerin, markaların ve ürün varyantlarının listelenmesi, yeni ürün eklenmesi, düzenlenmesi ve toplu güncellenmesi işlemlerini yürüten API uç noktalarıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Veritabanı Sorguları (SQL), Veri Doğrulama (Validation)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki ProductList, ProductForm ve BulkEditModal bileşenlerine veri hizmeti sunar.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, sistemdeki ürünlerin, kategorilerin, markaların listelenmesi, 
@@ -23,6 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const authMiddleware = require('../middleware/auth');
 const { logActivity } = require('../utils/logger');
 const multer = require('multer');
 const path = require('path');
@@ -61,16 +46,16 @@ const parseStackable = (val, defaultVal = 0) => {
 
 // GET: Tüm ürünleri getir
 // Bu uç nokta, sistemdeki tüm ürünleri (hammadde, mamul vb.) listelemek için kullanılır.
-router.get('/', async (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
         // Ürünleri çekerken, WMS (Depo) sistemindeki raf stoklarını (wms_stock_balances) topluyoruz.
         // Eğer ürünün WMS'te hiçbir hareketi yoksa (yeni eklenmişse), 'COALESCE' kullanarak
         // ürün eklerken girilen başlangıç stoğunu (p.StockQuantity) baz alıyoruz.
         const [rows] = await db.query('SELECT p.*, COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), p.StockQuantity) AS StockQuantity FROM products p ORDER BY p.Id DESC');
-        
+
         // Ürünlere ait tedarikçi bilgilerini (ürünü kimden alıyoruz) çekiyoruz.
         const [suppliers] = await db.query('SELECT ps.*, s.SupplierName FROM product_suppliers ps LEFT JOIN suppliers s ON ps.supplier_id = s.Id');
-        
+
         // Çektiğimiz tedarikçileri, ilgili ürünlerin altına bir dizi (array) olarak eşleştirip ekliyoruz.
         // Aynı zamanda raf/depo konumlarını da ekliyoruz.
         const [locations] = await db.query(`
@@ -97,17 +82,17 @@ router.get('/', async (req, res) => {
 // POST: Yeni ürün ekle
 // Bu uç nokta, yeni bir ürün oluşturmak ve aynı anda birden fazla tedarikçi atamak için kullanılır.
 // "upload.any()" kullanılarak multer üzerinden form-data içindeki resim ve pdf (sözleşme) dosyaları yakalanır.
-router.post('/', upload.any(), async (req, res) => {
+router.post('/', authMiddleware, upload.any(), async (req, res) => {
     const { Barcode, ProductName, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type } = req.body;
-    
+
     let parsedBarcodes = [];
-    try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch(e) { console.warn('JSON Parse Error (Barcode):', e.message); }
+    try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode):', e.message); }
     if (!Array.isArray(parsedBarcodes)) parsedBarcodes = Barcode ? [Barcode] : [];
-    
+
     let parsedExistingImages = [];
-    try { if (existingImages) parsedExistingImages = JSON.parse(existingImages); } catch(e) { console.warn('JSON Parse Error (existingImages):', e.message); }
+    try { if (existingImages) parsedExistingImages = JSON.parse(existingImages); } catch (e) { console.warn('JSON Parse Error (existingImages):', e.message); }
     if (!Array.isArray(parsedExistingImages)) parsedExistingImages = existingImages ? [existingImages] : [];
-    
+
     const imagesFiles = req.files ? req.files.filter(f => f.fieldname === 'images') : [];
     const newFiles = imagesFiles.map(f => `/uploads/${f.filename}`);
     const finalImagesArray = [...parsedExistingImages.filter(Boolean), ...newFiles];
@@ -115,7 +100,7 @@ router.post('/', upload.any(), async (req, res) => {
     const finalBarcodeString = JSON.stringify(parsedBarcodes.filter(Boolean));
 
     let parsedSuppliers = [];
-    try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch(e) { console.warn('JSON Parse Error (suppliers):', e.message); }
+    try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch (e) { console.warn('JSON Parse Error (suppliers):', e.message); }
     if (!Array.isArray(parsedSuppliers)) parsedSuppliers = [];
 
     try {
@@ -138,7 +123,7 @@ router.post('/', upload.any(), async (req, res) => {
         const depthVal = safeFloat(Depth, 0);
         const diameterVal = safeFloat(Diameter, 0);
         const weightVal = safeFloat(Weight, 0);
-        
+
         let volumeVal = 0;
         if (diameterVal > 0 && widthVal === 0 && depthVal === 0) {
             // Silindirik Hacim = pi * r^2 * h
@@ -157,7 +142,7 @@ router.post('/', upload.any(), async (req, res) => {
             (Barcode, ProductName, Brand, Category, unit_type, package_capacity, package_name, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit, critical_stock_level, minimum_production_quantity, supplier_id, shelf_life_months, supply_type) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        
+
         const values = [
             finalBarcodeString,
             ProductName || '',
@@ -213,7 +198,7 @@ router.post('/', upload.any(), async (req, res) => {
             `, [productId, supplier.supplier_id, contractFilePath, supplier.contract_start_date || null, supplier.contract_end_date || null, i === 0, safeFloat(supplier.unit_price, 0), safeInt(supplier.lead_time_days, 0)]);
         }
 
-        await logActivity(req.headers['x-user-id'] || '', 'INSERT', 'products', productId, `"${ProductName}" adlı yeni ürün ekledi.`);
+        await logActivity(req.user?.id, 'INSERT', 'products', productId, `"${ProductName}" adlı yeni ürün ekledi.`);
         await db.query('COMMIT');
         res.status(201).json({ success: true, message: 'Ürün başarıyla eklendi.', productId });
 
@@ -225,9 +210,9 @@ router.post('/', upload.any(), async (req, res) => {
 });
 
 // PUT: Toplu ürün düzenle
-router.put('/bulk-edit', async (req, res) => {
-    const { ids, updates } = req.body; 
-    
+router.put('/bulk-edit', authMiddleware, async (req, res) => {
+    const { ids, updates } = req.body;
+
     let finalUpdates = updates;
     if (!finalUpdates && req.body.field) {
         finalUpdates = [{ field: req.body.field, type: req.body.type, value: req.body.value }];
@@ -242,12 +227,12 @@ router.put('/bulk-edit', async (req, res) => {
 
     try {
         await db.query('START TRANSACTION');
-        
+
         for (const id of ids) {
             const [oldRows] = await db.query('SELECT * FROM products WHERE Id = ?', [id]);
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
-            
+
             for (const update of finalUpdates) {
                 const { field, type, value } = update;
                 if (!['SalePrice', 'PurchasePrice', 'Category', 'Brand', 'is_stackable', 'max_stack_limit', 'critical_stock_level'].includes(field)) continue;
@@ -282,7 +267,7 @@ router.put('/bulk-edit', async (req, res) => {
             }
         }
 
-        await logActivity(req.headers['x-user-id'] || '', 'UPDATE', 'products', 0, `${ids.length} adet üründe toplu güncelleme yapıldı: ${field} alanı (${type || 'giriş'}: ${value}) olarak değiştirildi.`);
+        await logActivity(req.user?.id, 'UPDATE', 'products', 0, `${ids.length} adet üründe toplu güncelleme yapıldı.`);
         await db.query('COMMIT');
         res.json({ success: true, message: 'Seçili ürünler başarıyla güncellendi.' });
 
@@ -294,18 +279,18 @@ router.put('/bulk-edit', async (req, res) => {
 });
 
 // PUT: Ürün güncelle
-router.put('/:id', upload.any(), async (req, res) => {
+router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
     const { id } = req.params;
     const { Barcode, ProductName, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type } = req.body;
 
     let parsedBarcodes = [];
-    try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch(e) { console.warn('JSON Parse Error (Barcode update):', e.message); }
+    try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode update):', e.message); }
     if (!Array.isArray(parsedBarcodes)) parsedBarcodes = Barcode ? [Barcode] : [];
-    
+
     let parsedExistingImages = [];
-    try { if (existingImages) parsedExistingImages = JSON.parse(existingImages); } catch(e) { console.warn('JSON Parse Error (existingImages update):', e.message); }
+    try { if (existingImages) parsedExistingImages = JSON.parse(existingImages); } catch (e) { console.warn('JSON Parse Error (existingImages update):', e.message); }
     if (!Array.isArray(parsedExistingImages)) parsedExistingImages = existingImages ? [existingImages] : [];
-    
+
     const imagesFiles = req.files ? req.files.filter(f => f.fieldname === 'images') : [];
     const newFiles = imagesFiles.map(f => `/uploads/${f.filename}`);
     const finalImagesArray = [...parsedExistingImages.filter(Boolean), ...newFiles];
@@ -313,7 +298,7 @@ router.put('/:id', upload.any(), async (req, res) => {
     const finalBarcodeString = JSON.stringify(parsedBarcodes.filter(Boolean));
 
     let parsedSuppliers = [];
-    try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch(e) { console.warn('JSON Parse Error (suppliers update):', e.message); }
+    try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch (e) { console.warn('JSON Parse Error (suppliers update):', e.message); }
     if (!Array.isArray(parsedSuppliers)) parsedSuppliers = [];
 
     try {
@@ -342,7 +327,7 @@ router.put('/:id', upload.any(), async (req, res) => {
         const depthVal = req.body.Depth !== undefined ? safeFloat(req.body.Depth, 0) : safeFloat(oldData.Depth, 0);
         const diameterVal = req.body.Diameter !== undefined ? safeFloat(req.body.Diameter, 0) : safeFloat(oldData.Diameter, 0);
         const weightVal = req.body.Weight !== undefined ? safeFloat(req.body.Weight, 0) : safeFloat(oldData.Weight, 0);
-        
+
         let volumeVal = 0;
         if (diameterVal > 0 && widthVal === 0 && depthVal === 0) {
             const radius = diameterVal / 2;
@@ -401,7 +386,7 @@ router.put('/:id', upload.any(), async (req, res) => {
         if (req.body.suppliers !== undefined) {
             const [oldSuppliersRows] = await db.query('SELECT supplier_id, unit_price, lead_time_days FROM product_suppliers WHERE product_id = ? ORDER BY supplier_id', [id]);
             const oldSuppliersSimple = oldSuppliersRows.map(s => ({ id: Number(s.supplier_id), price: Number(s.unit_price || 0), time: Number(s.lead_time_days || 0) }));
-            const newSuppliersSimple = parsedSuppliers.filter(s => s && s.supplier_id).map(s => ({ id: Number(s.supplier_id), price: Number(s.unit_price || 0), time: Number(s.lead_time_days || 0) })).sort((a,b) => a.id - b.id);
+            const newSuppliersSimple = parsedSuppliers.filter(s => s && s.supplier_id).map(s => ({ id: Number(s.supplier_id), price: Number(s.unit_price || 0), time: Number(s.lead_time_days || 0) })).sort((a, b) => a.id - b.id);
             if (JSON.stringify(oldSuppliersSimple) !== JSON.stringify(newSuppliersSimple)) {
                 suppliersChanged = true;
             }
@@ -492,7 +477,7 @@ router.put('/:id', upload.any(), async (req, res) => {
                     const objOld = typeof oldVal === 'string' ? JSON.parse(oldVal) : oldVal;
                     const objNew = typeof newVal === 'string' ? JSON.parse(newVal) : newVal;
                     if (JSON.stringify(objOld || []) === JSON.stringify(objNew || [])) continue;
-                } catch(e) { console.warn('JSON Parse Error (images/barcodes fetch):', e.message); }
+                } catch (e) { console.warn('JSON Parse Error (images/barcodes fetch):', e.message); }
                 changes.push(`${label} güncellendi`);
                 continue;
             }
@@ -515,7 +500,7 @@ router.put('/:id', upload.any(), async (req, res) => {
                 if (JSON.stringify(oldBarcodes) !== JSON.stringify(newBarcodes)) {
                     changes.push(`Barkodlar güncellendi`);
                 }
-            } catch(e) {
+            } catch (e) {
                 if (finalBarcodeString !== oldData.Barcode) changes.push(`Barkodlar güncellendi`);
             }
         }
@@ -526,7 +511,7 @@ router.put('/:id', upload.any(), async (req, res) => {
                 if (JSON.stringify(oldImg) !== JSON.stringify(newImg)) {
                     changes.push(`Resimler güncellendi`);
                 }
-            } catch(e) {
+            } catch (e) {
                 if (finalImagePath !== oldData.ImagePath) changes.push(`Resimler güncellendi`);
             }
         }
@@ -539,7 +524,7 @@ router.put('/:id', upload.any(), async (req, res) => {
             logDetailMsg = `"${ProductName || oldData.ProductName}" adlı üründe yapılan değişiklikler: ${changes.join(', ')}.`;
         }
 
-        await logActivity(req.headers['x-user-id'] || '', 'UPDATE', 'products', id, logDetailMsg, oldData);
+        await logActivity(req.user?.id, 'UPDATE', 'products', id, logDetailMsg, oldData);
         await db.query('COMMIT');
         res.json({ success: true, message: 'Ürün başarıyla güncellendi.' });
 
@@ -551,20 +536,20 @@ router.put('/:id', upload.any(), async (req, res) => {
 });
 
 
-router.delete('/bulk', async (req, res) => {
+router.delete('/bulk', authMiddleware, async (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'Silinecek ürün seçilmedi.' });
     }
-    
+
     try {
         await db.query('START TRANSACTION');
-        
+
         for (const id of ids) {
             const [oldRows] = await db.query('SELECT * FROM products WHERE Id = ?', [id]);
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
-            
+
             // İlişkili kayıtları sil (Stoklar, Siparişler, Hareketler vb.)
             await db.query('DELETE FROM orderitems WHERE ProductId = ?', [id]);
             await db.query('DELETE FROM product_barcodes WHERE product_id = ?', [id]);
@@ -574,9 +559,9 @@ router.delete('/bulk', async (req, res) => {
             await db.query('DELETE FROM wms_stock_balances WHERE product_id = ?', [id]);
 
             await db.query('DELETE FROM products WHERE Id = ?', [id]);
-            await logActivity(req.headers['x-user-id'], 'DELETE', 'products', id, `"${oldData.ProductName}" adlı ürünü toplu silme ile sildi.`, oldData);
+            await logActivity(req.user?.id, 'DELETE', 'products', id, `"${oldData.ProductName}" adlı ürünü toplu silme ile sildi.`, oldData);
         }
-        
+
         await db.query('COMMIT');
         res.json({ success: true, message: `${ids.length} adet ürün başarıyla silindi.` });
     } catch (error) {
@@ -587,7 +572,7 @@ router.delete('/bulk', async (req, res) => {
 });
 
 // DELETE: Ürünü sil
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -608,7 +593,7 @@ router.delete('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Silinecek ürün bulunamadı.' });
         }
 
-        await logActivity(req.headers['x-user-id'], 'DELETE', 'products', id, `"${oldData ? oldData.ProductName : 'Bilinmeyen'}" adlı ürünü sildi.`, oldData);
+        await logActivity(req.user?.id, 'DELETE', 'products', id, `"${oldData ? oldData.ProductName : 'Bilinmeyen'}" adlı ürünü sildi.`, oldData);
 
         res.json({ success: true, message: 'Ürün başarıyla silindi.' });
 

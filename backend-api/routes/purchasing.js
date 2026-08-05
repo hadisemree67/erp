@@ -1,19 +1,3 @@
-/**
- * ============================================================================
- * DOSYA ADI: purchasing.js
- * MODÜL / KATMAN: Arkayüz Rotası (API Route) - Satınalma Yönetimi
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Satınalma talepleri, tedarikçilere verilen siparişler (Purchase Orders), sipariş onay süreçleri ve gelen malzemelerin tedarik takibini yapan API uç noktalarını içerir.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Express.js Router, Veritabanı İşlemleri, Sipariş Durum Yönetimi
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Önyüzdeki PurchaseOrders ve PurchaseRequests bileşenleri ile entegre çalışarak tedarik zincirini yönetir.
- * ============================================================================
- */
-
 /*
  * ÖZET:
  * Bu modül, satınalma talepleri, tedarikçi siparişleri, sipariş onay süreçleri 
@@ -24,10 +8,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const nodemailer = require('nodemailer');
+const authMiddleware = require('../middleware/auth');
 const crypto = require('crypto');
+const { logActivity } = require('../utils/logger');
 
 // GET /api/purchasing/requests - Tüm satın alma taleplerini listele
-router.get('/requests', async (req, res) => {
+router.get('/requests', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT pr.*, u.name as employee_name, s.SupplierName as supplier_name, s.Email as supplier_email
@@ -44,7 +30,7 @@ router.get('/requests', async (req, res) => {
 });
 
 // POST /api/purchasing/requests - Yeni bir satın alma talebi oluştur
-router.post('/requests', async (req, res) => {
+router.post('/requests', authMiddleware, async (req, res) => {
     const { employee_id, product_name, quantity, description, supplier_id } = req.body;
 
     if (!product_name || !quantity) {
@@ -57,6 +43,7 @@ router.post('/requests', async (req, res) => {
             VALUES (?, ?, ?, ?, 'Bekliyor', ?)
         `, [employee_id || null, product_name, quantity, description || '', supplier_id || null]);
         
+        await logActivity(req.user?.id, 'INSERT', 'purchase_requests', result.insertId, `Yeni satın alma talebi oluşturuldu: ${product_name} (${quantity} Adet)`);
         res.json({ success: true, message: 'Satın alma talebi oluşturuldu.', id: result.insertId });
     } catch (err) {
         console.error('Error creating purchase request:', err);
@@ -65,7 +52,7 @@ router.post('/requests', async (req, res) => {
 });
 
 // PUT /api/purchasing/requests/:id/status - Talep durumunu güncelle
-router.put('/requests/:id/status', async (req, res) => {
+router.put('/requests/:id/status', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body; // 'Bekliyor', 'Onaylandı', 'Reddedildi'
 
@@ -84,6 +71,7 @@ router.put('/requests/:id/status', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Talep bulunamadı.' });
         }
 
+        await logActivity(req.user?.id, 'UPDATE', 'purchase_requests', id, `Satın alma talebi durumu güncellendi: ${status}`);
         res.json({ success: true, message: 'Durum güncellendi.' });
     } catch (err) {
         console.error('Error updating purchase request status:', err);
@@ -92,7 +80,7 @@ router.put('/requests/:id/status', async (req, res) => {
 });
 
 // POST /api/purchasing/requests/:id/send-order - E-posta gönder ve satın alma siparişi oluştur
-router.post('/requests/:id/send-order', async (req, res) => {
+router.post('/requests/:id/send-order', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { quantity, description, supplier_id, supplier_email, product_name } = req.body;
 
@@ -103,10 +91,10 @@ router.post('/requests/:id/send-order', async (req, res) => {
     try {
         // Generate secure token
         const actionToken = crypto.randomBytes(32).toString('hex');
-        
+
         // Base URL for actions
         const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-        
+
         // Action URLs
         const onaylaUrl = `${baseUrl}/api/purchasing/orders/action?token=${actionToken}&status=Hazırlanıyor`;
         const hazirlandiUrl = `${baseUrl}/api/purchasing/orders/action?token=${actionToken}&status=Hazırlandı`;
@@ -171,6 +159,7 @@ router.post('/requests/:id/send-order', async (req, res) => {
             VALUES (?, ?, ?, 0, 0, 'Bekliyor', ?)
         `, [supplier_id, product_name, quantity, actionToken]);
 
+        await logActivity(req.user?.id, 'INSERT', 'purchase_orders', id, `${product_name} ürünü için satın alma siparişi tedarikçiye mail ile gönderildi.`);
         res.json({ success: true, message: 'Mail başarıyla gönderildi ve sipariş oluşturuldu.' });
 
     } catch (err) {
@@ -226,10 +215,11 @@ router.get('/orders/action', async (req, res) => {
 });
 
 // GET /api/purchasing/orders - Tüm satın alma siparişlerini listele
-router.get('/orders', async (req, res) => {
+router.get('/orders', authMiddleware, async (req, res) => {
     try {
         const [rows] = await db.query(`
-            SELECT po.*, s.SupplierName as supplier_name, s.Email as supplier_email, s.Phone as supplier_phone, s.Address as supplier_address, s.ContactPerson as supplier_contact, p.shelf_life_months as shelf_life_months, p.Id as product_id, p.PurchasePrice as product_price, p.unit_type as unit_type
+            SELECT po.*, s.SupplierName as supplier_name, s.Email as supplier_email, s.Phone as supplier_phone, s.Address as supplier_address, s.ContactPerson as supplier_contact, p.shelf_life_months as shelf_life_months, p.Id as product_id, p.PurchasePrice as product_price, p.unit_type as unit_type,
+            (SELECT unit_price FROM product_suppliers WHERE product_id = p.Id AND supplier_id = po.supplier_id LIMIT 1) as supplier_unit_price
             FROM purchase_orders po
             LEFT JOIN suppliers s ON po.supplier_id = s.Id
             LEFT JOIN products p ON po.product_name = p.ProductName
@@ -243,9 +233,9 @@ router.get('/orders', async (req, res) => {
 });
 
 // PUT /api/purchasing/orders/:id/status - Sipariş durumunu güncelle
-router.put('/orders/:id/status', async (req, res) => {
+router.put('/orders/:id/status', authMiddleware, async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body; 
+    const { status } = req.body;
 
     if (!['Bekliyor', 'Onaylandı', 'Hazırlanıyor', 'Hazırlandı', 'Kargoya Verildi', 'Depo Kabul Bekliyor', 'Depoya Alındı', 'İptal', 'Teslim Edildi'].includes(status)) {
         return res.status(400).json({ success: false, message: 'Geçersiz durum.' });
@@ -262,6 +252,7 @@ router.put('/orders/:id/status', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Sipariş bulunamadı.' });
         }
 
+        await logActivity(req.user?.id, 'UPDATE', 'purchase_orders', id, `Satın alma siparişi durumu güncellendi: ${status}`);
         res.json({ success: true, message: 'Durum güncellendi.' });
     } catch (err) {
         console.error('Error updating purchase order status:', err);
@@ -270,7 +261,7 @@ router.put('/orders/:id/status', async (req, res) => {
 });
 
 // POST /api/purchasing/orders/:id/receive - Depoya mal kabul işlemini gerçekleştir
-router.post('/orders/:id/receive', async (req, res) => {
+router.post('/orders/:id/receive', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { quantity, shelfAllocations, location_id, warehouse_id, shelf_code, batch_number, expiration_date, user_id } = req.body;
 
@@ -286,10 +277,10 @@ router.post('/orders/:id/receive', async (req, res) => {
         await db.query('BEGIN'); // Start transaction
 
         // 1. Get the purchase order
-        const [orders] = await db.query('SELECT * FROM purchase_orders WHERE id = ? AND status = "Depo Kabul Bekliyor"', [id]);
+        const [orders] = await db.query('SELECT * FROM purchase_orders WHERE id = ? AND status != "İptal"', [id]);
         if (orders.length === 0) {
             await db.query('ROLLBACK');
-            return res.status(404).json({ success: false, message: 'Geçerli sipariş bulunamadı veya onay bekleyen durumda değil.' });
+            return res.status(404).json({ success: false, message: 'Geçerli sipariş bulunamadı veya iptal edilmiş.' });
         }
         const order = orders[0];
 
@@ -404,7 +395,7 @@ router.post('/orders/:id/receive', async (req, res) => {
                 if (supRows.length > 0) supplierName = supRows[0].SupplierName;
             }
             const desc = `${order.product_name} ürünü için ${supplierName} adlı tedarikçiden ${totalReceived} adet mal kabul yapıldı.`;
-            
+
             await db.query(`
                 INSERT INTO finance_transactions 
                 (type, amount, category, description, transaction_date) 
@@ -413,6 +404,7 @@ router.post('/orders/:id/receive', async (req, res) => {
         }
 
         await db.query('COMMIT'); // Commit transaction
+        await logActivity(req.user?.id, 'UPDATE', 'purchase_orders', id, `${totalReceived} adet ${order.product_name} için depo mal kabulü yapıldı.`);
         res.json({ success: true, message: isCompleted ? 'Mal kabul başarıyla yapıldı ve sipariş tamamlandı.' : `Kısmi mal kabul yapıldı (${newTotalReceived}/${totalOrderQty} Adet alındı). Kalan ürünler mal kabul bekliyor.` });
 
     } catch (err) {

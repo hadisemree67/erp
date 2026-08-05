@@ -7,9 +7,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const authMiddleware = require('../middleware/auth');
 
 // GET: Genel Raporlar ve Depo Doluluk Oranları
-router.get('/summary', async (req, res) => {
+router.get('/summary', authMiddleware, async (req, res) => {
     try {
         // 1. Depolar ve Raflar
         const [warehouses] = await db.query('SELECT * FROM warehouses ORDER BY name ASC');
@@ -132,7 +133,7 @@ router.get('/summary', async (req, res) => {
 
         // ÖZET SAYILAR
         const stats = {
-            totalProducts: allProducts.length,
+            totalProducts: allProducts.filter(p => p.Category !== 'Hammadde').length,
             totalStockQuantity: allProducts.reduce((sum, p) => sum + (parseFloat(p.StockQuantity) || 0), 0),
             totalInventoryValue: allProducts.reduce((sum, p) => sum + ((parseFloat(p.StockQuantity) || 0) * (parseFloat(p.PurchasePrice) || 0)), 0),
             totalWarehouses: warehouses.length,
@@ -155,7 +156,7 @@ router.get('/summary', async (req, res) => {
 });
 
 // GET: En Çok Satılan Ürünler (Dinamik Periyot)
-router.get('/top-selling', async (req, res) => {
+router.get('/top-selling', authMiddleware, async (req, res) => {
     try {
         const period = req.query.period || 'this_month';
         let dateCondition = "1=1";
