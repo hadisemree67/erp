@@ -1,16 +1,26 @@
+/**
+ * ============================================================================
+ * DOSYA ADI: BarcodePrintModal.jsx
+ * MODÜL / KATMAN: Önyüz Ortak Bileşen (Common Component) - Barkod Yazdırma
+ * 
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistem içerisindeki ürün, kutu veya sepet barkodlarının termal etiket
+ *   yazıcılarından veya normal yazıcılardan çıkarılması için kullanılan pop-up pencere.
+ * ============================================================================
+ */
 import React, { useState, useRef } from 'react';
 import Barcode from 'react-barcode';
 import { useReactToPrint } from 'react-to-print';
 
 const BarcodePrintModal = ({ isOpen, onClose, barcodeValue, title }) => {
-    // barcodeValue can be a string or an array of strings
+    // barcodeValue tek bir barkod stringi veya string dizisi olabilir
     const barcodesList = Array.isArray(barcodeValue) ? barcodeValue : (barcodeValue ? [barcodeValue] : []);
     
     const [copies, setCopies] = useState(1);
     const [selectedBarcode, setSelectedBarcode] = useState('');
     const printRef = useRef(null);
 
-    // Update selected barcode when modal opens or barcodeValue changes
+    // Modal açıldığında veya barkod değeri değiştiğinde seçili barkodu güncelle
     React.useEffect(() => {
         if (isOpen && barcodesList.length > 0) {
             setSelectedBarcode(barcodesList[0]);
@@ -24,10 +34,10 @@ const BarcodePrintModal = ({ isOpen, onClose, barcodeValue, title }) => {
 
     if (!isOpen) return null;
 
-    // A4 sheet usually holds many labels. But standard thermal label printers print one per page.
-    // We will render 'copies' number of barcode containers.
-    // CSS for printing: page-break-after: always; on each label if thermal printer is used.
-    // We will apply basic styling that works well with thermal barcode labels.
+    // A4 kağıtları çok sayıda etiket alabilir. Ancak standart termal etiket yazıcıları her sayfaya 1 etiket basar.
+    // 'copies' değeri kadar barkod kapsayıcısı render edeceğiz.
+    // Yazdırma CSS'i: Termal yazıcılar için her etikette "page-break-after: always;" kullanılır.
+    // Termal barkod etiketleri ile uyumlu çalışacak temel CSS stilleri uygulandı.
     
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
@@ -79,7 +89,7 @@ const BarcodePrintModal = ({ isOpen, onClose, barcodeValue, title }) => {
                 </div>
             </div>
 
-            {/* Gizli Yazdırma Alanı */}
+            {/* Gizli Yazdırma Alanı (Yazıcıya gönderilen kısım) */}
             <div style={{ display: 'none' }}>
                 <div ref={printRef}>
                     <style>

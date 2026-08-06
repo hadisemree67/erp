@@ -9,6 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Camera, CameraView } from 'expo-camera';
 import { Feather } from '@expo/vector-icons';
 import api from '../api/api';
+import { useIsFocused } from '@react-navigation/native';
 
 /**
  * ShippingScreen Bileşeni
@@ -16,6 +17,7 @@ import api from '../api/api';
  */
 export default function ShippingScreen({ navigation }) {
     const insets = useSafeAreaInsets();
+    const isFocused = useIsFocused();
     const [hasPermission, setHasPermission] = useState(null);
     const [scanned, setScanned] = useState(false);
     const [lastScanned, setLastScanned] = useState(null);
@@ -85,24 +87,27 @@ export default function ShippingScreen({ navigation }) {
                 <View style={{ width: 40 }} />
             </View>
 
-            <CameraView
-                style={styles.camera}
-                onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-                barcodeScannerSettings={{
-                    barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39'],
-                }}
-            >
-                <View style={styles.overlay}>
-                    <View style={styles.scanBox} />
-                    <Text style={styles.scanText}>Paketin kargo barkodunu okutun</Text>
-                    
-                    {lastScanned && (
-                        <View style={[styles.resultBox, { backgroundColor: lastScanned.success ? '#10b981' : '#ef4444' }]}>
-                            <Text style={styles.resultText}>{lastScanned.message}</Text>
-                        </View>
-                    )}
-                </View>
-            </CameraView>
+            {isFocused && (
+                <CameraView
+                    style={styles.camera}
+                    onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+                    barcodeScannerSettings={{
+                        barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39'],
+                    }}
+                >
+                    <View style={styles.overlay}>
+                        <View style={styles.scanBox} />
+                        <Text style={styles.scanText}>Paketin kargo barkodunu okutun</Text>
+                        
+                        {lastScanned && (
+                            <View style={[styles.resultBox, { backgroundColor: lastScanned.success ? '#10b981' : '#ef4444' }]}>
+                                <Feather name={lastScanned.success ? 'check-circle' : 'x-circle'} size={24} color="#fff" />
+                                <Text style={styles.resultText}>{lastScanned.message}</Text>
+                            </View>
+                        )}
+                    </View>
+                </CameraView>
+            )}
 
             <KeyboardAvoidingView 
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 

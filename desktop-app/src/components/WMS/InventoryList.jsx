@@ -54,10 +54,37 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   // Edit State
   const [editingStock, setEditingStock] = useState(null);
   const [productionRequestProduct, setProductionRequestProduct] = useState(null);
+  const [capacityData, setCapacityData] = useState(null);
+  const [capacityLoading, setCapacityLoading] = useState(false);
+  const [requestQty, setRequestQty] = useState('');
   const [warehouses, setWarehouses] = useState([]);
   const [allShelvesCapacity, setAllShelvesCapacity] = useState({});
 
   // 3. Backend API İstekleri (Veri Çekme)
+
+  const handleCreatePurchaseRequest = async (material, missingQty) => {
+      const orderQty = Math.ceil(missingQty * 1.10); // 10% fazlası
+      try {
+          const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  product_name: material.name,
+                  quantity: orderQty,
+                  description: `Sistem otomatik üretim malzeme eksiği talebi. Gerekli eksik miktar: ${missingQty} ${material.unit}`
+              })
+          });
+          const data = await res.json();
+          if (data.success) {
+              alert(`Satınalma talebi oluşturuldu: ${orderQty} ${material.unit} ${material.name}`);
+          } else {
+              alert(data.message || 'Satınalma talebi oluşturulamadı.');
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Sunucu hatası');
+      }
+  };
 
   const fetchStockList = async () => {
     setLoading(true);
@@ -666,7 +693,25 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           {selectedGroup.product?.Category !== 'Hammadde' && (
-                              <button onClick={() => setProductionRequestProduct(selectedGroup)} style={{ padding: '6px 10px', backgroundColor: '#fff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'} title="Üretim Talebi">
+                              <button onClick={() => {
+                                  setProductionRequestProduct(selectedGroup);
+                                  setCapacityData(null);
+                                  setCapacityLoading(true);
+                                  apiFetch(`http://localhost:3000/api/production/capacity-analysis/${selectedGroup.product_id}`)
+                                      .then(r => r.json())
+                                      .then(d => { 
+                                          if (d.success) {
+                                              setCapacityData(d.data);
+                                              if (d.data.capacity?.recommendedMin) {
+                                                  setRequestQty(d.data.capacity.recommendedMin);
+                                              } else {
+                                                  setRequestQty(100);
+                                              }
+                                          }
+                                      })
+                                      .catch(console.error)
+                                      .finally(() => setCapacityLoading(false));
+                              }} style={{ padding: '6px 10px', backgroundColor: '#fff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = '#fff'} title="Üretim Talebi">
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
                                   Talep Aç
                               </button>
@@ -764,23 +809,117 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
 
 {productionRequestProduct && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-                    <div style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', width: '90%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
+                    <div style={{ backgroundColor: 'white', padding: '32px', borderRadius: '16px', width: '90%', maxWidth: '650px', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                             <h3 style={{ margin: 0, color: '#0f172a', fontSize: '18px', fontWeight: 'bold' }}>Manuel Üretim Talebi</h3>
-                            <button onClick={() => setProductionRequestProduct(null)} style={{ background: 'none', border: 'none', fontSize: '20px', color: '#94a3b8', cursor: 'pointer' }}>&times;</button>
+                            <button onClick={() => { setProductionRequestProduct(null); setCapacityData(null); }} style={{ background: 'none', border: 'none', fontSize: '20px', color: '#94a3b8', cursor: 'pointer' }}>&times;</button>
                         </div>
                         <div style={{ marginBottom: '16px', color: '#475569', fontSize: '14px' }}>
                             <strong>Ürün:</strong> {productionRequestProduct.product_name}
                         </div>
+
+                        {capacityLoading && (
+                            <div style={{ padding: '16px', backgroundColor: '#f0f9ff', borderRadius: '10px', border: '1px solid #bae6fd', marginBottom: '16px', textAlign: 'center', color: '#0369a1', fontSize: '13px' }}>
+                                ⏳ Kapasite ve hammadde analizi yapılıyor...
+                            </div>
+                        )}
+
+                        {capacityData && capacityData.hasFormula && (
+                            <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <div style={{ padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                                    <div style={{ fontSize: '13px', fontWeight: '700', color: '#166534', marginBottom: '10px' }}>📊 Üretim Kapasite Analizi</div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+                                        <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Makine Min.</div>
+                                            <div style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', marginTop: '4px' }}>{capacityData.capacity.minFromMachine !== null ? `${capacityData.capacity.minFromMachine} Adet` : 'Belirsiz'}</div>
+                                        </div>
+                                        <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Makine Maks.</div>
+                                            <div style={{ fontSize: '20px', fontWeight: '800', color: '#0f172a', marginTop: '4px' }}>{capacityData.capacity.maxFromMachine !== null ? `${capacityData.capacity.maxFromMachine} Adet` : 'Belirsiz'}</div>
+                                        </div>
+                                        <div style={{ backgroundColor: 'white', padding: '12px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Hammadde Yeterlilik</div>
+                                            <div style={{ fontSize: '20px', fontWeight: '800', color: capacityData.capacity.maxFromMaterials === 0 ? '#dc2626' : '#0f172a', marginTop: '4px' }}>{capacityData.capacity.maxFromMaterials !== null ? `${capacityData.capacity.maxFromMaterials} Adet` : 'Hesaplanamadı'}</div>
+                                        </div>
+                                        <div style={{ backgroundColor: '#f0f9ff', padding: '12px', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                                            <div style={{ fontSize: '11px', color: '#0369a1', fontWeight: '600', textTransform: 'uppercase' }}>💡 Önerilen</div>
+                                            <div style={{ fontSize: '20px', fontWeight: '800', color: '#0369a1', marginTop: '4px' }}>{capacityData.capacity.recommendedMin} - {capacityData.capacity.recommendedMax > 99000 ? '∞' : capacityData.capacity.recommendedMax}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {capacityData.materials && capacityData.materials.length > 0 && (
+                                    <div style={{ padding: '14px', backgroundColor: '#fff7ed', borderRadius: '10px', border: '1px solid #fed7aa' }}>
+                                        <div style={{ fontSize: '12px', fontWeight: '700', color: '#c2410c', marginBottom: '8px' }}>🧪 Hammadde Durumu</div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            {capacityData.materials.map((m, idx) => {
+                                                const qty = parseInt(requestQty) || 0;
+                                                const requiredAmount = qty * m.quantityPerProduct;
+                                                const missingAmount = Math.max(0, requiredAmount - m.currentStock);
+                                                const isShort = missingAmount > 0;
+                                                
+                                                return (
+                                                <div key={idx} style={{ padding: '6px 10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #fed7aa', fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: isShort ? '#ef4444' : '#22c55e' }} />
+                                                        <span style={{ fontWeight: '500', color: '#334155' }}>{m.name}</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                        <span style={{ color: '#64748b' }}>1 Ürün: {m.quantityPerProduct} {m.unit}</span>
+                                                        <span style={{ color: m.currentStock > 0 ? '#059669' : '#dc2626', fontWeight: '600' }}>Stok: {m.currentStock} {m.unit}</span>
+                                                        {isShort ? (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <span style={{ color: '#dc2626', fontWeight: 'bold' }}>Eksik: {missingAmount} {m.unit}</span>
+                                                                <button type="button" onClick={() => handleCreatePurchaseRequest(m, missingAmount)} style={{ padding: '4px 8px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                    Talep Aç
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            m.maxProducts !== null && (
+                                                                <span style={{ padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: '600', backgroundColor: '#dcfce7', color: '#166534' }}>
+                                                                    Yeterli
+                                                                </span>
+                                                            )
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                {capacityData.capacity.maxFromMaterials === 0 && (
+                                    <div style={{ padding: '10px 14px', backgroundColor: '#fef2f2', borderRadius: '10px', border: '1px solid #fecaca', color: '#991b1b', fontSize: '12px', fontWeight: '600' }}>🚨 Hammadde stoku yetersiz!</div>
+                                )}
+                            </div>
+                        )}
+
+                        {capacityData && !capacityData.hasFormula && (
+                            <div style={{ padding: '12px', backgroundColor: '#fffbeb', borderRadius: '10px', border: '1px solid #fde68a', marginBottom: '16px', color: '#92400e', fontSize: '13px', fontWeight: '600' }}>⚠️ {capacityData.message}</div>
+                        )}
+
                         <form onSubmit={async (e) => {
                             e.preventDefault();
+                            const qty = parseInt(requestQty);
+                            
+                            if (capacityData && capacityData.hasFormula) {
+                                if (capacityData.capacity.minFromMachine && qty < capacityData.capacity.minFromMachine) {
+                                    return alert(`Hata: Girdiğiniz miktar (${qty}) makine minimum kapasitesinden (${capacityData.capacity.minFromMachine}) düşük olamaz!`);
+                                }
+                                if (capacityData.capacity.maxFromMachine && qty > capacityData.capacity.maxFromMachine) {
+                                    return alert(`Hata: Girdiğiniz miktar (${qty}) makine maksimum kapasitesinden (${capacityData.capacity.maxFromMachine}) fazla olamaz!`);
+                                }
+                                if (capacityData.capacity.maxFromMaterials !== null && qty > capacityData.capacity.maxFromMaterials) {
+                                    return alert(`Hata: Girdiğiniz miktar için yeterli hammadde yok! (Mevcut stokla maks: ${capacityData.capacity.maxFromMaterials} adet üretilebilir.) Lütfen önce eksik hammaddeler için talep açın.`);
+                                }
+                            }
+
                             try {
                                 const res = await apiFetch('http://localhost:3000/api/production/requests', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                         productId: productionRequestProduct.product_id,
-                                        quantity: e.target.qty.value,
+                                        quantity: qty,
                                         reason: 'Depo Sorumlusu (Manuel)',
                                         creator: currentUser?.username || 'Kullanıcı',
                                         priority: e.target.priority.value
@@ -790,24 +929,20 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                                 if(data.success) {
                                     alert('Talep oluşturuldu!');
                                     setProductionRequestProduct(null);
+                                    setCapacityData(null);
                                 } else {
                                     alert('Talep oluşturulamadı');
                                 }
                             } catch(err) { console.error(err); }
                         }}>
                             <div style={{ marginBottom: '16px' }}>
-                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Miktar (Raf Boşluğu)</label>
-                                {(() => {
-                                    let maxEmpty = 0;
-                                    if (productionRequestProduct?.batches) {
-                                        for (const b of productionRequestProduct.batches) {
-                                            const empty = (b.shelf_max_capacity || 0) - (b.quantity || 0);
-                                            if (empty > maxEmpty) maxEmpty = empty;
-                                        }
-                                    }
-                                    const defaultQty = maxEmpty > 0 ? Math.ceil(maxEmpty) : 100;
-                                    return <input name="qty" type="number" required defaultValue={defaultQty} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />;
-                                })()}
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>
+                                    Miktar
+                                    {capacityData?.hasFormula && (
+                                        <span style={{ fontWeight: '400', color: '#3b82f6', marginLeft: '6px' }}>(Önerilen: {capacityData.capacity.recommendedMin} - {capacityData.capacity.recommendedMax > 99000 ? '∞' : capacityData.capacity.recommendedMax})</span>
+                                    )}
+                                </label>
+                                <input name="qty" type="number" required value={requestQty} onChange={(e) => setRequestQty(e.target.value)} min="1" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                             </div>
                             <div style={{ marginBottom: '24px' }}>
                                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Aciliyet</label>
@@ -817,7 +952,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                                 </select>
                             </div>
                             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                                <button type="button" onClick={() => setProductionRequestProduct(null)} style={{ padding: '10px 16px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>İptal</button>
+                                <button type="button" onClick={() => { setProductionRequestProduct(null); setCapacityData(null); }} style={{ padding: '10px 16px', backgroundColor: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>İptal</button>
                                 <button type="submit" style={{ padding: '10px 16px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Talep Gönder</button>
                             </div>
                         </form>

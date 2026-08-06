@@ -20,6 +20,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 
 const ProductionRequests = ({ currentUser, onNavigate }) => {
     // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -37,12 +38,16 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
         priority: 'Normal'
     });
 
+    // Kapasite Analizi State'i
+    const [capacityData, setCapacityData] = useState(null);
+    const [capacityLoading, setCapacityLoading] = useState(false);
+
     // 3. Backend API İstekleri (Veri Çekme)
 
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:3000/api/production/requests');
+            const res = await apiFetch('http://localhost:3000/api/production/requests');
             const data = await res.json();
             if (data.success) {
                 setRequests(data.data);
@@ -57,13 +62,35 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
 
     const fetchProducts = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/products');
+            const res = await apiFetch('http://localhost:3000/api/products');
             const data = await res.json();
             if (Array.isArray(data)) {
                 setProducts(data);
             }
         } catch (err) {
             console.error('Products fetch error:', err);
+        }
+    };
+
+    const fetchCapacityAnalysis = async (productId) => {
+        if (!productId) {
+            setCapacityData(null);
+            return;
+        }
+        setCapacityLoading(true);
+        try {
+            const res = await apiFetch(`http://localhost:3000/api/production/capacity-analysis/${productId}`);
+            const data = await res.json();
+            if (data.success) {
+                setCapacityData(data.data);
+            } else {
+                setCapacityData(null);
+            }
+        } catch (err) {
+            console.error('Capacity analysis error:', err);
+            setCapacityData(null);
+        } finally {
+            setCapacityLoading(false);
         }
     };
 
@@ -83,7 +110,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
 
     const fetchRequestsSilently = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/production/requests');
+            const res = await apiFetch('http://localhost:3000/api/production/requests');
             const data = await res.json();
             if (data.success) {
                 setRequests(data.data);
@@ -93,10 +120,53 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
         }
     };
 
+    const handleProductChange = (e) => {
+        const productId = e.target.value;
+        setFormData({ ...formData, productId });
+        fetchCapacityAnalysis(productId);
+    };
+
+    const handleCreatePurchaseRequest = async (material, missingQty) => {
+        const orderQty = Math.ceil(missingQty * 1.10); // 10% fazlası
+        try {
+            const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    product_name: material.name,
+                    quantity: orderQty,
+                    description: `Sistem otomatik üretim malzeme eksiği talebi. Gerekli eksik miktar: ${missingQty} ${material.unit}`
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert(`Satınalma talebi oluşturuldu: ${orderQty} ${material.unit} ${material.name}`);
+            } else {
+                alert(data.message || 'Satınalma talebi oluşturulamadı.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Sunucu hatası');
+        }
+    };
+
     const handleCreateManualRequest = async (e) => {
         e.preventDefault();
+        const qty = parseInt(formData.quantity);
+        if (capacityData && capacityData.hasFormula) {
+            if (capacityData.capacity.minFromMachine && qty < capacityData.capacity.minFromMachine) {
+                return alert(`Hata: Girdiğiniz miktar (${qty}) makine minimum kapasitesinden (${capacityData.capacity.minFromMachine}) düşük olamaz!`);
+            }
+            if (capacityData.capacity.maxFromMachine && qty > capacityData.capacity.maxFromMachine) {
+                return alert(`Hata: Girdiğiniz miktar (${qty}) makine maksimum kapasitesinden (${capacityData.capacity.maxFromMachine}) fazla olamaz!`);
+            }
+            if (capacityData.capacity.maxFromMaterials !== null && qty > capacityData.capacity.maxFromMaterials) {
+                return alert(`Hata: Girdiğiniz miktar için yeterli hammadde yok! (Mevcut stokla maks: ${capacityData.capacity.maxFromMaterials} adet üretilebilir.) Lütfen önce eksik hammaddeler için talep açın.`);
+            }
+        }
+        
         try {
-            const res = await fetch('http://localhost:3000/api/production/requests', {
+            const res = await apiFetch('http://localhost:3000/api/production/requests', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -110,7 +180,8 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
             const data = await res.json();
             if (data.success) {
                 setShowManualForm(false);
-                setFormData({ productId: '', quantity: '', reason: '' });
+                setFormData({ productId: '', quantity: '', reason: '', priority: 'Normal' });
+                setCapacityData(null);
                 fetchRequests();
             } else {
                 alert(data.message || 'Talep oluşturulamadı.');
@@ -127,7 +198,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
         }
 
         try {
-            const res = await fetch(`http://localhost:3000/api/production/requests/${id}/status`, {
+            const res = await apiFetch(`http://localhost:3000/api/production/requests/${id}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status })
@@ -153,6 +224,173 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
         }
     };
 
+    // Kapasite Analiz Kartı Render
+    const renderCapacityCard = () => {
+        if (capacityLoading) {
+            return (
+                <div style={{ padding: '16px', backgroundColor: '#f0f9ff', borderRadius: '10px', border: '1px solid #bae6fd', marginTop: '16px', textAlign: 'center', color: '#0369a1' }}>
+                    ⏳ Kapasite ve hammadde analizi yapılıyor...
+                </div>
+            );
+        }
+
+        if (!capacityData) return null;
+
+        if (!capacityData.hasFormula) {
+            return (
+                <div style={{ padding: '16px', backgroundColor: '#fffbeb', borderRadius: '10px', border: '1px solid #fde68a', marginTop: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#92400e', fontWeight: '600', fontSize: '14px' }}>
+                        ⚠️ {capacityData.message}
+                    </div>
+                </div>
+            );
+        }
+
+        const { capacity, machines, materials } = capacityData;
+
+        return (
+            <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {/* Özet Kart */}
+                <div style={{ padding: '20px', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: '15px', fontWeight: '700', color: '#166534', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        📊 Üretim Kapasite Analizi
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+                        <div style={{ backgroundColor: 'white', padding: '14px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Makine Min. Üretim</div>
+                            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a', marginTop: '4px' }}>
+                                {capacity.minFromMachine !== null ? `${capacity.minFromMachine} Adet` : 'Belirsiz'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Makineler minimum bu kadar üretmeli</div>
+                        </div>
+                        <div style={{ backgroundColor: 'white', padding: '14px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Makine Maks. Üretim</div>
+                            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a', marginTop: '4px' }}>
+                                {capacity.maxFromMachine !== null ? `${capacity.maxFromMachine} Adet` : 'Belirsiz'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Tek seferde en fazla bu kadar</div>
+                        </div>
+                        <div style={{ backgroundColor: 'white', padding: '14px', borderRadius: '8px', border: '1px solid #dcfce7' }}>
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hammadde Maks. Yeterlilik</div>
+                            <div style={{ fontSize: '22px', fontWeight: '800', color: capacity.maxFromMaterials === 0 ? '#dc2626' : '#0f172a', marginTop: '4px' }}>
+                                {capacity.maxFromMaterials !== null ? `${capacity.maxFromMaterials} Adet` : 'Hesaplanamadı'}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Mevcut stokla üretilebilir</div>
+                        </div>
+                        <div style={{ backgroundColor: '#f0f9ff', padding: '14px', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                            <div style={{ fontSize: '11px', color: '#0369a1', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>💡 Önerilen Aralık</div>
+                            <div style={{ fontSize: '22px', fontWeight: '800', color: '#0369a1', marginTop: '4px' }}>
+                                {capacity.recommendedMin} - {capacity.recommendedMax > 99000 ? '∞' : capacity.recommendedMax}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>Optimum talep miktarı</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Makine Detayları */}
+                {machines.length > 0 && (
+                    <div style={{ padding: '16px', backgroundColor: '#faf5ff', borderRadius: '10px', border: '1px solid #e9d5ff' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#7c3aed', marginBottom: '10px' }}>🏭 Kullanılacak Makineler</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {machines.map(m => (
+                                <div key={m.id} style={{
+                                    padding: '8px 14px',
+                                    backgroundColor: 'white',
+                                    borderRadius: '8px',
+                                    border: '1px solid #e9d5ff',
+                                    fontSize: '12px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px'
+                                }}>
+                                    <span style={{ 
+                                        width: '8px', height: '8px', borderRadius: '50%', 
+                                        backgroundColor: m.status === 'Boş' ? '#22c55e' : m.status === 'Dolu' ? '#ef4444' : '#f59e0b' 
+                                    }} />
+                                    <span style={{ fontWeight: '600', color: '#334155' }}>{m.name}</span>
+                                    <span style={{ color: '#94a3b8' }}>({m.minCapacity} - {m.maxCapacity} kg/L)</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Hammadde Detayları */}
+                {materials.length > 0 && (
+                    <div style={{ padding: '16px', backgroundColor: '#fff7ed', borderRadius: '10px', border: '1px solid #fed7aa' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: '#c2410c', marginBottom: '10px' }}>🧪 Hammadde Durumu</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {materials.map((m, idx) => {
+                                const qty = parseInt(formData.quantity) || 0;
+                                const requiredAmount = qty * m.quantityPerProduct;
+                                const missingAmount = Math.max(0, requiredAmount - m.currentStock);
+                                const isShort = missingAmount > 0;
+
+                                return (
+                                <div key={idx} style={{
+                                    padding: '8px 14px',
+                                    backgroundColor: 'white',
+                                    borderRadius: '8px',
+                                    border: '1px solid #fed7aa',
+                                    fontSize: '12px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: '8px'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ 
+                                            width: '6px', height: '6px', borderRadius: '50%', 
+                                            backgroundColor: isShort ? '#ef4444' : '#22c55e' 
+                                        }} />
+                                        <span style={{ fontWeight: '500', color: '#334155' }}>{m.name}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <span style={{ color: '#64748b' }}>1 Ürün: {m.quantityPerProduct} {m.unit}</span>
+                                        <span style={{ color: m.currentStock > 0 ? '#059669' : '#dc2626', fontWeight: '600' }}>
+                                            Stok: {m.currentStock} {m.unit}
+                                        </span>
+                                        {isShort ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <span style={{ color: '#dc2626', fontWeight: 'bold' }}>Eksik: {missingAmount} {m.unit}</span>
+                                                <button type="button" onClick={() => handleCreatePurchaseRequest(m, missingAmount)} style={{ padding: '4px 8px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                                                    Talep Aç
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            m.maxProducts !== null && (
+                                                <span style={{ 
+                                                    padding: '2px 8px', 
+                                                    borderRadius: '10px', 
+                                                    fontSize: '11px', 
+                                                    fontWeight: '600',
+                                                    backgroundColor: '#dcfce7',
+                                                    color: '#166534'
+                                                }}>
+                                                    Yeterli
+                                                </span>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* Uyarı (Hammadde yetersizse) */}
+                {capacity.maxFromMaterials !== null && capacity.maxFromMaterials === 0 && (
+                    <div style={{ padding: '12px 16px', backgroundColor: '#fef2f2', borderRadius: '10px', border: '1px solid #fecaca', color: '#991b1b', fontSize: '13px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🚨 Dikkat: Hammadde stoku yetersiz! Üretim öncesi hammadde tedarik edilmelidir.
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
@@ -165,7 +403,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
                     <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '14px' }}>Sistem ve çalışanlar tarafından oluşturulan üretim ihtiyaçları.</p>
                 </div>
                 <button 
-                    onClick={() => setShowManualForm(!showManualForm)}
+                    onClick={() => { setShowManualForm(!showManualForm); if (showManualForm) { setCapacityData(null); } }}
                     style={{ backgroundColor: '#0284c7', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
                 >
                     {showManualForm ? 'İptal' : '+ Manuel Talep Oluştur'}
@@ -175,12 +413,12 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
             {showManualForm && (
                 <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                     <h3 style={{ marginTop: 0, color: '#0f172a', fontSize: '16px' }}>Yeni Manuel Talep</h3>
-                    <form onSubmit={handleCreateManualRequest} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end' }}>
-                        <div style={{ flex: 2, display: 'flex', flexDirection: 'column' }}>
+                    <form onSubmit={handleCreateManualRequest} style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', minWidth: '200px' }}>
                             <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ürün</label>
                             <select 
                                 value={formData.productId} 
-                                onChange={(e) => setFormData({...formData, productId: e.target.value})} 
+                                onChange={handleProductChange} 
                                 required
                                 style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                             >
@@ -190,17 +428,42 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
                                 ))}
                             </select>
                         </div>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                            <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Miktar</label>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: '120px' }}>
+                            <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                                Miktar
+                                {capacityData?.hasFormula && capacityData?.capacity && (
+                                    <span style={{ fontWeight: '400', color: '#3b82f6', marginLeft: '6px' }}>
+                                        (Önerilen: {capacityData.capacity.recommendedMin} - {capacityData.capacity.recommendedMax > 99000 ? '∞' : capacityData.capacity.recommendedMax})
+                                    </span>
+                                )}
+                            </label>
                             <input 
                                 type="number" 
                                 value={formData.quantity} 
                                 onChange={(e) => setFormData({...formData, quantity: e.target.value})} 
                                 required 
-                                style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                min="1"
+                                placeholder={capacityData?.hasFormula ? `Min: ${capacityData.capacity.recommendedMin}` : ''}
+                                style={{ 
+                                    padding: '10px', 
+                                    borderRadius: '6px', 
+                                    border: `1px solid ${
+                                        formData.quantity && capacityData?.hasFormula 
+                                            ? (parseInt(formData.quantity) < capacityData.capacity.recommendedMin ? '#fbbf24' 
+                                                : parseInt(formData.quantity) > capacityData.capacity.recommendedMax && capacityData.capacity.recommendedMax < 99000 ? '#ef4444' 
+                                                : '#22c55e') 
+                                            : '#cbd5e1'
+                                    }` 
+                                }}
                             />
+                            {formData.quantity && capacityData?.hasFormula && parseInt(formData.quantity) < capacityData.capacity.recommendedMin && (
+                                <span style={{ fontSize: '11px', color: '#d97706', marginTop: '4px' }}>⚠️ Minimum {capacityData.capacity.recommendedMin} önerilir (makine kapasitesi)</span>
+                            )}
+                            {formData.quantity && capacityData?.hasFormula && capacityData.capacity.recommendedMax < 99000 && parseInt(formData.quantity) > capacityData.capacity.recommendedMax && (
+                                <span style={{ fontSize: '11px', color: '#dc2626', marginTop: '4px' }}>🚨 Maks {capacityData.capacity.recommendedMax} adet üretilebilir (hammadde/makine limiti)</span>
+                            )}
                         </div>
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: '100px' }}>
                             <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Aciliyet</label>
                             <select 
                                 value={formData.priority} 
@@ -211,7 +474,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
                                 <option value="Acil">Acil</option>
                             </select>
                         </div>
-                        <div style={{ flex: 3, display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ flex: 3, display: 'flex', flexDirection: 'column', minWidth: '200px' }}>
                             <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Açıklama / Neden</label>
                             <input 
                                 type="text" 
@@ -224,6 +487,9 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
                         </div>
                         <button type="submit" style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '11px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>Kaydet</button>
                     </form>
+
+                    {/* Kapasite Analiz Kartı */}
+                    {renderCapacityCard()}
                 </div>
             )}
 

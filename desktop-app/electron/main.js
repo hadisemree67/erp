@@ -1,7 +1,6 @@
 /*
  * main.js
  * Projenin çalışması için gereken kodları barındırıyor.
- * Biraz karışık görünebilir ama işin özünü burada hallediyoruz.
  */
 
 import { app, BrowserWindow } from 'electron';
@@ -38,7 +37,8 @@ function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       webSecurity: true,
-      allowRunningInsecureContent: false
+      allowRunningInsecureContent: false,
+      backgroundThrottling: false // Arka planda donmayı ve uykuya geçmeyi engeller
     }
   });
 

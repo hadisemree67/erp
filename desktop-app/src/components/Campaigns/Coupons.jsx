@@ -1,3 +1,13 @@
+/**
+ * ============================================================================
+ * DOSYA ADI: Coupons.jsx
+ * MODÜL / KATMAN: Önyüz Bileşeni - Kampanya ve İndirim Kuponları
+ * 
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemde kullanılacak indirim kuponlarının (Yüzde, Sabit Tutar, Hediye Ürün vb.)
+ *   listelenmesi, oluşturulması, güncellenmesi ve silinmesi işlemlerini yönetir.
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
@@ -7,7 +17,7 @@ const Coupons = ({ currentUser }) => {
     const [error, setError] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     
-    // Form state
+    // Form veri yönetimi (State)
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({
         code: '',
@@ -61,7 +71,7 @@ const Coupons = ({ currentUser }) => {
                 const pData = await prodRes.json();
                 const filteredProducts = pData.filter(p => !p.Category || p.Category.trim().toLowerCase() !== 'hammadde');
                 setProducts(filteredProducts);
-                // Extract unique categories
+                // Sadece benzersiz (unique) kategorileri ayıkla
                 const uniqueCategories = [...new Set(filteredProducts.map(p => p.Category).filter(Boolean))];
                 setCategories(uniqueCategories);
             }

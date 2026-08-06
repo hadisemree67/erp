@@ -1303,6 +1303,167 @@ router.get('/max-quantity/:productId', authMiddleware, async (req, res) => {
 
 
 // ==========================================
+// PRODUCTION CAPACITY ANALYSIS
+// ==========================================
+
+// GET: Ürün için üretim kapasitesi ve hammadde analizi
+router.get('/capacity-analysis/:productId', authMiddleware, async (req, res) => {
+    const { productId } = req.params;
+    try {
+        // 1. Ürün bilgilerini al
+        const [productRows] = await db.query('SELECT Id, ProductName, Formula, supply_type FROM products WHERE Id = ?', [productId]);
+        if (productRows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Ürün bulunamadı.' });
+        }
+        const product = productRows[0];
+
+        let formula = [];
+        try {
+            formula = JSON.parse(product.Formula || '[]');
+        } catch (e) {
+            formula = [];
+        }
+
+        if (!Array.isArray(formula) || formula.length === 0) {
+            return res.json({ success: true, data: { hasFormula: false, message: 'Bu ürün için reçete (BOM) tanımlanmamış.' } });
+        }
+
+        // 2. Makine kapasiteleri
+        const machineIds = formula.map(step => step.machine_id).filter(id => id);
+        let machineInfo = [];
+        let minMachineCapacity = null;
+        let maxMachineCapacity = null;
+
+        if (machineIds.length > 0) {
+            const [machines] = await db.query('SELECT id, name, min_capacity, max_capacity, status FROM production_machines WHERE id IN (?)', [machineIds]);
+            machineInfo = machines.map(m => ({
+                id: m.id,
+                name: m.name,
+                minCapacity: parseFloat(m.min_capacity) || 0,
+                maxCapacity: parseFloat(m.max_capacity) || 0,
+                status: m.status
+            }));
+
+            for (const m of machineInfo) {
+                if (m.maxCapacity > 0) {
+                    if (maxMachineCapacity === null || m.maxCapacity < maxMachineCapacity) {
+                        maxMachineCapacity = m.maxCapacity;
+                    }
+                }
+                if (m.minCapacity > 0) {
+                    if (minMachineCapacity === null || m.minCapacity > minMachineCapacity) {
+                        minMachineCapacity = m.minCapacity;
+                    }
+                }
+            }
+        }
+
+        // 3. Hammadde analizi - her adımda ne kadar malzeme kullanılıyor ve stokta ne kadar var
+        let materialsAnalysis = [];
+        let totalVolumePerProduct = 0; // 1 ürün üretmek için toplam hacim (kg/L)
+
+        for (const step of formula) {
+            for (const mat of (step.materials || [])) {
+                const matQty = parseFloat(mat.quantity) || 0;
+                const matUnit = (mat.unit || '').toLowerCase();
+                const matName = mat.material || 'Bilinmiyor';
+
+                // Hacim hesabı (kg/L bazında)
+                let volumePerProduct = 0;
+                if (matUnit === 'gr' || matUnit === 'ml') {
+                    volumePerProduct = matQty / 1000;
+                } else if (matUnit === 'kg' || matUnit === 'l' || matUnit === 'litre') {
+                    volumePerProduct = matQty;
+                } else if (matUnit === 'adet') {
+                    volumePerProduct = 0; // adet bazlı olanlar hacim hesabına girmiyor
+                }
+
+                totalVolumePerProduct += volumePerProduct;
+
+                // Stokta bu hammaddeden ne kadar var?
+                const [stockRows] = await db.query(`
+                    SELECT COALESCE(SUM(wsb.quantity), 0) as totalStock
+                    FROM wms_stock_balances wsb
+                    JOIN products p ON wsb.product_id = p.Id
+                    WHERE p.ProductName = ?
+                `, [matName]);
+
+                const currentStock = parseFloat(stockRows[0]?.totalStock) || 0;
+
+                // Bu hammaddeden kaç ürün üretilebilir?
+                let maxProductsFromMaterial = null;
+                if (matQty > 0 && matUnit !== 'adet') {
+                    maxProductsFromMaterial = Math.floor(currentStock / matQty);
+                } else if (matUnit === 'adet' && matQty > 0) {
+                    maxProductsFromMaterial = Math.floor(currentStock / matQty);
+                }
+
+                materialsAnalysis.push({
+                    name: matName,
+                    quantityPerProduct: matQty,
+                    unit: mat.unit || '',
+                    currentStock: currentStock,
+                    maxProducts: maxProductsFromMaterial,
+                    step: step.step
+                });
+            }
+        }
+
+        // 4. Darboğaz: Hammaddeden üretilebilecek maks ürün sayısı
+        let maxFromMaterials = null;
+        for (const m of materialsAnalysis) {
+            if (m.maxProducts !== null) {
+                if (maxFromMaterials === null || m.maxProducts < maxFromMaterials) {
+                    maxFromMaterials = m.maxProducts;
+                }
+            }
+        }
+
+        // 5. Makineden üretilebilecek min/maks adet (hacim bazında)
+        let minFromMachine = null;
+        let maxFromMachine = null;
+        if (totalVolumePerProduct > 0) {
+            if (minMachineCapacity !== null) {
+                minFromMachine = Math.ceil(minMachineCapacity / totalVolumePerProduct);
+            }
+            if (maxMachineCapacity !== null) {
+                maxFromMachine = Math.floor(maxMachineCapacity / totalVolumePerProduct);
+            }
+        }
+
+        // 6. Önerilen aralık
+        const recommendedMin = minFromMachine || 1;
+        let recommendedMax = maxFromMachine || 99999;
+        if (maxFromMaterials !== null && maxFromMaterials < recommendedMax) {
+            recommendedMax = maxFromMaterials;
+        }
+
+        res.json({
+            success: true,
+            data: {
+                hasFormula: true,
+                productName: product.ProductName,
+                machines: machineInfo,
+                materials: materialsAnalysis,
+                totalVolumePerProduct: totalVolumePerProduct,
+                capacity: {
+                    minMachineCapacity: minMachineCapacity,
+                    maxMachineCapacity: maxMachineCapacity,
+                    minFromMachine: minFromMachine,
+                    maxFromMachine: maxFromMachine,
+                    maxFromMaterials: maxFromMaterials,
+                    recommendedMin: recommendedMin,
+                    recommendedMax: recommendedMax > 0 ? recommendedMax : 0
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Kapasite analizi hatası:', error);
+        res.status(500).json({ success: false, message: 'Kapasite analizi yapılamadı.' });
+    }
+});
+
+// ==========================================
 // PRODUCTION REQUESTS API
 // ==========================================
 

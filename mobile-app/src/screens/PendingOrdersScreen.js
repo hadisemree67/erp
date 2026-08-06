@@ -279,7 +279,7 @@ export default function PendingOrdersScreen({ navigation, route }) {
                         
                         <ScrollView style={{ width: '100%' }} showsVerticalScrollIndicator={false}>
 
-                            {hasPermission && (
+                            {hasPermission && isScannerModalVisible && (
                                 <View style={{ width: '100%', height: 200, borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
                                     <CameraView
                                         style={StyleSheet.absoluteFillObject}
