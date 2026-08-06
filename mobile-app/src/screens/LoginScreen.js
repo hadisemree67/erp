@@ -8,7 +8,7 @@ export default function LoginScreen({ navigation }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
-    
+
     const { login } = useContext(AuthContext);
 
     const handleLogin = async () => {
@@ -29,7 +29,7 @@ export default function LoginScreen({ navigation }) {
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardView}>
-                
+
                 <View style={styles.logoContainer}>
                     <View style={styles.logoCircle}>
                         <Feather name="box" size={48} color="#ffffff" />
@@ -50,7 +50,7 @@ export default function LoginScreen({ navigation }) {
                             autoCapitalize="none"
                         />
                     </View>
-                    
+
                     <View style={styles.inputGroup}>
                         <Feather name="lock" size={20} color="#64748b" style={styles.inputIcon} />
                         <TextInput
@@ -62,7 +62,7 @@ export default function LoginScreen({ navigation }) {
                             onChangeText={setPassword}
                         />
                     </View>
-                    
+
                     <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
                         {loading ? <ActivityIndicator color="#fff" /> : (
                             <>
@@ -72,7 +72,7 @@ export default function LoginScreen({ navigation }) {
                         )}
                     </TouchableOpacity>
                 </View>
-                
+
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
