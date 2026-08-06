@@ -1,59 +1,54 @@
-# Kapsamlı Stok, ERP ve WMS Sistemi
+# Stok, Üretim ve Depo Yönetim Sistemi (WMS & ERP)
 
-Modern teknolojilerle geliştirilmiş, uçtan uca Depo Yönetim (WMS), Üretim, Satın Alma, Satış ve Müşteri İlişkileri (CRM) süreçlerini yöneten tam kapsamlı bir ERP uygulamasıdır. Sistem; Masaüstü (Electron/React), Mobil (React Native/Expo) ve Güçlü bir Backend (Node.js/Express) altyapısından oluşmaktadır.
+Bu proje; üretim, tedarik, depo yerleşimi, sipariş yönetimi ve raporlama süreçlerini tek bir merkezden uçtan uca yönetmeyi sağlayan kapsamlı bir sistemdir. Masaüstü (Electron/React), Mobil (React Native) ve Backend (Node.js/MySQL) olarak üç ana bileşenden oluşur.
 
-## Temel Özellikler ve Modüller
+## 🔄 Temel İş Akışı (Sistem Nasıl Çalışır?)
 
-### 1. Gelişmiş Depo Yönetim Sistemi (WMS - Akıllı Raf ve Yerleşim)
-Sistemin en güçlü yanlarından biri olan WMS modülü, depoların hacimsel (m³) ve fiziksel özelliklerine göre tamamen otonom yerleşim algoritmaları kullanır.
-* **Hacimsel (Volume) Hesaplama:** Ürünlerin en, boy, derinlik ve çap özelliklerini okuyarak silindirik veya dikdörtgen prizma hacim hesaplamalarını otomatik yapar.
-* **Akıllı Raf Optimizasyonu:** Rafların maksimum hacim (m³) ve ağırlık (kg) taşıma kapasitelerine göre ürünlerin sığıp sığmayacağını otonom hesaplar.
-* **Üst Üste İstifleme (Stackability):** Ürünün "Üst üste konulabilir mi?" (is_stackable) özelliğine ve "Maksimum istifleme limitine" (max_stack_limit) göre yer hesaplaması yapar. Kırılacak veya ezilecek ürünleri korur.
-* **Koli ve Kutu (Package) Hesaplama:** Bir koli/kutu içinde kaç adet ürün olduğu ve bir rafa kaç koli sığabileceği algoritmik olarak arka planda yönetilir.
-* **Dinamik Raf Önerisi:** Depoya mal kabul edilirken (veya üretimden çıkarken), sistem depodaki boş yerleri tarar ve "Bu ürün X deposunun Y rafına tam sığmaktadır" şeklinde personeli yönlendirir.
+Sistem, bir üretim tesisinin veya e-ticaret deposunun günlük operasyon akışına göre tasarlanmıştır:
 
-### 2. Akıllı Satın Alma ve Tedarik Zinciri (Purchasing)
-Ürünlerin tedarik süreçleri kritik stok seviyeleri ile tetiklenir.
-* **Kritik Stok Uyarıları:** Her ürün için belirlenen kritik stok seviyesinin altına düşüldüğünde sistem otomatik olarak uyarı verir.
-* **Akıllı Tedarikçi Seçimi:** Bir ürünü sağlayan birden fazla tedarikçi arasından en ucuz (unit_price) veya en hızlı (lead_time_days) olanı analiz eder.
-* **Sözleşme Yönetimi:** Tedarikçiler ile yapılan resmi sözleşmeler (PDF/Görsel) sisteme yüklenir. "Ana Tedarikçi" (Primary) mantığıyla ürünlerin satın alma fiyatları otomatik çekilir.
-* **Otomatik Onay Mailleri:** Tedarikçilere otomatik "Sipariş Onay" linkleri içeren e-postalar gönderilir, tedarikçi tıkladığında ERP sisteminde sipariş durumu "Onaylandı" olarak güncellenir.
+### 1. Malzeme ve Tedarikçi Tanımlamaları
+Her şeyin başlangıcı temel verilerin girilmesidir. Sisteme öncelikle hammadde tedarikçileri ve bu tedarikçilerden alınacak malzemeler (Hammaddeler, ambalajlar vb.) girilir. Hangi tedarikçiden hangi malzemenin kaç paraya ve kaç günde temin edildiği (Sözleşmeler ve PDF'ler dahil) sisteme işlenir.
 
-### 3. CRM ve Satış (Müşteri ve Sipariş Yönetimi)
-* **Gelişmiş Müşteri Demografisi:** Müşterilerin (veya son tüketicilerin) **Cinsiyet, Yaş ve Şehir (İl)** gibi demografik özellikleri kayıt altına alınır.
-* **Sipariş ve Paketleme (Packaging):** Siparişler onaylandığında paketleme sırasına alınır (Mobil uygulamadan barkod okutularak paketlenebilir).
-* **Excel İçe/Dışa Aktarım:** Siparişler, müşteri verileri, şehir ve yaş grubu filtrelemeleriyle anında Excel formatında raporlanır.
+### 2. Ürün Formülü (Reçete) Oluşturma
+Üretilecek nihai ürünler için "Formül / Reçete" tanımlanır. Örneğin, "Bir adet A ürünü üretmek için, X hammaddesinden 10 gram, Y ambalajından 1 adet gerekir" şeklinde ürün mimarisi sisteme tanıtılır.
 
-### 4. Güvenlik ve "Sayım / Bakım Modu" (Time Freeze Architecture)
-Depolarda sayım yapılacağı zaman sistemin durdurulması gerekir. Bu sistemde kusursuz bir güvenlik kalkanı (Global Middleware) bulunur.
-* **Tüm Hareketleri Durdur:** Tek bir butonla tüm sistem veri girişine kapatılır. (Ürün ekleme, satış, sipariş vb.)
-* **503 Shield:** Sistem kilitliyken API'ye atılan tüm `POST`, `PUT`, `DELETE` istekleri Node.js katmanında reddedilir ve veritabanı %100 koruma altına alınır. Hiçbir kaçak ürün veya eksik görsel/dosya işlenemez.
-* **E-Ticaret ve Dış Link İstisnaları:** Sistem dondurulmuş olsa bile tedarikçi e-posta onayları veya salt-okunur (listeleme) işlemleri sorunsuz çalışmaya devam eder.
+### 3. Depo ve Stok Girişleri (WMS Algoritmaları)
+Sisteme giren hammaddeler veya üretilen yeni ürünler için stok girişleri yapılır. Sistem bu aşamada çok akıllı davranır:
+* Ürünün hacmi (en, boy, derinlik, çap) ve ağırlığı otomatik hesaplanır.
+* Koli / Kutu kapasitesi ve "Üst üste konulabilir mi?" (İstifleme limiti) özellikleri okunur.
+* Depodaki rafların boş m³ hacimlerine ve taşıma kapasitelerine bakılarak personeline **"Bu ürünü A deposundaki 3 numaralı rafa yerleştir"** şeklinde otonom yönlendirme yapar.
 
----
+### 4. Akıllı Stok Takibi ve Üretim Talebi
+Satışlar oldukça veya üretim yapıldıkça stoklar anlık olarak sistemden düşer.
+* Bir nihai ürünün (Satılan ürünün) stoku, belirlenen **Kritik Stok Seviyesi**nin altına düştüğünde sistem bunu algılar ve hemen "Üretime Talep" oluşturur.
 
-## 🛠 Kullanılan Teknolojiler (Tech Stack)
+### 5. Otomatik Satın Alma ve Tedarikçi Mailleri (Purchasing)
+Eğer üretime talep oluşturulduğunda içeride yeterli "Hammadde" yoksa (hammadde kritik seviyenin altına düşmüşse), sistem Satın Alma döngüsünü tetikler.
+* Tedarikçiler arasından en uygun olanı (fiyat veya hıza göre) otomatik seçer.
+* Tedarikçiye onay linki içeren otonom e-postalar gönderir. Tedarikçi e-postadaki linke tıklayarak siparişi onayladığında ERP sistemine "Yola Çıktı" olarak düşer.
 
-### Backend (API)
-- **Node.js & Express.js:** Hızlı ve ölçeklenebilir RESTful API mimarisi.
-- **MySQL & Prisma ORM:** Gelişmiş ilişkisel veritabanı, raw query optimizasyonları ve parametrik sorgular (`?` parametresiyle %100 SQL Injection koruması).
-- **JWT (JSON Web Token):** Rol tabanlı (Role-based) gelişmiş kimlik doğrulama, API güvenliği.
-- **Multer:** Sunucuya görsel, PDF, sözleşme gibi dosyaların `multipart/form-data` ile aktarılması.
+### 6. Sipariş ve Satış Yönetimi
+E-Ticaret veya B2B müşterilerinden gelen siparişler sisteme yansır.
+* Müşterilerin detaylı bilgileri (Cinsiyet, Yaş, Şehir gibi demografik veriler) tutulur.
+* Onaylanan siparişler doğrudan **Paketleme Sırasına** aktarılır.
 
-### Frontend (Desktop & Web)
-- **React.js & Vite:** Hızlı arayüzler ve komponent tabanlı yapı.
-- **Electron.js:** Projenin Windows/Mac üzerinde native masaüstü uygulaması (Executable) olarak çalışmasını sağlar.
-- **Tailwind CSS / Pure CSS:** Modern, esnek ve dinamik kullanıcı arayüzleri.
-- **Axios & Fetch:** API iletişimleri.
+### 7. Mobil Uygulama ve El Terminalleri
+Paketleme sırasına giren siparişler deponun içinde personelin telefonuna (veya el terminaline) bildirim olarak düşer.
+* Personel mobil uygulama üzerinden siparişteki ürünlerin barkodlarını okutarak paketleme işlemini yapar. Hatalı ürün konulmasını %100 engeller.
+* Sevkiyat (Kargo) işlemi tamamlandığında stoklar sistemden kalıcı olarak düşer.
 
-### Mobil Uygulama (Depo / Paketleme Operasyonları)
-- **React Native & Expo:** iOS ve Android uyumlu, el terminalleriyle (veya telefonlarla) %100 uyumlu barkod okuma ve depo yönetim uygulaması.
+### 8. Gelişmiş Raporlama (Excel Dışa Aktarım)
+Sistemdeki tüm hareketler; Müşteri, Sipariş, Stok ve Yaş/Cinsiyet/Şehir filtrelerine göre analiz edilip tek tıkla Excel formatında indirilebilir. İşletmenin anlık durumu (Nereden kim ne almış, hangi rafta ne var) en ince ayrıntısına kadar raporlanır.
+
+### 9. Güvenli Sayım Modu (Sistemi Durdurma)
+Depolarda genel sayım (Inventory Count) yapılacağı zaman, işlemlerin birbirine karışmasını engellemek için **Sistem Durdurma (Zamanı Dondurma)** özelliği devreye alınır.
+* Ayarlardan "Sistemi Durdur" butonuna basıldığında tüm sistemde güçlü bir kalkan (Global Middleware) aktif olur.
+* Sistem o saniyede donar; personel veya dış API'ler yeni ürün, stok veya sipariş ekleyemez (Uygulama arka planda HTTP 503 güvenliğiyle istekleri reddeder).
+* Sayım bittiğinde kilit açılır ve sistem normal akışına sorunsuz devam eder. Hiçbir veri bozulması veya çakışma yaşanmaz.
 
 ---
 
-## 🛡 Güvenlik Mimarisi (Security First)
-1. **Veri Tipleri Koruması:** Frontend'den sayı beklenen bir alana (Örn: `Yaş`, `Genişlik`, `Fiyat`) harf veya metin girilirse backend bunu fark eder. Sistemi çökertmek (Crash) yerine kullanıcıya zarifçe (HTTP 400) **kırmızı uyarı** döndürür (`isNaN` ve `safeFloat` mimarisi).
-2. **Kör Noktasız SQL:** Veritabanına dışarıdan gelen hiçbir metin direkt birleştirilerek yazılmaz. Node.js `mysql2` kütüphanesinin en güvenli hali olan Prepared Statements kullanılır.
-3. **Şifre ve Sırların Gizliliği:** `.env` mimarisi ile veritabanı şifreleri, JWT anahtarları ve e-posta şifreleri kod içine (Hardcoded) yazılmaz.
-
-Sistem; performans, güvenlik ve ticari sürdürülebilirlik açısından güncel standartların en üst düzey mimarisi ile tasarlanmıştır. Yüksek işlem hacimli ve kompleks hesaplamalı tüm endüstriyel operasyonları (Hacim-Ağırlık hesaplamaları vb.) kusursuz şekilde karşılar.
+## 🛠 Kullanılan Teknolojiler
+* **Backend:** Node.js, Express.js, Prisma ORM, MySQL (Tamamen Parametrik Güvenli Sorgular).
+* **Masaüstü Frontend:** React.js, Vite, Electron.js, TailwindCSS.
+* **Mobil Frontend:** React Native, Expo (Barkod ve Kamera entegreli).
