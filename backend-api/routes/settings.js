@@ -26,7 +26,7 @@ router.get('/', authMiddleware, async (req, res) => {
         res.json({ success: true, data: settings, raw: rows });
     } catch (error) {
         console.error('Ayarlar alınırken hata:', error);
-        res.status(500).json({ success: false, message: 'Ayarlar getirilirken hata oluştu.' });
+        res.status(500).json({ success: false, message: 'Sunucu hatası', error: error.message });
     }
 });
 
@@ -45,6 +45,12 @@ router.post('/', authMiddleware, requireAdmin, async (req, res) => {
             // Eğer system_paused değişiyorsa in-memory cache'i de güncelle
             if (key === 'system_paused') {
                 req.app.locals.system_paused = (strValue === 'true');
+                
+                if (strValue === 'true') {
+                    req.app.locals.paused_at = new Date().toISOString();
+                } else {
+                    req.app.locals.paused_at = null;
+                }
             }
         }
 

@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import Barcode from 'react-barcode';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiFetch } from '../../utils/api';
+import * as XLSX from 'xlsx';
 
 const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', customerId = null }) => {
     const hasPerm = (key) => currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(key);
@@ -671,6 +672,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         }
     };
 
+
     // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
@@ -685,6 +687,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
+
                     {currentUser?.role === 'admin' && (
                         <button 
                             onClick={handleOpenStatsModal}

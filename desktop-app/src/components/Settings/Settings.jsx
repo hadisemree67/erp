@@ -56,7 +56,7 @@ const Settings = ({ currentUser }) => {
         }
     };
 
-    if (currentUser?.role !== 'Yönetici' && currentUser?.role !== 'Admin') {
+    if (currentUser?.role !== 'Yönetici' && currentUser?.role !== 'Admin' && currentUser?.role !== 'admin' && currentUser?.role !== 'Sistem Yöneticisi') {
         return (
             <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444' }}>
                 Bu sayfayı görüntüleme yetkiniz yok. Sadece yöneticiler erişebilir.

@@ -289,26 +289,39 @@ router.get('/orders/next', authMiddleware, async (req, res) => {
         });
 
         if (!order) {
-            const availableOrder = await prisma.orders.findFirst({
-                where: { OrderStatus: 'Onayland_', PickerId: null },
-                orderBy: { Id: 'asc' }
-            });
+            let assignedOrder = null;
+            let attempts = 0;
+            const MAX_ATTEMPTS = 5; // En fazla 5 kere sıradaki siparişi kapmaya çalış
 
-            if (!availableOrder) {
-                return res.json({ success: false, message: 'Toplanacak sipariş bulunmuyor.' });
+            while (!assignedOrder && attempts < MAX_ATTEMPTS) {
+                attempts++;
+                
+                const availableOrder = await prisma.orders.findFirst({
+                    where: { OrderStatus: 'Onayland_', PickerId: null },
+                    orderBy: { Id: 'asc' }
+                });
+
+                if (!availableOrder) {
+                    return res.json({ success: false, message: 'Şu an toplanacak boşta sipariş bulunmuyor.' });
+                }
+
+                const updated = await prisma.orders.updateMany({
+                    where: { Id: availableOrder.Id, OrderStatus: 'Onayland_', PickerId: null },
+                    data: { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
+                });
+
+                if (updated.count > 0) {
+                    assignedOrder = availableOrder; // Başarıyla kilitlendi!
+                }
+                // Eğer count === 0 ise (başkası bizden 1 salise önce aldıysa), döngü devam eder ve bir sonraki siparişi dener.
             }
 
-            const updated = await prisma.orders.updateMany({
-                where: { Id: availableOrder.Id, OrderStatus: 'Onayland_', PickerId: null },
-                data: { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
-            });
-
-            if (updated.count === 0) {
-                 return res.json({ success: false, message: 'Sipariş başkası tarafından alınmış olabilir. Lütfen tekrar deneyin.' });
+            if (!assignedOrder) {
+                 return res.json({ success: false, message: 'Sistem şu an çok yoğun, tüm siparişler kapışılıyor. Lütfen tekrar deneyin.' });
             }
 
             order = await prisma.orders.findUnique({
-                where: { Id: availableOrder.Id },
+                where: { Id: assignedOrder.Id },
                 include: { customers: true }
             });
 

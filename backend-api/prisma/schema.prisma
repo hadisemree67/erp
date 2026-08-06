@@ -132,9 +132,22 @@ model customers {
   Phone        String?        @db.VarChar(20)
   Email        String?        @db.VarChar(100)
   Address      String?        @db.VarChar(255)
+  City         String?        @db.VarChar(100)
+  Gender       String?        @db.VarChar(20)
+  Age          Int?
   crm_accounts crm_accounts[]
   crm_tickets  crm_tickets[]
   orders       orders[]
+}
+
+model wms_warehouse_zones {
+  id              Int       @id @default(autoincrement())
+  warehouse_id    Int
+  zone_name       String    @db.VarChar(50)
+  description     String?   @db.Text
+  created_at      DateTime? @default(now()) @db.Timestamp(0)
+  updated_at      DateTime? @db.Timestamp(0)
+  is_active       Boolean?  @default(true)
 }
 
 model employee_documents {

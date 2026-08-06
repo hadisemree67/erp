@@ -67,6 +67,7 @@ import CourierDelivery from './components/Orders/CourierDelivery';
 import Reports from './components/Reports/Reports';
 import Settings from './components/Settings/Settings';
 import DataImport from './components/DataImport/DataImport';
+import DataExport from './components/DataExport/DataExport';
 import './index.css';
 
 function App() {
@@ -338,6 +339,7 @@ function App() {
           {currentView === 'uretim-detayi' && <ProductionDetail currentUser={currentUser} orderId={selectedOrderId} onNavigate={setCurrentView} />}
           {currentView === 'raporlar' && <Reports currentUser={currentUser} />}
           {currentView === 'veri-ice-aktar' && <DataImport currentUser={currentUser} />}
+          {currentView === 'veri-aktar' && <DataExport currentUser={currentUser} />}
         </div>
         </div>
       </div>

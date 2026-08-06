@@ -4,8 +4,11 @@
  * Uygulama genelinde kullanıcı durumunu, giriş (login) ve çıkış (logout) işlemlerini barındırır.
  */
 import React, { createContext, useState, useEffect } from 'react';
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/api';
+
+const APP_VERSION = '1.0.0'; // Mevcut mobil uygulama sürümü
 
 export const AuthContext = createContext();
 
@@ -27,6 +30,25 @@ export const AuthProvider = ({ children }) => {
      */
     const loadUser = async () => {
         try {
+            // Önce versiyon kontrolü yap
+            try {
+                const versionRes = await api.get('/mobile-version');
+                if (versionRes.data.success && versionRes.data.forceUpdate) {
+                    if (versionRes.data.minVersion !== APP_VERSION) {
+                        Alert.alert(
+                            "Zorunlu Güncelleme",
+                            "Uygulamanın eski bir sürümünü kullanıyorsunuz. Lütfen sistem yöneticisinden uygulamanın güncel sürümünü isteyin.",
+                            [{ text: "Tamam", onPress: () => {} }],
+                            { cancelable: false }
+                        );
+                        setIsLoading(false);
+                        return; // Versiyon eskiyse uygulamayı açma
+                    }
+                }
+            } catch (vErr) {
+                console.log("Versiyon kontrolü yapılamadı (Sunucuya ulaşılamıyor olabilir).");
+            }
+
             const userStr = await AsyncStorage.getItem('user');
             if (userStr) {
                 setUser(JSON.parse(userStr));

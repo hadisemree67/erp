@@ -22,6 +22,7 @@
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect, Fragment } from 'react';
 import StockEntry from './StockEntry';
+import * as XLSX from 'xlsx';
 
 const StockList = ({ currentUser, initialEntryVisible = false }) => {
   // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -239,6 +240,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
 
     const uniqueWarehouses = [...new Set(stockItems.map(item => item.warehouse_name))].filter(Boolean).sort();
 
+
   // Eğer form açıksa, doğrudan formu göster
   if (isEntryVisible) {
     // 5. Arayüz (UI) Çizimi ve Render Edilmesi
@@ -332,6 +334,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
           <p style={{ color: '#64748b', marginTop: '4px' }}>Depolardaki ürünleri, raf konumlarını ve bakiye miktarlarını görüntüleyin.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+
           <button 
             onClick={() => setIsFastDeductVisible(true)}
             style={{

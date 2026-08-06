@@ -362,18 +362,25 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
           </div>
         )}
 
-        {/* 14. Araçlar & İçe Aktarma */}
+        {/* 14. Excel & Veri Merkezi */}
         {hasPerm('view_dashboard') && (
           <div className="nav-item">
-            <a href="#veri-ice-aktar" className={`nav-link direct-link ${currentView === 'veri-ice-aktar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('veri-ice-aktar'); }}>
+            <div className={`nav-link ${(openDropdown === 'excel' || currentView === 'veri-ice-aktar' || currentView === 'veri-aktar') ? 'active' : ''}`} onClick={() => toggleDropdown('excel')}>
               <span className="nav-icon"></span>
-              <span className="nav-text">Veri İçe Aktar (Excel)</span>
-            </a>
+              <span className="nav-text">Excel & Veri Merkezi</span>
+              <span className={`nav-arrow ${openDropdown === 'excel' ? 'open' : ''}`}>▼</span>
+            </div>
+            {openDropdown === 'excel' && (
+              <div className="dropdown-menu">
+                <a href="#veri-ice-aktar" className={`dropdown-item ${currentView === 'veri-ice-aktar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('veri-ice-aktar'); }}>Veri Çek (İçe Aktar)</a>
+                <a href="#veri-aktar" className={`dropdown-item ${currentView === 'veri-aktar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('veri-aktar'); }}>Veri Aktar (Raporlama)</a>
+              </div>
+            )}
           </div>
         )}
 
         {/* 15. Sistem Ayarları */}
-        {(userRole === 'Yönetici' || userRole === 'Admin') && (
+        {(userRole === 'Yönetici' || userRole === 'Admin' || userRole === 'admin' || userRole === 'Sistem Yöneticisi') && (
           <div className="nav-item">
             <a href="#ayarlar" className={`nav-link direct-link ${currentView === 'ayarlar' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('ayarlar'); }}>
               <span className="nav-icon"></span>

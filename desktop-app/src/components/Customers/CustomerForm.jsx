@@ -6,6 +6,10 @@
 import React, { useState } from 'react';
 import { apiFetch } from '../../utils/api';
 
+const TURKISH_CITIES = [
+    "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari", "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir", "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Kahramanmaraş", "Mardin", "Muğla", "Muş", "Nevşehir", "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van", "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman", "Kırıkkale", "Batman", "Şırnak", "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"
+].sort((a, b) => a.localeCompare(b, 'tr'));
+
 const CustomerForm = ({ customer, onClose, onNavigate }) => {
     const isEditing = !!customer;
 
@@ -14,7 +18,10 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
         CustomerName: customer?.CustomerName || '',
         Phone: customer?.Phone || '',
         Email: customer?.Email || '',
-        Address: customer?.Address || ''
+        Address: customer?.Address || '',
+        City: customer?.City || '',
+        Gender: customer?.Gender || '',
+        Age: customer?.Age || ''
     });
 
     const [loading, setLoading] = useState(false);
@@ -131,6 +138,56 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
                             value={formData.Email}
                             onChange={handleChange}
                             placeholder="Örn: bilgi@abcticaret.com"
+                            style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                            Şehir
+                        </label>
+                        <select
+                            name="City"
+                            value={formData.City}
+                            onChange={handleChange}
+                            style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', backgroundColor: '#fff' }}
+                        >
+                            <option value="">Seçiniz (Örn: İstanbul)</option>
+                            {TURKISH_CITIES.map(city => (
+                                <option key={city} value={city}>{city}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                            Cinsiyet
+                        </label>
+                        <select
+                            name="Gender"
+                            value={formData.Gender}
+                            onChange={handleChange}
+                            style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none', backgroundColor: '#fff' }}
+                        >
+                            <option value="">Seçiniz</option>
+                            <option value="Erkek">Erkek</option>
+                            <option value="Kadın">Kadın</option>
+                            <option value="Belirtmek İstemiyorum">Belirtmek İstemiyorum</option>
+                        </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                            Yaş
+                        </label>
+                        <input
+                            type="number"
+                            name="Age"
+                            value={formData.Age}
+                            onChange={handleChange}
+                            placeholder="Örn: 35"
+                            min="0"
+                            max="120"
                             style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }}
                         />
                     </div>

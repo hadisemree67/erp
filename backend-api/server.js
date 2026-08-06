@@ -1,5 +1,4 @@
 /*
- * ÖZET:
  * Bu dosya arkayüz (backend) uygulamasının başlangıç noktasıdır. Express.js sunucusunu başlatır, 
  * güvenlik ayarlarını yapar ve tüm API rotalarını sisteme bağlar.
  */
@@ -46,8 +45,8 @@ app.use((req, res, next) => {
 
 app.locals.system_paused = false;
 db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'system_paused'")
-  .then(([rows]) => { if (rows.length > 0) app.locals.system_paused = (rows[0].setting_value === 'true'); })
-  .catch(e => console.error("system_paused fetch error:", e));
+    .then(([rows]) => { if (rows.length > 0) app.locals.system_paused = (rows[0].setting_value === 'true'); })
+    .catch(e => console.error("system_paused fetch error:", e));
 
 
 app.use(helmet({
@@ -121,8 +120,8 @@ app.use((req, res, next) => {
     }
     // Login isteği, public mail linkleri veya sistem durumunu soruyorsa güvenliği atla
     if (
-        req.path === '/api/login' || req.path === '/api/login/' || 
-        req.path === '/api/settings/status' || req.path === '/api/settings/status/' || 
+        req.path === '/api/login' || req.path === '/api/login/' ||
+        req.path === '/api/settings/status' || req.path === '/api/settings/status/' ||
         req.path.startsWith('/uploads/') ||
         // Tedarikçi onay linkleri - sadece GET (e-posta linkleri) ve POST (form gönderimi) izni
         (req.path.startsWith('/api/purchasing/orders/action') && ['GET', 'POST'].includes(req.method)) ||
@@ -143,15 +142,16 @@ app.use(async (req, res, next) => {
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
         // İstisna yollar
         const isExempt =
-            req.path.startsWith('/api/settings') || 
+            req.path.startsWith('/api/settings') ||
             req.path === '/api/login' || req.path === '/api/login/' ||
             req.path.startsWith('/api/purchasing/orders/action') ||
             req.path.startsWith('/api/supplier-approval');
+            
         if (!isExempt) {
             if (req.app.locals.system_paused) {
-                return res.status(503).json({ 
-                    success: false, 
-                    message: 'Sistem şu anda depo sayımı veya bakım nedeniyle duraklatılmıştır. Veri değişikliği yapılamaz.' 
+                return res.status(503).json({
+                    success: false,
+                    message: 'Sistem şu anda depo sayımı veya bakım nedeniyle duraklatılmıştır. Veri değişikliği yapılamaz.'
                 });
             }
         }
@@ -201,6 +201,9 @@ app.use('/api/finance', financeRouter);
 
 const reportsRouter = require('./routes/reports');
 app.use('/api/reports', reportsRouter);
+
+const dataExportRouter = require('./routes/data_export');
+app.use('/api/data-export', dataExportRouter);
 
 const ordersRouter = require('./routes/orders');
 app.use('/api/orders', ordersRouter);
@@ -311,7 +314,7 @@ app.post('/api/login', async (req, res) => {
         }
 
         const user = rows[0];
-        
+
         // GÜVENLİK: Pasif veya kovulmuş kullanıcı kontrolü
         if (user.is_active === 0 || user.is_active === false || user.is_active === '0') {
             return res.status(403).json({ success: false, message: 'Hesabınız askıya alınmış veya pasif duruma getirilmiştir.' });
@@ -397,7 +400,7 @@ app.use((err, req, res, next) => {
     // Genel Hata Dönüşü
     try {
         require('fs').appendFileSync('error.log', new Date().toISOString() + ' [API HATASI] ' + req.url + ' : ' + (err.stack || err.message || err) + '\n');
-    } catch(e) {}
+    } catch (e) { }
 
     res.status(err.status || 500).json({
         success: false,
