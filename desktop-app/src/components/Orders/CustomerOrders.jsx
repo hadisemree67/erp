@@ -23,6 +23,13 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
 
     // Order Create Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
+    
+    // Kupon Durumları
+    const [couponCodeInput, setCouponCodeInput] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
+    const [couponError, setCouponError] = useState(null);
+    const [couponDiscount, setCouponDiscount] = useState(0);
+
     const [selectedCustomerId, setSelectedCustomerId] = useState('');
     const [shippingAddress, setShippingAddress] = useState('');
     const [paymentMethod, setPaymentMethod] = useState('Nakit');
@@ -61,6 +68,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
     const [isStatsModalOpen, setIsStatsModalOpen] = useState(false);
     const [statsData, setStatsData] = useState([]);
     const [statsLoading, setStatsLoading] = useState(false);
+    const [statsRange, setStatsRange] = useState('daily');
 
     // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
@@ -117,11 +125,10 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         }
     };
 
-    const handleOpenStatsModal = async () => {
-        setIsStatsModalOpen(true);
+    const fetchStats = async (range) => {
         setStatsLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/mobile/stats/daily');
+            const res = await apiFetch(`http://localhost:3000/api/mobile/stats?range=${range}`);
             const data = await res.json();
             if (data.success) {
                 setStatsData(data.stats || []);
@@ -134,6 +141,17 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         } finally {
             setStatsLoading(false);
         }
+    };
+
+    const handleOpenStatsModal = async () => {
+        setIsStatsModalOpen(true);
+        setStatsRange('daily');
+        fetchStats('daily');
+    };
+
+    const handleStatsRangeChange = (range) => {
+        setStatsRange(range);
+        fetchStats(range);
     };
 
     // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
@@ -162,6 +180,54 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         }
 
         setOrderItems(newItems);
+    };
+
+    const handleApplyCoupon = async () => {
+        setCouponError(null);
+        if (!couponCodeInput.trim()) return;
+        
+        const validItems = orderItems.filter(i => i.productId && i.quantity > 0).map(item => {
+             const prod = products.find(p => p.Id === parseInt(item.productId) || p.id === parseInt(item.productId));
+             return {
+                 ...item,
+                 Category: prod ? prod.Category : ''
+             };
+        });
+        
+        if (validItems.length === 0) {
+            setCouponError('Sepette geçerli ürün yok.');
+            return;
+        }
+
+        try {
+            const res = await apiFetch('http://localhost:3000/api/coupons/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: couponCodeInput, items: validItems })
+            });
+            const data = await res.json();
+            if (data.success) {
+                setAppliedCoupon(data.coupon);
+                setCouponDiscount(data.discountAmount);
+                if (data.giftItem) {
+                    setOrderItems([...orderItems.filter(i => !i.isGift), {
+                        productId: data.giftItem.productId,
+                        quantity: data.giftItem.quantity,
+                        unitPrice: data.giftItem.unitPrice,
+                        isGift: true
+                    }]);
+                }
+                alert('Kupon başarıyla uygulandı!');
+            } else {
+                setCouponError(data.message);
+                setAppliedCoupon(null);
+                setCouponDiscount(0);
+                // Hediye ürünleri temizle
+                setOrderItems(orderItems.filter(i => !i.isGift));
+            }
+        } catch (e) {
+            setCouponError('Kupon doğrulanırken hata oluştu.');
+        }
     };
 
     const calculateTotalAndDiscount = () => {
@@ -206,6 +272,11 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                 }
             });
 
+            if (appliedCoupon) {
+                discount += couponDiscount;
+                appliedCampaignName = appliedCampaignName ? `${appliedCampaignName} + ${appliedCoupon.code}` : appliedCoupon.code;
+            }
+
             return {
                 rawTotal: total,
                 finalTotal: total - discount,
@@ -225,7 +296,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
             alert('Lütfen bir müşteri seçiniz.');
             return;
         }
-        if (!shippingAddress || !shippingAddress.trim()) {
+        if (selectedShipperId !== 'ELDEN_TESLIM' && (!shippingAddress || !shippingAddress.trim())) {
             alert('Lütfen sevkiyat adresi giriniz.');
             return;
         }
@@ -249,14 +320,16 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     customerId: selectedCustomerId,
-                    shippingAddress,
+                    shippingAddress: selectedShipperId === 'ELDEN_TESLIM' ? 'Elden Teslim' : shippingAddress,
                     paymentMethod,
                     items: validItems,
                     userId: currentUser?.id,
                     campaignId: calcResult.campaignId,
                     campaignName: calcResult.campaignName,
                     discountAmount: calcResult.discount,
-                    shipperId: selectedShipperId
+                    shipperId: selectedShipperId === 'ELDEN_TESLIM' ? null : selectedShipperId,
+                    couponId: appliedCoupon ? appliedCoupon.id : null,
+                    couponCode: appliedCoupon ? appliedCoupon.code : null
                 })
             });
 
@@ -269,6 +342,9 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                 setShippingAddress('');
                 setPaymentMethod('Nakit');
                 setSelectedShipperId('');
+                setCouponCodeInput('');
+                setAppliedCoupon(null);
+                setCouponDiscount(0);
                 setOrderItems([{ productId: '', quantity: 1, unitPrice: 0 }]);
                 fetchInitialData();
             } else {
@@ -961,14 +1037,25 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                     </select>
                                 </div>
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Sevkiyat Adresi *</label>
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
+                                        Sevkiyat Adresi {selectedShipperId !== 'ELDEN_TESLIM' && '*'}
+                                    </label>
                                     <input
                                         type="text"
                                         value={shippingAddress}
                                         onChange={e => setShippingAddress(e.target.value)}
-                                        required
-                                        placeholder="Örn: Organize Sanayi Bölgesi 2. Cadde..."
-                                        style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', color: '#0f172a' }}
+                                        required={selectedShipperId !== 'ELDEN_TESLIM'}
+                                        disabled={selectedShipperId === 'ELDEN_TESLIM'}
+                                        placeholder={selectedShipperId === 'ELDEN_TESLIM' ? "Elden Teslim" : "Örn: Organize Sanayi Bölgesi 2. Cadde..."}
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '10px 12px', 
+                                            border: '1px solid #cbd5e1', 
+                                            borderRadius: '8px', 
+                                            fontSize: '14px', 
+                                            color: selectedShipperId === 'ELDEN_TESLIM' ? '#94a3b8' : '#0f172a',
+                                            backgroundColor: selectedShipperId === 'ELDEN_TESLIM' ? '#f1f5f9' : 'white'
+                                        }}
                                     />
                                 </div>
                                 <div>
@@ -980,6 +1067,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                         style={{ width: '100%', padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', color: '#0f172a', backgroundColor: 'white' }}
                                     >
                                         <option value="">-- Kargo Seçiniz --</option>
+                                        <option value="ELDEN_TESLIM">Elden Teslim</option>
                                         {shippers.map(s => (
                                             <option key={s.Id} value={s.Id}>{s.CompanyName}</option>
                                         ))}
@@ -1119,11 +1207,15 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                         <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Miktar (Adet)</label>
                                                         <input
                                                             type="number"
+                                                            disabled={item.isGift}
                                                             min="1"
                                                             value={item.quantity}
-                                                            onChange={e => handleItemChange(index, 'quantity', e.target.value)}
+                                                            onChange={e => {
+                                                                let val = Math.max(1, parseInt(e.target.value) || 1);
+                                                                handleItemChange(index, 'quantity', val);
+                                                            }}
                                                             required
-                                                            style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', fontWeight: 'bold' }}
+                                                            style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '15px', fontWeight: '700', textAlign: 'center', backgroundColor: item.isGift ? '#f1f5f9' : 'white' }}
                                                         />
                                                     </div>
 
@@ -1133,31 +1225,34 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                             type="number"
                                                             step="0.01"
                                                             min="0"
+                                                            disabled={item.isGift}
                                                             value={item.unitPrice}
                                                             onChange={e => handleItemChange(index, 'unitPrice', e.target.value)}
                                                             required
-                                                            style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px' }}
+                                                            style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', backgroundColor: item.isGift ? '#f1f5f9' : 'white', cursor: item.isGift ? 'not-allowed' : 'default' }}
                                                         />
                                                     </div>
 
                                                     <div style={{ paddingTop: '18px' }}>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveItemRow(index)}
-                                                            disabled={orderItems.length === 1}
-                                                            style={{
-                                                                padding: '10px',
-                                                                backgroundColor: orderItems.length === 1 ? '#e2e8f0' : '#fee2e2',
-                                                                color: orderItems.length === 1 ? '#94a3b8' : '#dc2626',
-                                                                border: 'none',
-                                                                borderRadius: '6px',
-                                                                cursor: orderItems.length === 1 ? 'not-allowed' : 'pointer',
-                                                                fontWeight: 'bold'
-                                                            }}
-                                                            title="Bu ürün kalemini listeden çıkar"
-                                                        >
-                                                            ✕
-                                                        </button>
+                                                        <div style={{ textAlign: 'right', fontWeight: '900', color: '#1e293b', fontSize: '15px' }}>
+                                                            {((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)).toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ₺
+                                                        </div>
+                                                        {orderItems.length > 1 && !item.isGift && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const newItems = orderItems.filter((_, i) => i !== index);
+                                                                    setOrderItems(newItems);
+                                                                }}
+                                                                style={{ marginLeft: '12px', background: 'none', border: 'none', color: '#ef4444', fontSize: '18px', cursor: 'pointer', padding: '4px' }}
+                                                                title="Bu satırı sil"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        )}
+                                                        {item.isGift && (
+                                                            <span style={{ marginLeft: '12px', color: '#10b981', fontWeight: 'bold', fontSize: '12px' }}>🎁 HEDİYE</span>
+                                                        )}
                                                     </div>
                                                 </div>
 
@@ -1179,6 +1274,45 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                         );
                                     })}
                                 </div>
+                            </div>
+                            
+                            {/* Kupon Alanı */}
+                            <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px', border: '1px solid #cbd5e1' }}>
+                                <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <label style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap' }}>İndirim Kuponu:</label>
+                                    <input
+                                        type="text"
+                                        value={couponCodeInput}
+                                        onChange={e => setCouponCodeInput(e.target.value.toUpperCase())}
+                                        disabled={appliedCoupon !== null}
+                                        placeholder="Kupon Kodunu Girin..."
+                                        style={{ flex: 1, padding: '10px 12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+                                    />
+                                    {!appliedCoupon ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleApplyCoupon}
+                                            style={{ padding: '10px 16px', backgroundColor: '#4f46e5', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                                        >
+                                            Uygula
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setAppliedCoupon(null);
+                                                setCouponDiscount(0);
+                                                setCouponCodeInput('');
+                                                setOrderItems(orderItems.filter(i => !i.isGift));
+                                            }}
+                                            style={{ padding: '10px 16px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                                        >
+                                            İptal Et
+                                        </button>
+                                    )}
+                                </div>
+                                {couponError && <div style={{ color: '#ef4444', fontSize: '13px', fontWeight: '600' }}>{couponError}</div>}
+                                {appliedCoupon && <div style={{ color: '#10b981', fontSize: '13px', fontWeight: '600' }}>✅ Kupon uygulandı (-{couponDiscount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL)</div>}
                             </div>
 
                             {/* Toplam Özet Bilgi Alanı */}
@@ -1602,8 +1736,33 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1200, padding: '20px' }} onClick={() => setIsStatsModalOpen(false)}>
                     <div style={{ backgroundColor: '#ffffff', borderRadius: '16px', width: '100%', maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' }} onClick={(e) => e.stopPropagation()}>
                         <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: '16px 16px 0 0' }}>
-                            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>🏆 Günlük Toplayıcı Liderlik Tablosu</h2>
+                            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
+                                🏆 {statsRange === 'daily' ? 'Günlük' : statsRange === 'weekly' ? 'Haftalık' : statsRange === 'monthly' ? 'Aylık' : 'Yıllık'} Toplayıcı Liderlik Tablosu
+                            </h2>
                             <button onClick={() => setIsStatsModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
+                        </div>
+                        
+                        <div style={{ padding: '16px 24px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '8px', overflowX: 'auto' }}>
+                            {['daily', 'weekly', 'monthly', 'yearly'].map(range => (
+                                <button
+                                    key={range}
+                                    onClick={() => handleStatsRangeChange(range)}
+                                    style={{
+                                        padding: '8px 16px',
+                                        backgroundColor: statsRange === range ? '#8b5cf6' : '#f1f5f9',
+                                        color: statsRange === range ? '#fff' : '#475569',
+                                        border: 'none',
+                                        borderRadius: '20px',
+                                        fontWeight: '600',
+                                        fontSize: '13px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    {range === 'daily' ? 'Günlük' : range === 'weekly' ? 'Haftalık' : range === 'monthly' ? 'Aylık' : 'Yıllık'}
+                                </button>
+                            ))}
                         </div>
                         
                         <div style={{ padding: '24px' }}>

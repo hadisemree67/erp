@@ -24,6 +24,7 @@ import { useState, useEffect } from 'react';
 import Barcode from 'react-barcode';
 import ProductForm from './ProductForm';
 import BulkEditModal from './BulkEditModal';
+import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const ProductList = ({ onNavigate, currentUser }) => {
   // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -39,6 +40,10 @@ const ProductList = ({ onNavigate, currentUser }) => {
   // Barkod Okuyucu State'i
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState('');
+
+  // Barkod Yazdırma State
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printBarcodeData, setPrintBarcodeData] = useState({ value: '', title: '' });
 
   const hasPerm = (key) => currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(key);
   const canSeeCosts = currentUser?.role === 'admin' || hasPerm('view_finance');
@@ -404,7 +409,35 @@ const ProductList = ({ onNavigate, currentUser }) => {
                       />
                   </td>
                   <td style={{ padding: '12px 24px', color: '#0f172a', fontWeight: '500', textAlign: 'left' }}>
-                    {barcodes.length > 0 ? barcodes.join(', ') : '-'}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>{barcodes.length > 0 ? barcodes.join(', ') : '-'}</span>
+                        {barcodes.length > 0 && (
+                            <button
+                                type="button"
+                                title="Yazdır"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPrintBarcodeData({ value: barcodes.filter(b => b), title: product.ProductName });
+                                    setPrintModalOpen(true);
+                                }}
+                                style={{
+                                    padding: '4px',
+                                    backgroundColor: 'transparent',
+                                    border: 'none',
+                                    color: '#64748b',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    borderRadius: '4px'
+                                }}
+                                onMouseOver={(e) => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.backgroundColor = '#e0f2fe'; }}
+                                onMouseOut={(e) => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                            >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                            </button>
+                        )}
+                    </div>
                   </td>
                   <td style={{ padding: '12px 24px', color: '#334155', textAlign: 'left' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -480,6 +513,13 @@ const ProductList = ({ onNavigate, currentUser }) => {
             }}
         />
       )}
+
+      <BarcodePrintModal 
+          isOpen={printModalOpen}
+          onClose={() => setPrintModalOpen(false)}
+          barcodeValue={printBarcodeData.value}
+          title={printBarcodeData.title}
+      />
     </div>
   );
 };

@@ -21,6 +21,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
+import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const WarehouseForm = ({ warehouse, onNavigate }) => {
     const isEditing = !!warehouse;
@@ -45,6 +46,10 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
     const [barcodeModalIndex, setBarcodeModalIndex] = useState(null);
     const [tempBarcode, setTempBarcode] = useState('');
     const [error, setError] = useState(null);
+
+    // Barkod Yazdırma State
+    const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printBarcodeData, setPrintBarcodeData] = useState({ value: '', title: '' });
 
     // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
@@ -104,12 +109,13 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
             const floorStr = floorPrefix.trim() ? floorPrefix.trim() + ' ' : '';
             
             for (let i = 1; i <= count; i++) {
+                const shelfCode = `${floorStr}${blockPrefix.trim()}-${i}`;
                 newShelves.push({ 
-                    shelfCode: `${floorStr}${blockPrefix.trim()}-${i}`, 
+                    shelfCode, 
                     width: shelfWidth, 
                     height: shelfHeight, 
                     depth: shelfDepth,
-                    barcode: ''
+                    barcode: `RAF-${Date.now().toString().slice(-6)}-${shelfCode.replace(/\s+/g, '-')}`
                 });
             }
             const currentShelves = shelves.filter(s => s.shelfCode.trim() !== '');
@@ -226,7 +232,7 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
                             <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', color: '#0f172a' }}>Raf / Bölüm Tanımları</h3>
                             <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>Aşağıdaki araçla otomatik seri oluşturabilir veya tek tek raf ekleyebilirsiniz.</p>
                         </div>
-                        <button type="button" onClick={addShelfField} style={{ padding: '8px 16px', backgroundColor: '#e0f2fe', color: '#0284c7', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button type="button" onClick={() => setShelves([...shelves, { shelfCode: '', width: '', height: '', depth: '', barcode: `RAF-${Date.now().toString().slice(-6)}-YENI` }])} style={{ padding: '8px 16px', backgroundColor: '#e0f2fe', color: '#0284c7', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <span style={{ fontSize: '18px' }}>+</span> Tekli Raf Ekle
                         </button>
                     </div>
@@ -273,7 +279,17 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
                                 <input 
                                     type="text" 
                                     value={shelf.shelfCode} 
-                                    onChange={(e) => handleShelfChange(index, 'shelfCode', e.target.value)} 
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        const newShelves = [...shelves];
+                                        newShelves[index] = { ...newShelves[index], shelfCode: val };
+                                        
+                                        // Eğer barkod atanmamışsa veya RAF- ile başlayıp YENI biten geçici barkodsa, güncelle
+                                        if (!newShelves[index].barcode || newShelves[index].barcode.endsWith('YENI')) {
+                                            newShelves[index].barcode = `RAF-${Date.now().toString().slice(-6)}-${val.replace(/\s+/g, '-')}`;
+                                        }
+                                        setShelves(newShelves);
+                                    }} 
                                     placeholder={`Raf Kodu ${index + 1}`} 
                                     style={{ flex: 1, minWidth: '100px', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }} 
                                 />
@@ -298,7 +314,7 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
                                     placeholder={`Derinlik`} 
                                     style={{ width: '80px', padding: '10px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }} 
                                 />
-                                <div style={{ position: 'relative' }}>
+                                <div style={{ position: 'relative', display: 'flex', gap: '4px' }}>
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -329,6 +345,33 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
                                     >
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
                                     </button>
+
+                                    {shelf.barcode && (
+                                        <button
+                                            type="button"
+                                            title="Yazdır"
+                                            onClick={() => {
+                                                setPrintBarcodeData({ value: shelf.barcode, title: `Raf: ${shelf.shelfCode || 'İsimsiz'}` });
+                                                setPrintModalOpen(true);
+                                            }}
+                                            style={{
+                                                padding: '0',
+                                                backgroundColor: 'white',
+                                                border: '1px solid #cbd5e1',
+                                                color: '#3b82f6',
+                                                borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                height: '40px',
+                                                width: '40px',
+                                                flexShrink: 0
+                                            }}
+                                        >
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                        </button>
+                                    )}
                                     
                                     {barcodeModalIndex === index && (
                                         <div style={{ position: 'absolute', top: '100%', right: '0', zIndex: 50, marginTop: '8px', backgroundColor: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.15)', border: '1px solid #e2e8f0', display: 'flex', gap: '8px' }}>
@@ -340,13 +383,24 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
                                                 onKeyDown={e => {
                                                     if (e.key === 'Enter') {
                                                         e.preventDefault();
-                                                        handleShelfChange(index, 'barcode', tempBarcode);
+                                                        const finalBarcode = e.target.value;
+                                                        handleShelfChange(index, 'barcode', finalBarcode);
                                                         setBarcodeModalIndex(null);
                                                     }
                                                 }}
                                                 placeholder="Okutun veya yazın..." 
                                                 style={{ padding: '8px 12px', borderRadius: '6px', border: '2px solid #3b82f6', outline: 'none', width: '180px', fontSize: '14px' }} 
                                             />
+                                            <button 
+                                                type="button" 
+                                                onClick={() => {
+                                                    const newBarcode = `RAF-${Date.now().toString().slice(-6)}-${shelf.shelfCode ? shelf.shelfCode.replace(/\s+/g, '-') : 'YENI'}`;
+                                                    setTempBarcode(newBarcode);
+                                                }}
+                                                style={{ padding: '8px 12px', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}
+                                            >
+                                                Oluştur
+                                            </button>
                                             <button 
                                                 type="button" 
                                                 onClick={() => {
@@ -384,6 +438,13 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
                     </button>
                 </div>
             </form>
+
+            <BarcodePrintModal 
+                isOpen={printModalOpen}
+                onClose={() => setPrintModalOpen(false)}
+                barcodeValue={printBarcodeData.value}
+                title={printBarcodeData.title}
+            />
         </div>
     );
 };

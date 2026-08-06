@@ -104,6 +104,28 @@ model crm_tickets {
   @@index([customer_id], map: "customer_id")
 }
 
+model coupons {
+  id                      Int       @id @default(autoincrement())
+  code                    String    @unique @db.VarChar(50)
+  discount_type           String    @db.VarChar(50)
+  discount_value          Decimal?  @db.Decimal(10,2)
+  minimum_order_amount    Decimal?  @db.Decimal(10,2)
+  maximum_discount_amount Decimal?  @db.Decimal(10,2)
+  buy_quantity            Int?
+  free_quantity           Int?
+  gift_product_id         Int?
+  target_category         String?   @db.VarChar(100)
+  target_product_id       Int?
+  usage_limit             Int?
+  used_count              Int?      @default(0)
+  start_date              DateTime? @db.Date
+  end_date                DateTime? @db.Date
+  is_active               Boolean?  @default(true)
+  created_at              DateTime? @default(now()) @db.Timestamp(0)
+  
+  orders                  orders[]
+}
+
 model customers {
   Id           Int            @id @default(autoincrement())
   CustomerName String         @db.VarChar(150)
@@ -258,6 +280,8 @@ model orders {
   CampaignId                     Int?
   CampaignName                   String?             @db.VarChar(255)
   DiscountAmount                 Decimal?            @default(0.00) @db.Decimal(18, 2)
+  CouponId                       Int?
+  CouponCode                     String?             @db.VarChar(50)
   deducted_batches               Json?
   PickerId                       Int?
   PickedDate                     DateTime?           @db.DateTime(0)
@@ -274,6 +298,7 @@ model orders {
   users_orders_PickerIdTousers   users?              @relation("orders_PickerIdTousers", fields: [PickerId], references: [id], onUpdate: NoAction, map: "fk_orders_picker")
   users_orders_ShipUserIdTousers users?              @relation("orders_ShipUserIdTousers", fields: [ShipUserId], references: [id], onUpdate: NoAction, map: "fk_orders_shipper_user")
   customers                      customers           @relation(fields: [CustomerId], references: [Id], onUpdate: NoAction, map: "orders_ibfk_1")
+  coupons                        coupons?            @relation(fields: [CouponId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([CustomerId], map: "CustomerId")
   @@index([ShipperId], map: "FK_Orders_Shippers")
@@ -281,6 +306,7 @@ model orders {
   @@index([PickerId], map: "fk_orders_picker")
   @@index([ShipUserId], map: "fk_orders_shipper_user")
   @@index([CartId], map: "fk_orders_cart")
+  @@index([CouponId], map: "fk_orders_coupon")
 }
 
 model packaging_boxes {
@@ -298,6 +324,17 @@ model packaging_boxes {
   MinStockLevel     Int?                @default(0)
   box_stock_entries box_stock_entries[]
   box_suppliers     box_suppliers[]
+  box_barcodes      box_barcodes[]
+}
+
+model box_barcodes {
+  id         Int             @id @default(autoincrement())
+  box_id     Int
+  barcode    String          @unique(map: "box_barcode") @db.VarChar(100)
+  created_at DateTime?       @default(now()) @db.Timestamp(0)
+  box        packaging_boxes @relation(fields: [box_id], references: [Id], onDelete: Cascade, onUpdate: NoAction, map: "box_barcodes_ibfk_1")
+
+  @@index([box_id], map: "box_id")
 }
 
 model permissions {

@@ -1,3 +1,8 @@
+/**
+ * @file PendingOrdersScreen.js
+ * @description Bekleyen siparişlerin listelendiği ekran. 
+ * Kullanıcı buradan sipariş seçip, bir taşıma arabasına (ve bölümlerine) atayarak toplamaya başlayabilir.
+ */
 import React, { useState, useEffect, useContext } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +12,10 @@ import api from '../api/api';
 import { AuthContext } from '../context/AuthContext';
 import { Feather } from '@expo/vector-icons';
 
+/**
+ * PendingOrdersScreen Bileşeni
+ * Siparişleri listeler, arama yapılmasını sağlar ve sipariş atama modülünü yönetir.
+ */
 export default function PendingOrdersScreen({ navigation, route }) {
     const { user } = useContext(AuthContext);
     const [orders, setOrders] = useState([]);
@@ -45,6 +54,9 @@ export default function PendingOrdersScreen({ navigation, route }) {
         return () => clearInterval(intervalId);
     }, [route.params?.autoStartOrderId]);
 
+    /**
+     * API'den bekleyen (toplanmamış) siparişlerin listesini çeken fonksiyon.
+     */
     const fetchPendingOrders = async () => {
         setLoading(true);
         try {
@@ -62,6 +74,10 @@ export default function PendingOrdersScreen({ navigation, route }) {
         }
     };
 
+    /**
+     * Bir sipariş seçildiğinde barkod okutma modalını açan fonksiyon.
+     * @param {number} orderId - Seçilen siparişin ID'si
+     */
     const startOrderSession = (orderId) => {
         setSelectedOrderId(orderId);
         setSectionBarcodes(['']); // Reset sections
@@ -85,6 +101,10 @@ export default function PendingOrdersScreen({ navigation, route }) {
         setTimeout(() => setScanned(false), 1500);
     };
 
+    /**
+     * Okutulan barkodları siparişe atayıp toplama işlemini başlatan fonksiyon.
+     * İşlem başarılıysa Picking (Toplama) ekranına yönlendirir.
+     */
     const handleAssignOrder = async () => {
         if (assigning || !selectedOrderId) return;
         
@@ -105,6 +125,33 @@ export default function PendingOrdersScreen({ navigation, route }) {
             if (res.data.success) {
                 setIsScannerModalVisible(false);
                 navigation.navigate('Picking', { order: res.data.order, items: res.data.items, initialSections: validSections });
+            } else {
+                Alert.alert('Bilgi', res.data.message || 'Sipariş alınamadı.');
+                fetchPendingOrders(); // Listeyi yenile
+            }
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Hata', 'Sipariş atanamadı.');
+        } finally {
+            setAssigning(false);
+        }
+    };
+
+    /**
+     * Arabasız / Elden teslim gibi durumlarda bölüm barkodu okutmadan atama yapar.
+     */
+    const handleAssignWithoutCart = async () => {
+        if (assigning || !selectedOrderId) return;
+        
+        setAssigning(true);
+        try {
+            const res = await api.post(`/mobile/orders/assign/${selectedOrderId}`, {
+                userId: user.id,
+                section_barcodes: ['ELDEN_TESLIM']
+            });
+            if (res.data.success) {
+                setIsScannerModalVisible(false);
+                navigation.navigate('Picking', { order: res.data.order, items: res.data.items, initialSections: ['ELDEN_TESLIM'] });
             } else {
                 Alert.alert('Bilgi', res.data.message || 'Sipariş alınamadı.');
                 fetchPendingOrders(); // Listeyi yenile
@@ -159,6 +206,7 @@ export default function PendingOrdersScreen({ navigation, route }) {
         );
     };
 
+    // Arayüz render işlemleri: Arama çubuğu, sipariş listesi ve barkod okutma modalı
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -291,6 +339,14 @@ export default function PendingOrdersScreen({ navigation, route }) {
                         >
                             {assigning ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.startSessionButtonText}>Toplama İşlemine Başla</Text>}
                         </TouchableOpacity>
+
+                        <TouchableOpacity 
+                            style={[styles.skipCartButton, assigning && { opacity: 0.7 }]} 
+                            onPress={handleAssignWithoutCart}
+                            disabled={assigning}
+                        >
+                            <Text style={styles.skipCartButtonText}>Arabasız Topla (Geç)</Text>
+                        </TouchableOpacity>
                     </View>
                 </KeyboardAvoidingView>
             </Modal>
@@ -298,6 +354,7 @@ export default function PendingOrdersScreen({ navigation, route }) {
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -410,10 +467,23 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
         marginTop: 10,
-        marginBottom: 20,
+        marginBottom: 12,
     },
     startSessionButtonText: {
         color: '#ffffff',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    skipCartButton: {
+        width: '100%',
+        backgroundColor: '#f1f5f9',
+        paddingVertical: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    skipCartButtonText: {
+        color: '#64748b',
         fontSize: 16,
         fontWeight: 'bold',
     },

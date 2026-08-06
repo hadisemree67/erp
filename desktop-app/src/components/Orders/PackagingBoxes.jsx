@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
+import Barcode from 'react-barcode';
 
 const PackagingBoxes = () => {
     // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -23,6 +24,11 @@ const PackagingBoxes = () => {
         MinStockLevel: ''
     });
     const [suppliersData, setSuppliersData] = useState([]);
+    
+    // Barkod Modal State'leri
+    const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
+    const [selectedBoxForBarcode, setSelectedBoxForBarcode] = useState(null);
+    const [newBarcode, setNewBarcode] = useState('');
 
     // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
@@ -190,7 +196,60 @@ const PackagingBoxes = () => {
         setSuppliersData(initialSuppliersData);
         setIsModalOpen(true);
     };
+    // Barkod İşlemleri
+    const generateRandomBarcode = () => {
+        return Math.floor(1000000000000 + Math.random() * 9000000000000).toString();
+    };
 
+    const handleAddBarcode = async () => {
+        if (!newBarcode) return alert("Barkod boş olamaz!");
+        
+        try {
+            const res = await apiFetch(`http://localhost:3000/api/boxes/${selectedBoxForBarcode.Id}/barcodes`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ barcode: newBarcode })
+            });
+            const data = await res.json();
+            if (data.success) {
+                // Modalı güncelle
+                setSelectedBoxForBarcode({
+                    ...selectedBoxForBarcode,
+                    barcodes: [...(selectedBoxForBarcode.barcodes || []), data.data]
+                });
+                setNewBarcode('');
+                fetchBoxes(); // Listeyi güncelle
+            } else {
+                alert(data.message || 'Barkod eklenemedi.');
+            }
+        } catch (err) {
+            console.error('Error adding barcode:', err);
+            alert('Bir hata oluştu.');
+        }
+    };
+
+    const handleDeleteBarcode = async (barcodeId) => {
+        if (!window.confirm("Bu barkodu silmek istediğinize emin misiniz?")) return;
+        
+        try {
+            const res = await apiFetch(`http://localhost:3000/api/boxes/${selectedBoxForBarcode.Id}/barcodes/${barcodeId}`, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            if (data.success) {
+                setSelectedBoxForBarcode({
+                    ...selectedBoxForBarcode,
+                    barcodes: selectedBoxForBarcode.barcodes.filter(b => b.id !== barcodeId)
+                });
+                fetchBoxes();
+            } else {
+                alert(data.message || 'Barkod silinemedi.');
+            }
+        } catch (err) {
+            console.error('Error deleting barcode:', err);
+            alert('Bir hata oluştu.');
+        }
+    };
     // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
     return (
@@ -255,6 +314,17 @@ const PackagingBoxes = () => {
                                     </td>
                                     <td style={{ padding: '16px', textAlign: 'right' }}>
                                         <div className="action-container" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+                                            <button 
+                                                onClick={() => {
+                                                    setSelectedBoxForBarcode(box);
+                                                    setIsBarcodeModalOpen(true);
+                                                    setNewBarcode('');
+                                                }}
+                                                title="Barkodları Yönet" 
+                                                style={{ background: 'none', border: 'none', color: '#10b981', cursor: 'pointer', padding: '4px', transition: 'color 0.2s' }} 
+                                            >
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
+                                            </button>
                                             <button 
                                                 onClick={() => handleEdit(box)}
                                                 title="Düzenle" 
@@ -517,6 +587,71 @@ const PackagingBoxes = () => {
                                 <button type="submit" style={{ flex: 1, padding: '12px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Stok Ekle</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            
+            {/* BARKOD YÖNETİM MODALI */}
+            {isBarcodeModalOpen && selectedBoxForBarcode && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1100, padding: '20px' }}>
+                    <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', color: '#1e293b' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h2 style={{ margin: '0', color: '#0f172a' }}>{selectedBoxForBarcode.BoxName} Barkodları</h2>
+                            <button onClick={() => setIsBarcodeModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#64748b' }}>&times;</button>
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                            <input 
+                                type="text"
+                                placeholder="Yeni barkod okutun..."
+                                value={newBarcode}
+                                onChange={(e) => setNewBarcode(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        setNewBarcode(e.target.value);
+                                        handleAddBarcode();
+                                    }
+                                }}
+                                style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '2px solid #3b82f6', outline: 'none' }}
+                            />
+                            <button 
+                                onClick={() => setNewBarcode(generateRandomBarcode())}
+                                style={{ padding: '0 15px', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                Üret
+                            </button>
+                            <button 
+                                onClick={handleAddBarcode}
+                                style={{ padding: '0 15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                            >
+                                Ekle
+                            </button>
+                        </div>
+
+                        <div>
+                            <h4 style={{ margin: '0 0 10px 0', color: '#475569' }}>Kayıtlı Barkodlar</h4>
+                            {(!selectedBoxForBarcode.barcodes || selectedBoxForBarcode.barcodes.length === 0) ? (
+                                <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>Henüz barkod eklenmemiş.</div>
+                            ) : (
+                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {selectedBoxForBarcode.barcodes.map(b => (
+                                        <li key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                            <div>
+                                                <Barcode value={b.barcode} height={40} width={1.5} fontSize={14} background="transparent" />
+                                            </div>
+                                            <button 
+                                                onClick={() => handleDeleteBarcode(b.id)}
+                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                                                title="Sil"
+                                            >
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

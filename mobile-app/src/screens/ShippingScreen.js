@@ -1,3 +1,8 @@
+/**
+ * @file ShippingScreen.js
+ * @description Sevkiyat (Kargo) ekranı. Kamera ile kargo barkodunu okutarak
+ * veya manuel barkod girerek siparişlerin sevkiyat (kargoya verilme) işlemini gerçekleştirir.
+ */
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -5,6 +10,10 @@ import { Camera, CameraView } from 'expo-camera';
 import { Feather } from '@expo/vector-icons';
 import api from '../api/api';
 
+/**
+ * ShippingScreen Bileşeni
+ * Kamera izinlerini yönetir ve barkod tarama arayüzünü sunar.
+ */
 export default function ShippingScreen({ navigation }) {
     const insets = useSafeAreaInsets();
     const [hasPermission, setHasPermission] = useState(null);
@@ -12,6 +21,9 @@ export default function ShippingScreen({ navigation }) {
     const [lastScanned, setLastScanned] = useState(null);
     const [manualBarcode, setManualBarcode] = useState('');
 
+    /**
+     * Bileşen yüklendiğinde kamera izinlerini isteyen UseEffect hook'u.
+     */
     useEffect(() => {
         (async () => {
             const { status } = await Camera.requestCameraPermissionsAsync();
@@ -19,6 +31,11 @@ export default function ShippingScreen({ navigation }) {
         })();
     }, []);
 
+    /**
+     * Kamera ile barkod okutulduğunda veya manuel girildiğinde tetiklenen fonksiyon.
+     * Okunan barkodu API'ye göndererek kargo çıkışını kaydeder.
+     * @param {Object} param0 - Okunan barkodun tipi (type) ve verisi (data)
+     */
     const handleBarCodeScanned = async ({ type, data }) => {
         if (scanned) return;
         setScanned(true);
@@ -41,6 +58,9 @@ export default function ShippingScreen({ navigation }) {
         }, 2000);
     };
 
+    /**
+     * Barkod okunamadığında kullanıcının manuel olarak girdiği barkodu işleyen fonksiyon.
+     */
     const handleManualSubmit = () => {
         if (!manualBarcode.trim()) return;
         handleBarCodeScanned({ type: 'manual', data: manualBarcode.trim() });
@@ -54,6 +74,7 @@ export default function ShippingScreen({ navigation }) {
         return <View style={styles.container}><Text>Kamera izni reddedildi.</Text></View>;
     }
 
+    // Arayüz render işlemleri: Kamera görüntüsü ve manuel giriş alanı
     return (
         <View style={styles.container}>
             <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -108,6 +129,7 @@ export default function ShippingScreen({ navigation }) {
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: {
         flex: 1,

@@ -73,7 +73,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/orders - Yeni manuel sipariş oluştur ve stok kontrolü / otomatik üretim talebi yap
 router.post('/', authMiddleware, async (req, res) => {
-    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount, shipperId } = req.body;
+    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount, shipperId, couponId, couponCode } = req.body;
 
     if (!customerId || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, message: 'Müşteri ve en az bir sipariş kalemi gereklidir.' });
@@ -120,6 +120,14 @@ router.post('/', authMiddleware, async (req, res) => {
                     transaction_date: new Date()
                 }
             });
+
+            // Kupon kullanımı geçici olarak devre dışı
+            // if (couponId) {
+            //     await tx.coupons.update({
+            //         where: { id: Number(couponId) },
+            //         data: { used_count: { increment: 1 } }
+            //     });
+            // }
 
             for (const item of items) {
                 const productId = Number(item.productId);

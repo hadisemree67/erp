@@ -1,3 +1,8 @@
+/**
+ * @file HomeScreen.js
+ * @description Uygulamanın ana ekranı. Kullanıcıya özet istatistikleri ve yetkilerine göre yapabileceği 
+ * temel işlemleri (sipariş toplama, paketleme, sevkiyat) sunan yönlendirme sayfasıdır.
+ */
 import React, { useContext, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, RefreshControl, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +12,10 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useIsFocused } from '@react-navigation/native';
 
+/**
+ * HomeScreen Bileşeni
+ * Kullanıcının giriş yaptıktan sonra gördüğü ana menü panosu.
+ */
 export default function HomeScreen({ navigation }) {
     const { user, logout } = useContext(AuthContext);
     const isFocused = useIsFocused();
@@ -15,6 +24,9 @@ export default function HomeScreen({ navigation }) {
     const [stats, setStats] = useState({ totalOrders: 0, totalItems: 0 });
     const [loading, setLoading] = useState(true);
 
+    /**
+     * Bekleyen sipariş sayısını ve kullanıcının günlük performans özetini API'den çeken fonksiyon.
+     */
     const fetchData = async () => {
         try {
             const resPending = await api.get('/mobile/orders/pending');
@@ -22,7 +34,7 @@ export default function HomeScreen({ navigation }) {
                 setPendingCount(resPending.data.data ? resPending.data.data.length : 0);
             }
 
-            const resStats = await api.get('/mobile/stats/daily');
+            const resStats = await api.get('/mobile/stats?range=daily');
             if (resStats.data.success && resStats.data.stats) {
                 const myStats = resStats.data.stats.find(s => s.UserId === user.id);
                 if (myStats) {
@@ -41,6 +53,9 @@ export default function HomeScreen({ navigation }) {
         }
     };
 
+    /**
+     * Sayfa odaklandığında (isFocused) veya her 15 saniyede bir verileri güncelleyen UseEffect hook'u.
+     */
     useEffect(() => {
         if (isFocused) {
             fetchData();
@@ -56,6 +71,9 @@ export default function HomeScreen({ navigation }) {
         return () => clearInterval(intervalId);
     }, [isFocused]);
 
+    /**
+     * "Otomatik Sipariş Topla" butonuna basıldığında sıradaki ilk siparişi alıp işlemi başlatan fonksiyon.
+     */
     const handleCollectOrder = async () => {
         try {
             const res = await api.get(`/mobile/orders/next?userId=${user.id}`);
@@ -71,6 +89,7 @@ export default function HomeScreen({ navigation }) {
         }
     };
 
+    // Arayüz render işlemleri: Yetkilere göre dinamik buton gösterimi ve istatistik kartları
     return (
         <SafeAreaView style={styles.container}>
             <ScrollView
@@ -242,6 +261,7 @@ export default function HomeScreen({ navigation }) {
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: {
         flex: 1,

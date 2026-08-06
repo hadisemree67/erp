@@ -272,10 +272,17 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
         {/* 8. Kampanyalar */}
         {canSeeCampaigns && (
           <div className="nav-item">
-            <div className={`nav-link ${currentView === 'kampanya-listesi' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('kampanya-listesi'); }}>
+            <div className={`nav-link ${(openDropdown === 'kampanya' || currentView === 'kampanya-listesi' || currentView === 'kuponlar') ? 'active' : ''}`} onClick={() => toggleDropdown('kampanya')}>
               <span className="nav-icon"></span>
               <span className="nav-text">Kampanyalar</span>
+              <span className={`nav-arrow ${openDropdown === 'kampanya' ? 'open' : ''}`}>▼</span>
             </div>
+            {openDropdown === 'kampanya' && (
+              <div className="dropdown-menu">
+                <a href="#kampanya-listesi" className={`dropdown-item ${currentView === 'kampanya-listesi' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('kampanya-listesi'); }}>Kampanya Listesi</a>
+                <a href="#kuponlar" className={`dropdown-item ${currentView === 'kuponlar' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('kuponlar'); }}>İndirim Kuponları</a>
+              </div>
+            )}
           </div>
         )}
 

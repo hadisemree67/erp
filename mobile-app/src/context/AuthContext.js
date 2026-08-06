@@ -1,9 +1,18 @@
+/**
+ * @file AuthContext.js
+ * @description Kullanıcı oturum yönetimini (Authentication) sağlayan React Context dosyası.
+ * Uygulama genelinde kullanıcı durumunu, giriş (login) ve çıkış (logout) işlemlerini barındırır.
+ */
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/api';
 
 export const AuthContext = createContext();
 
+/**
+ * AuthProvider Bileşeni
+ * Tüm uygulamayı sarmalayarak `user` verisine heryerden ulaşılabilmesini sağlar.
+ */
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -12,6 +21,10 @@ export const AuthProvider = ({ children }) => {
         loadUser();
     }, []);
 
+    /**
+     * Uygulama açıldığında cihaz hafızasında (AsyncStorage) 
+     * kayıtlı bir kullanıcı olup olmadığını kontrol eder.
+     */
     const loadUser = async () => {
         try {
             const userStr = await AsyncStorage.getItem('user');
@@ -25,6 +38,12 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    /**
+     * Kullanıcı adı ve şifre ile sisteme giriş yapar.
+     * Başarılı olursa kullanıcı verilerini ve token'ı hafızaya kaydeder.
+     * @param {string} username - Kullanıcı adı
+     * @param {string} password - Şifre
+     */
     const login = async (username, password) => {
         try {
             const res = await api.post('/login', { username, password, role: 'employee' });
@@ -47,6 +66,9 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    /**
+     * Kullanıcının oturumunu kapatır ve cihaz hafızasındaki bilgileri temizler.
+     */
     const logout = async () => {
         try {
             await AsyncStorage.removeItem('user');

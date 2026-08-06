@@ -1,9 +1,18 @@
+/**
+ * @file StatsScreen.js
+ * @description Günlük liderlik ve performans istatistiklerini gösteren ekran.
+ * En çok sipariş toplayan çalışanların listesini getirir.
+ */
 import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import api from '../api/api';
 
+/**
+ * StatsScreen Bileşeni
+ * Liderlik tablosunu ve istatistik listesini render eder.
+ */
 export default function StatsScreen({ navigation }) {
     const [stats, setStats] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -12,9 +21,12 @@ export default function StatsScreen({ navigation }) {
         loadStats();
     }, []);
 
+    /**
+     * API'den günlük istatistik verilerini çeken fonksiyon.
+     */
     const loadStats = async () => {
         try {
-            const res = await api.get('/mobile/stats/daily');
+            const res = await api.get('/mobile/stats?range=daily');
             if (res.data.success) {
                 setStats(res.data.stats);
             }
@@ -25,6 +37,10 @@ export default function StatsScreen({ navigation }) {
         }
     };
 
+    /**
+     * Listedeki her bir kullanıcının (item) istatistik kartını oluşturan render fonksiyonu.
+     * @param {Object} param0 - FlatList item ve index özellikleri
+     */
     const renderItem = ({ item, index }) => (
         <View style={styles.card}>
             <View style={[styles.rankContainer, index === 0 && styles.firstRankContainer, index === 1 && styles.secondRankContainer, index === 2 && styles.thirdRankContainer]}>
@@ -50,6 +66,7 @@ export default function StatsScreen({ navigation }) {
         </View>
     );
 
+    // Arayüz render işlemleri: Başlık, yükleniyor göstergesi ve FlatList
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -87,6 +104,7 @@ export default function StatsScreen({ navigation }) {
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: {
         flex: 1,

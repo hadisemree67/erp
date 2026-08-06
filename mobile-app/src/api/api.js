@@ -1,30 +1,43 @@
+/**
+ * @file api.js
+ * @description Axios HTTP istemcisi (client) yapılandırması.
+ * Uygulamanın backend (sunucu) ile olan tüm haberleşmesi bu dosya üzerinden yönetilir.
+ */
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
 // Use 192.168.10.144 for physical device on same WiFi or ngrok URL
-const API_URL = 'http://192.168.10.144:3000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 
+/**
+ * Axios Instance Oluşturma
+ * Temel URL adresi belirlenir. Çevresel değişkenden alınır veya varsayılan (localhost) kullanılır.
+ */
 const api = axios.create({
     baseURL: API_URL,
 });
 
-// Interceptor to add token/user info if needed
+/**
+ * Request (İstek) Interceptor
+ * API'ye gönderilen her istekten önce araya girer ve gerekli başlık (header) bilgilerini,
+ * özellikle de kimlik doğrulama token'ını ve kullanıcı ID'sini ekler.
+ */
 api.interceptors.request.use(
     async (config) => {
         const userStr = await AsyncStorage.getItem('user');
         const token = await AsyncStorage.getItem('token');
-        
+
         if (userStr) {
             const user = JSON.parse(userStr);
             // Example of passing user ID in headers if backend needs it (our backend checks req.headers['x-user-id'] sometimes)
             config.headers['x-user-id'] = user.id;
         }
-        
+
         if (token) {
             config.headers['Authorization'] = `Bearer ${token}`;
         }
-        
+
         return config;
     },
     (error) => {
@@ -32,6 +45,11 @@ api.interceptors.request.use(
     }
 );
 
+/**
+ * Response (Cevap) Interceptor
+ * API'den dönen cevapları dinler. 
+ * Özellikle yetkisiz erişim (401) durumlarında kullanıcıyı çıkış yapmaya zorlamak için kullanılır.
+ */
 api.interceptors.response.use(
     (response) => {
         return response;

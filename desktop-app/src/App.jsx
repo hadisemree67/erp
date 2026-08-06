@@ -56,6 +56,7 @@ import PurchaseOrders from './components/Purchasing/PurchaseOrders';
 import GoodsReceipt from './components/WMS/GoodsReceipt';
 import CampaignList from './components/Campaigns/CampaignList';
 import CampaignForm from './components/Campaigns/CampaignForm';
+import Coupons from './components/Campaigns/Coupons';
 import FinanceAccounts from './components/Finance/FinanceAccounts';
 import CustomerList from './components/Customers/CustomerList';
 import CustomerForm from './components/Customers/CustomerForm';
@@ -319,6 +320,7 @@ function App() {
           {currentView === 'tedarik-siparisleri' && <PurchaseOrders currentUser={currentUser} />}
 
           {currentView === 'kampanya-listesi' && <CampaignList currentUser={currentUser} onNavigate={setCurrentView} />}
+          {currentView === 'kuponlar' && <Coupons currentUser={currentUser} />}
           {currentView === 'gelir-gider' && <FinanceAccounts onNavigate={setCurrentView} />}
           {(currentView === 'musteri-listesi' || currentView === 'b2b-b2c-cari') && <CustomerList currentUser={currentUser} onNavigate={setCurrentView} onEdit={setSelectedCustomer} />}
           {currentView === 'musteri-ekle' && <CustomerForm currentUser={currentUser} customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onNavigate={setCurrentView} />}

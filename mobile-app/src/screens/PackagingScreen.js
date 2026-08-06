@@ -1,15 +1,24 @@
+/**
+ * @file PackagingScreen.js
+ * @description Siparişte toplanan ürünlerin barkodlarının okutularak kutuya (pakete) konulması işlemi.
+ * Tüm ürünler paketlendiğinde kargo etiketi oluşturulur ve sipariş tamamlanır.
+ */
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform, Dimensions, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform, Dimensions, Image, Modal, ScrollView } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
 import api from '../api/api';
 import { AuthContext } from '../context/AuthContext';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
-import Barcode from 'react-native-barcode-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
+/**
+ * PackagingScreen Bileşeni
+ * Kamera izinlerini, barkod taramayı ve paketleme ilerleyişini yönetir.
+ */
 export default function PackagingScreen({ route, navigation }) {
     const { order, items } = route.params;
     const { user } = useContext(AuthContext);
@@ -24,8 +33,14 @@ export default function PackagingScreen({ route, navigation }) {
     // Barcode Modal
     const [showBarcodeModal, setShowBarcodeModal] = useState(false);
     const [generatedBarcode, setGeneratedBarcode] = useState('');
+    const [boxBarcode, setBoxBarcode] = useState('');
+    const [availableBoxes, setAvailableBoxes] = useState([]);
+    const [recommendedBoxId, setRecommendedBoxId] = useState(null);
+    const [isScanningBox, setIsScanningBox] = useState(false);
+    const [cameraFacing, setCameraFacing] = useState('back');
 
     const isCompletedRef = useRef(false);
+    const isScanningRef = useRef(false);
 
     useEffect(() => {
         const getBarCodeScannerPermissions = async () => {
@@ -33,9 +48,51 @@ export default function PackagingScreen({ route, navigation }) {
             setHasPermission(status === 'granted');
         };
 
+        const fetchBoxes = async () => {
+            try {
+                const res = await api.get('/boxes');
+                if (res.data.success) {
+                    const boxes = res.data.data || [];
+                    setAvailableBoxes(boxes);
+                }
+            } catch (error) {
+                console.log('Kutular getirilemedi:', error);
+            }
+        };
+
+        const loadCameraPref = async () => {
+            try {
+                const saved = await AsyncStorage.getItem('cameraFacingPref');
+                if (saved) setCameraFacing(saved);
+            } catch (e) {}
+        };
+
         getBarCodeScannerPermissions();
+        fetchBoxes();
+        loadCameraPref();
     }, []);
 
+    const toggleCameraFacing = async () => {
+        const next = cameraFacing === 'back' ? 'front' : 'back';
+        setCameraFacing(next);
+        try {
+            await AsyncStorage.setItem('cameraFacingPref', next);
+        } catch (e) {}
+    };
+
+    useEffect(() => {
+        if (availableBoxes.length > 0 && packagingList.length > 0) {
+            const totalW = packagingList.reduce((acc, item) => acc + ((parseFloat(item.Weight) || 0) * item.Quantity), 0);
+            const sorted = [...availableBoxes].sort((a,b) => parseFloat(a.MaxWeightCapacity || 0) - parseFloat(b.MaxWeightCapacity || 0));
+            let bestBox = sorted.find(b => parseFloat(b.MaxWeightCapacity || 0) >= totalW);
+            if (!bestBox) bestBox = sorted[sorted.length - 1];
+            if (bestBox) setRecommendedBoxId(bestBox.Id);
+        }
+    }, [availableBoxes, packagingList]);
+
+    /**
+     * Kullanıcı yanlışlıkla sayfadan çıkmaya çalışırsa paketlemeyi iptal edeceğine dair uyaran UseEffect.
+     */
     useEffect(() => {
         const unsubscribe = navigation.addListener('beforeRemove', (e) => {
             if (isCompletedRef.current) {
@@ -69,10 +126,27 @@ export default function PackagingScreen({ route, navigation }) {
     }, [navigation, order.Id, user.id]);
 
     const handleBarcodeScanned = ({ type, data }) => {
+        if (isScanningRef.current) return;
+        isScanningRef.current = true;
         setScanned(true);
-        processBarcode(data);
+        if (isScanningBox) {
+            setBoxBarcode(data);
+            setIsScanningBox(false);
+            setShowBarcodeModal(true);
+            setTimeout(() => {
+                setScanned(false);
+                isScanningRef.current = false;
+            }, 500);
+        } else {
+            processBarcode(data);
+        }
     };
 
+    /**
+     * Okutulan barkodu listedeki ürünlerle eşleştiren, 
+     * eksik miktar varsa paketlenen miktarı (+1) artıran fonksiyon.
+     * @param {string} scannedCode - Okutulan veya yazılan barkod
+     */
     const processBarcode = (scannedCode) => {
         let found = false;
 
@@ -102,16 +176,19 @@ export default function PackagingScreen({ route, navigation }) {
 
         if (found) {
             setPackagingList(newList);
-            setTimeout(() => setScanned(false), 1500);
+            setTimeout(() => {
+                setScanned(false);
+                isScanningRef.current = false;
+            }, 1500);
         } else {
             const exists = packagingList.find(i => isMatch(i, scannedCode));
             if (exists) {
                 Alert.alert('Uyarı', 'Bu üründen kutuya eklenecek miktar tamamlandı.', [
-                    { text: 'Tamam', onPress: () => setScanned(false) }
+                    { text: 'Tamam', onPress: () => { setScanned(false); isScanningRef.current = false; } }
                 ]);
             } else {
                 Alert.alert('Hata', 'Bu ürün siparişte bulunmuyor veya yanlış barkod okutuldu!', [
-                    { text: 'Tamam', onPress: () => setScanned(false) }
+                    { text: 'Tamam', onPress: () => { setScanned(false); isScanningRef.current = false; } }
                 ]);
             }
         }
@@ -120,6 +197,8 @@ export default function PackagingScreen({ route, navigation }) {
 
     const handleManualSubmit = () => {
         if (manualBarcode.trim() !== '') {
+            if (isScanningRef.current) return;
+            isScanningRef.current = true;
             processBarcode(manualBarcode.trim());
         }
     };
@@ -138,11 +217,20 @@ export default function PackagingScreen({ route, navigation }) {
         setShowBarcodeModal(true);
     };
 
+    const handlePrintInvoice = () => {
+        Alert.alert('Bilgi', 'Fatura yazdırma isteği gönderildi (Simülasyon).', [{ text: 'Tamam' }]);
+    };
+
+    /**
+     * Siparişin paketlenmesi tamamlandığında son onayı API'ye gönderen fonksiyon.
+     */
     const handleCompletePackaging = async () => {
+        const safeBoxBarcode = (boxBarcode || '').trim();
         setIsSubmitting(true);
         try {
             const res = await api.post(`/mobile/orders/package/complete/${order.Id}`, {
-                scannedBarcode: generatedBarcode
+                scannedBarcode: generatedBarcode,
+                boxBarcode: safeBoxBarcode
             });
 
             if (res.data.success) {
@@ -227,6 +315,7 @@ export default function PackagingScreen({ route, navigation }) {
         return <View style={styles.center}><Text>Kamera izni reddedildi.</Text></View>;
     }
 
+    // Arayüz render işlemleri: Kamera, manuel giriş, ilerleme çubuğu ve ürün listesi
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -244,10 +333,21 @@ export default function PackagingScreen({ route, navigation }) {
                     {isFocused && hasPermission && (
                         <CameraView
                             style={StyleSheet.absoluteFillObject}
-                            facing="back"
+                            facing={cameraFacing}
                             onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
                         />
                     )}
+                    
+                    {/* Kamera Değiştirme Butonu */}
+                    <View style={{ position: 'absolute', top: 16, right: 16, zIndex: 20 }}>
+                        <TouchableOpacity 
+                            style={{ backgroundColor: 'rgba(0,0,0,0.6)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={toggleCameraFacing}
+                        >
+                            <Feather name="refresh-cw" size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+
                     <View style={styles.scannerFrame}>
                         <View style={[styles.frameCorner, styles.topLeft]} />
                         <View style={[styles.frameCorner, styles.topRight]} />
@@ -255,10 +355,24 @@ export default function PackagingScreen({ route, navigation }) {
                         <View style={[styles.frameCorner, styles.bottomRight]} />
                         <View style={styles.scanLine} />
                     </View>
-                    {scanned && (
+                    {scanned && !isScanningBox && (
                         <View style={styles.scanOverlay}>
                             <Feather name="check-circle" size={48} color="#fff" style={{ marginBottom: 8 }} />
                             <Text style={styles.scanText}>Okundu!</Text>
+                        </View>
+                    )}
+                    {isScanningBox && (
+                        <View style={{ position: 'absolute', top: 20, width: '100%', alignItems: 'center', zIndex: 10 }}>
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, flexDirection: 'row', alignItems: 'center' }}>
+                                <Feather name="box" size={20} color="#fff" style={{marginRight: 8}} />
+                                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Kutu Barkodunu Okutun</Text>
+                            </View>
+                            <TouchableOpacity 
+                                style={{ marginTop: 12, backgroundColor: '#ef4444', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 16 }}
+                                onPress={() => { setIsScanningBox(false); setShowBarcodeModal(true); setScanned(false); isScanningRef.current = false; }}
+                            >
+                                <Text style={{ color: '#fff', fontWeight: 'bold' }}>İptal Et</Text>
+                            </TouchableOpacity>
                         </View>
                     )}
                 </View>
@@ -336,25 +450,84 @@ export default function PackagingScreen({ route, navigation }) {
                         
                         <View style={styles.barcodeContainer}>
                             {generatedBarcode ? (
-                                <Barcode value={generatedBarcode} format="CODE128" maxWidth={width * 0.7} />
+                                <Image
+                                    source={{ uri: `https://bwipjs-api.metafloor.com/?bcid=code128&text=${generatedBarcode}&scaleX=2&scaleY=2&height=15` }}
+                                    style={{ width: width * 0.7, height: 60 }}
+                                    resizeMode="contain"
+                                />
                             ) : null}
                             <Text style={styles.barcodeText}>{generatedBarcode}</Text>
                         </View>
                         
                         <View style={styles.infoBox}>
                             <Feather name="info" size={20} color="#4f46e5" style={{marginRight: 8}} />
-                            <Text style={styles.infoText}>Lütfen bu barkodu kutuya yapıştırın. Fatura çıktısını kutunun içine eklemeyi unutmayın.</Text>
+                            <Text style={styles.infoText}>
+                                {order.ShippingAddress === 'Elden Teslim' 
+                                    ? 'Elden teslim için kutu zorunlu değildir. İsterseniz boş bırakıp işlemi bitirebilirsiniz.'
+                                    : 'Lütfen seçtiğiniz kutunun barkodunu okutun ve fatura çıktısını kutunun içine eklemeyi unutmayın.'}
+                            </Text>
+                        </View>
+                        
+                        {/* Kargo Etiketi Bilgileri */}
+                        <View style={{ width: '100%', marginBottom: 24, padding: 16, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12 }}>
+                            <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 8 }}>Alıcı Bilgileri</Text>
+                            <Text style={{ fontSize: 15, color: '#334155', fontWeight: '600', marginBottom: 4 }}>{order.CustomerName || 'Bilinmiyor'}</Text>
+                            {order.customers?.Phone && <Text style={{ fontSize: 14, color: '#475569', marginBottom: 4 }}>{order.customers.Phone}</Text>}
+                            <Text style={{ fontSize: 14, color: '#64748b', lineHeight: 20 }}>{order.ShippingAddress}</Text>
+                        </View>
+                        
+                        <View style={{ width: '100%', marginBottom: 24 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#334155', marginBottom: 8 }}>
+                                Kullanılan Kutunun Barkodu 
+                            </Text>
+                            
+                            {/* Kutu Önerisi Sadece Metin */}
+                            {recommendedBoxId && availableBoxes && availableBoxes.length > 0 && (
+                                <Text style={{ fontSize: 13, color: '#d97706', fontWeight: '700', marginBottom: 12 }}>
+                                    💡 {availableBoxes.find(b => b.Id === recommendedBoxId)?.BoxName} numaralı kutu öneriliyor.
+                                </Text>
+                            )}
+
+                            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                                <TextInput
+                                    style={{ flex: 1, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, padding: 16, fontSize: 16, backgroundColor: '#f8fafc', color: '#0f172a' }}
+                                    placeholder="Kutu barkodunu okutun veya yazın..."
+                                    value={boxBarcode}
+                                    onChangeText={setBoxBarcode}
+                                />
+                                <TouchableOpacity
+                                    style={{ width: 56, height: 56, backgroundColor: '#4f46e5', borderRadius: 12, justifyContent: 'center', alignItems: 'center' }}
+                                    onPress={() => {
+                                        setShowBarcodeModal(false);
+                                        setIsScanningBox(true);
+                                        setScanned(false);
+                                        isScanningRef.current = false;
+                                    }}
+                                >
+                                    <Feather name="camera" size={24} color="#fff" />
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
-                        <TouchableOpacity 
-                            style={styles.finalCompleteButton} 
-                            onPress={handleCompletePackaging}
-                            disabled={isSubmitting}
-                        >
-                            <Text style={styles.finalCompleteButtonText}>
-                                {isSubmitting ? 'Paketleniyor...' : 'İşlemi Bitir'}
-                            </Text>
-                        </TouchableOpacity>
+                        <View style={{ width: '100%', flexDirection: 'row', gap: 12 }}>
+                            <TouchableOpacity 
+                                style={[styles.invoiceButton, { flex: 1 }]} 
+                                onPress={handlePrintInvoice}
+                            >
+                                <Feather name="printer" size={20} color="#4f46e5" style={{ marginRight: 8 }} />
+                                <Text style={styles.invoiceButtonText}>Fatura Çıkart</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity 
+                                style={[styles.finalCompleteButton, { flex: 1 }, isSubmitting && { backgroundColor: '#94a3b8' }]} 
+                                onPress={handleCompletePackaging}
+                                disabled={isSubmitting}
+                            >
+                                <Text style={styles.finalCompleteButtonText}>
+                                    {isSubmitting ? 'Paketleniyor...' : 'İşlemi Bitir'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -362,6 +535,7 @@ export default function PackagingScreen({ route, navigation }) {
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f8fafc' },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -429,6 +603,12 @@ const styles = StyleSheet.create({
     barcodeText: { fontSize: 24, fontWeight: '800', letterSpacing: 2, color: '#0f172a', marginTop: 16 },
     infoBox: { flexDirection: 'row', backgroundColor: '#eef2ff', padding: 16, borderRadius: 12, marginBottom: 24, alignItems: 'center' },
     infoText: { flex: 1, color: '#4338ca', fontSize: 14, fontWeight: '500', lineHeight: 20 },
-    finalCompleteButton: { backgroundColor: '#16a34a', width: '100%', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-    finalCompleteButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' }
+    finalCompleteButton: { backgroundColor: '#16a34a', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+    finalCompleteButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    invoiceButton: { backgroundColor: '#eef2ff', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', flexDirection: 'row', borderWidth: 1, borderColor: '#c7d2fe' },
+    invoiceButtonText: { color: '#4f46e5', fontSize: 16, fontWeight: '700' },
+    boxChip: { backgroundColor: '#f1f5f9', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+    boxChipSelected: { backgroundColor: '#4f46e5', borderColor: '#4f46e5' },
+    boxChipText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
+    boxChipTextSelected: { color: '#ffffff' }
 });

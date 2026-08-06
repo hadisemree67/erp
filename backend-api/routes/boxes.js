@@ -35,7 +35,7 @@ router.get('/', authMiddleware, async (req, res) => {
             ORDER BY Id DESC
         `);
 
-        // Her bir kutu için tedarikçilerini getir
+        // Her bir kutu için tedarikçilerini ve barkodlarını getir
         for (let box of boxes) {
             const [suppliers] = await db.query(`
                 SELECT bs.*, s.SupplierName 
@@ -44,6 +44,9 @@ router.get('/', authMiddleware, async (req, res) => {
                 WHERE bs.box_id = ?
             `, [box.Id]);
             box.suppliers = suppliers;
+
+            const [barcodes] = await db.query('SELECT id, barcode FROM box_barcodes WHERE box_id = ?', [box.Id]);
+            box.barcodes = barcodes;
         }
 
         res.json({ success: true, data: boxes });
@@ -98,10 +101,49 @@ const saveBoxSuppliers = async (boxId, suppliersRaw, files) => {
                 contract_file
             ]);
         }
+
+        // Eğer en az 1 tedarikçi eklendiyse, ilk tedarikçinin fiyatını kutunun maliyeti (Cost) olarak güncelle
+        if (suppliers.length > 0 && suppliers[0].unit_price) {
+            await db.query('UPDATE packaging_boxes SET Cost = ? WHERE Id = ?', [suppliers[0].unit_price, boxId]);
+        }
     } catch (e) {
         console.error('Tedarikçiler kaydedilirken hata:', e);
     }
 };
+
+// POST /api/boxes/:id/barcodes - Kutuya yeni barkod ekle
+router.post('/:id/barcodes', authMiddleware, async (req, res) => {
+    const { id } = req.params;
+    const { barcode } = req.body;
+    
+    if (!barcode) {
+        return res.status(400).json({ success: false, message: 'Barkod boş olamaz.' });
+    }
+
+    try {
+        const [result] = await db.query('INSERT INTO box_barcodes (box_id, barcode) VALUES (?, ?)', [id, barcode]);
+        res.json({ success: true, message: 'Barkod başarıyla eklendi.', data: { id: result.insertId, barcode } });
+    } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ success: false, message: 'Bu barkod zaten kullanımda.' });
+        }
+        console.error('Barkod eklenirken hata:', err);
+        res.status(500).json({ success: false, message: 'Barkod eklenemedi.' });
+    }
+});
+
+// DELETE /api/boxes/:id/barcodes/:barcodeId - Kutudan barkod sil
+router.delete('/:id/barcodes/:barcodeId', authMiddleware, async (req, res) => {
+    const { id, barcodeId } = req.params;
+    
+    try {
+        await db.query('DELETE FROM box_barcodes WHERE id = ? AND box_id = ?', [barcodeId, id]);
+        res.json({ success: true, message: 'Barkod silindi.' });
+    } catch (err) {
+        console.error('Barkod silinirken hata:', err);
+        res.status(500).json({ success: false, message: 'Barkod silinemedi.' });
+    }
+});
 
 // POST /api/boxes - Yeni kutu ekle
 router.post('/', authMiddleware, upload.any(), async (req, res) => {

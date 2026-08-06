@@ -1,9 +1,18 @@
+/**
+ * @file LoginScreen.js
+ * @description Uygulamanın giriş ekranı. Kullanıcı adı ve şifre ile sisteme giriş yapılmasını sağlar.
+ * Başarılı girişte AuthContext üzerinden token ve kullanıcı bilgileri kaydedilir.
+ */
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthContext } from '../context/AuthContext';
 import { Feather } from '@expo/vector-icons';
 
+/**
+ * LoginScreen Bileşeni
+ * Kullanıcının giriş formunu oluşturur ve giriş işlemlerini yönetir.
+ */
 export default function LoginScreen({ navigation }) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -11,6 +20,10 @@ export default function LoginScreen({ navigation }) {
 
     const { login } = useContext(AuthContext);
 
+    /**
+     * Giriş Yap butonuna tıklandığında tetiklenen fonksiyon.
+     * Boş alan kontrolü yapar ve AuthContext'teki login fonksiyonunu çağırır.
+     */
     const handleLogin = async () => {
         if (!username || !password) {
             Alert.alert('Hata', 'Kullanıcı adı ve şifre gereklidir.');
@@ -26,6 +39,7 @@ export default function LoginScreen({ navigation }) {
         }
     };
 
+    // Kullanıcı arayüzü (UI) render kısmı
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardView}>
@@ -78,6 +92,7 @@ export default function LoginScreen({ navigation }) {
     );
 }
 
+// Sayfa içi stil tanımlamaları
 const styles = StyleSheet.create({
     container: {
         flex: 1,

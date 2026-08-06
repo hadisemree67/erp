@@ -1,3 +1,8 @@
+/**
+ * @file PickingScreen.js
+ * @description Depo içerisinde atanmış siparişlerin ürün bazlı toplama (picking) işleminin yapıldığı ekran.
+ * Kamera ile barkod okutularak ürünlerin toplanması sağlanır.
+ */
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, TextInput, KeyboardAvoidingView, Platform, Dimensions, Image } from 'react-native';
 import { Camera, CameraView } from 'expo-camera';
@@ -6,9 +11,14 @@ import { AuthContext } from '../context/AuthContext';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePreventRemove, useIsFocused } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
+/**
+ * PickingScreen Bileşeni
+ * Sipariş içerisindeki ürünlerin raftan alınarak barkodlarının okutulmasını yönetir.
+ */
 export default function PickingScreen({ route, navigation }) {
     const { order, items, initialSections } = route.params;
     const { user } = useContext(AuthContext);
@@ -19,7 +29,9 @@ export default function PickingScreen({ route, navigation }) {
     const [manualBarcode, setManualBarcode] = useState('');
     const [pickingList, setPickingList] = useState(items.map(item => ({ ...item, pickedQuantity: 0 })) || []);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [cameraFacing, setCameraFacing] = useState('back');
     const isCompletedRef = useRef(false);
+    const isScanningRef = useRef(false);
 
     // Section logic
     const [activeSections, setActiveSections] = useState(initialSections || []);
@@ -33,9 +45,28 @@ export default function PickingScreen({ route, navigation }) {
             setHasPermission(status === 'granted');
         };
 
+        const loadCameraPref = async () => {
+            try {
+                const saved = await AsyncStorage.getItem('cameraFacingPref');
+                if (saved) setCameraFacing(saved);
+            } catch (e) {}
+        };
+
         getBarCodeScannerPermissions();
+        loadCameraPref();
     }, []);
 
+    const toggleCameraFacing = async () => {
+        const next = cameraFacing === 'back' ? 'front' : 'back';
+        setCameraFacing(next);
+        try {
+            await AsyncStorage.setItem('cameraFacingPref', next);
+        } catch (e) {}
+    };
+
+    /**
+     * Toplama bitmeden sayfadan çıkılırsa siparişi iptal durumuna döndüren güvenlik mekanizması (UseEffect).
+     */
     useEffect(() => {
         // Prevent going back unless explicitly canceled
         const unsubscribe = navigation.addListener('beforeRemove', (e) => {
@@ -71,11 +102,17 @@ export default function PickingScreen({ route, navigation }) {
     }, [navigation, order.Id, user.id]);
 
     const handleBarcodeScanned = ({ type, data }) => {
+        if (isScanningRef.current) return;
+        isScanningRef.current = true;
         setScanned(true);
         processBarcode(data);
-        setTimeout(() => setScanned(false), 1500);
     };
 
+    /**
+     * Okutulan barkodun listedeki ürünlerle (ve JSON formatındaki ekstra barkodlarla)
+     * eşleşip eşleşmediğini kontrol edip toplama listesini (pickingList) günceller.
+     * @param {string} scannedCode - Kamera veya elle girilen barkod
+     */
     const processBarcode = (scannedCode) => {
         let found = false;
 
@@ -105,16 +142,19 @@ export default function PickingScreen({ route, navigation }) {
 
         if (found) {
             setPickingList(newList);
-            setTimeout(() => setScanned(false), 1500);
+            setTimeout(() => {
+                setScanned(false);
+                isScanningRef.current = false;
+            }, 1500);
         } else {
             const exists = pickingList.find(i => isMatch(i, scannedCode));
             if (exists) {
                 Alert.alert('Uyarı', 'Bu üründen siparişte istenen miktarı zaten topladınız.', [
-                    { text: 'Tamam', onPress: () => setScanned(false) }
+                    { text: 'Tamam', onPress: () => { setScanned(false); isScanningRef.current = false; } }
                 ]);
             } else {
                 Alert.alert('Hata', 'Bu ürün siparişte bulunmuyor veya yanlış barkod okutuldu!', [
-                    { text: 'Tamam', onPress: () => setScanned(false) }
+                    { text: 'Tamam', onPress: () => { setScanned(false); isScanningRef.current = false; } }
                 ]);
             }
         }
@@ -123,6 +163,8 @@ export default function PickingScreen({ route, navigation }) {
 
     const handleManualSubmit = () => {
         if (manualBarcode.trim() !== '') {
+            if (isScanningRef.current) return;
+            isScanningRef.current = true;
             processBarcode(manualBarcode.trim());
         }
     };
@@ -190,6 +232,10 @@ export default function PickingScreen({ route, navigation }) {
         return pickingList.every(item => item.pickedQuantity === item.Quantity);
     };
 
+    /**
+     * Tüm ürünler toplandığında işlemi sonlandıran ve API'ye tamamlandı bilgisini ileten fonksiyon.
+     * Kullanıcının paketleme yetkisi varsa doğrudan Packaging (Paketleme) sayfasına yönlendirir.
+     */
     const handleCompleteOrder = async () => {
         if (!isOrderComplete()) {
             Alert.alert('Uyarı', 'Lütfen siparişteki tüm ürünleri okutun.');
@@ -205,19 +251,10 @@ export default function PickingScreen({ route, navigation }) {
             if (res.data.success) {
                 isCompletedRef.current = true; // Senkron olarak güncelle
                 
-                const hasPackPermission = user?.role === 'admin' || (user?.permissions && user.permissions.includes('order_ship'));
-                
-                if (hasPackPermission) {
-                    setIsSubmitting(false);
-                    navigation.replace('Packaging', {
-                        order: order,
-                        totalItems: pickingList.reduce((acc, curr) => acc + curr.Quantity, 0)
-                    });
-                } else {
-                    Alert.alert('Başarılı', 'Sipariş başarıyla toplandı. Paketleme ekibine devredildi.', [
-                        { text: 'Tamam', onPress: () => { setIsSubmitting(false); navigation.replace('Home'); } }
-                    ]);
-                }
+                setIsSubmitting(false);
+                Alert.alert('Başarılı', 'Sipariş başarıyla toplandı. Paketleme ekibine devredildi.', [
+                    { text: 'Tamam', onPress: () => { navigation.replace('Home'); } }
+                ]);
             } else {
                 Alert.alert('Hata', res.data.message);
                 setIsSubmitting(false);
@@ -304,6 +341,7 @@ export default function PickingScreen({ route, navigation }) {
         return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     };
 
+    // Arayüz render işlemleri: Kamera görüntüsü, sipariş detayları ve toplama adımları
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <View style={styles.header}>
@@ -321,10 +359,21 @@ export default function PickingScreen({ route, navigation }) {
                     {isFocused && hasPermission && (
                         <CameraView
                             style={StyleSheet.absoluteFillObject}
-                            facing="back"
+                            facing={cameraFacing}
                             onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
                         />
                     )}
+
+                    {/* Kamera Değiştirme Butonu */}
+                    <View style={{ position: 'absolute', top: 16, right: 16, zIndex: 20 }}>
+                        <TouchableOpacity 
+                            style={{ backgroundColor: 'rgba(0,0,0,0.6)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={toggleCameraFacing}
+                        >
+                            <Feather name="refresh-cw" size={20} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+
                     <View style={styles.scannerFrame}>
                         <View style={[styles.frameCorner, styles.topLeft]} />
                         <View style={[styles.frameCorner, styles.topRight]} />
@@ -487,6 +536,7 @@ export default function PickingScreen({ route, navigation }) {
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: {
         flex: 1,

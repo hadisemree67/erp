@@ -9,6 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const db = require('../db');
 const { toFrontendStatus, toPrismaStatus } = require('../utils/enumMapper');
 const authMiddleware = require('../middleware/auth');
 const { logActivity } = require('../utils/logger');
@@ -136,8 +137,11 @@ router.post('/orders/assign/:id', authMiddleware, async (req, res) => {
         let cartSectionIds = null;
 
         if (section_barcodes && Array.isArray(section_barcodes) && section_barcodes.length > 0) {
-            // Find sections first
-            const sections = await prisma.picking_cart_sections.findMany({
+            if (section_barcodes.length === 1 && section_barcodes[0] === 'ELDEN_TESLIM') {
+                // Arabasız toplama durumu: CartId ve CartSectionIds null olarak kalacak
+            } else {
+                // Find sections first
+                const sections = await prisma.picking_cart_sections.findMany({
                 where: {
                     barcode: { in: section_barcodes }
                 },
@@ -175,6 +179,7 @@ router.post('/orders/assign/:id', authMiddleware, async (req, res) => {
                     where: { id: cart.id },
                     data: { status: 'PICKING' }
                 });
+                }
             }
         }
 
@@ -398,17 +403,31 @@ router.post('/orders/complete/:id', authMiddleware, async (req, res) => {
 // POST: Siparişi paketle (Kargo etiketini oluştur ve doğrula)
 router.post('/orders/package/complete/:id', authMiddleware, async (req, res) => {
     const id = Number(req.params.id);
-    const { scannedBarcode } = req.body; // Yeni üretilen kargo barkodu
+    const { scannedBarcode, boxBarcode } = req.body; // Yeni üretilen kargo barkodu ve kutu barkodu
     const userId = req.user?.id;
 
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
     if (!scannedBarcode) return res.status(400).json({ success: false, message: 'Barkod bilgisi eksik.' });
-
     try {
+        const order = await prisma.orders.findUnique({ where: { Id: id } });
+        if (!order) return res.status(404).json({ success: false, message: 'Sipariş bulunamadı.' });
+
+        let boxId = null;
+        if (boxBarcode) {
+            // Kutu barkodunu doğrula ve ilgili kutuyu bul
+            const [barcodes] = await db.query('SELECT box_id FROM box_barcodes WHERE barcode = ?', [boxBarcode]);
+            if (barcodes.length === 0) {
+                return res.status(400).json({ success: false, message: 'Geçersiz kutu barkodu okutuldu.' });
+            }
+            boxId = barcodes[0].box_id;
+        }
+
+        const isEldenTeslim = order.ShippingAddress === 'Elden Teslim';
+        
         const updated = await prisma.orders.updateMany({
             where: { Id: id, PackerId: userId, OrderStatus: 'Paketleniyor' },
             data: { 
-                OrderStatus: 'Paketlendi', 
+                OrderStatus: isEldenTeslim ? 'Teslim_Edildi' : 'Paketlendi', 
                 CargoBarcode: scannedBarcode,
                 PackedDate: new Date() 
             }
@@ -418,7 +437,14 @@ router.post('/orders/package/complete/:id', authMiddleware, async (req, res) => 
             return res.status(400).json({ success: false, message: 'Paketleme tamamlanamadı. Sipariş size atanmamış veya yanlış durumda olabilir.' });
         }
 
-        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketledi ve ${scannedBarcode} barkodunu oluşturdu.`, null);
+        if (boxId) {
+            // Kutu stoğunu düş
+            await db.query('UPDATE packaging_boxes SET StockQuantity = StockQuantity - 1 WHERE Id = ?', [boxId]);
+            await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketledi, ${scannedBarcode} kargo barkodunu oluşturdu ve ${boxBarcode} barkodlu kutuyu kullandı.`, null);
+            await logActivity(userId, 'UPDATE', 'packaging_boxes', boxId, `Sipariş #${id} için ${boxBarcode} barkodu okutularak 1 adet kutu stoktan düşüldü.`, null);
+        } else {
+            await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi kutusuz (Elden Teslim) olarak paketledi ve ${scannedBarcode} kargo barkodunu oluşturdu.`, null);
+        }
 
         res.json({ success: true, message: 'Sipariş başarıyla paketlendi.' });
 
@@ -472,23 +498,43 @@ router.post('/orders/ship', authMiddleware, async (req, res) => {
     }
 });
 
-// GET: Günlük istatistikler (Liderlik Tablosu)
-router.get('/stats/daily', authMiddleware, async (req, res) => {
+// GET: İstatistikler (Liderlik Tablosu) - Filtreli
+router.get('/stats', authMiddleware, async (req, res) => {
+    const range = req.query.range || 'daily';
     try {
-        const stats = await prisma.$queryRaw`
-            SELECT 
-                u.id as UserId, 
-                u.name as UserName,
-                COUNT(DISTINCT o.Id) as TotalOrdersPicked,
-                COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
-            FROM users u
-            JOIN orders o ON u.id = o.PickerId
-            JOIN orderitems oi ON o.Id = oi.OrderId
-            WHERE DATE(o.PickedDate) = CURDATE() AND o.OrderStatus IN ('Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
-            GROUP BY u.id, u.name
-            ORDER BY TotalProductsPicked DESC
-        `;
+        let stats;
         
+        if (range === 'weekly') {
+            stats = await prisma.$queryRaw`
+                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
+                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
+                WHERE YEARWEEK(o.PickedDate, 1) = YEARWEEK(CURDATE(), 1) AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
+                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
+            `;
+        } else if (range === 'monthly') {
+            stats = await prisma.$queryRaw`
+                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
+                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
+                WHERE YEAR(o.PickedDate) = YEAR(CURDATE()) AND MONTH(o.PickedDate) = MONTH(CURDATE()) AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
+                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
+            `;
+        } else if (range === 'yearly') {
+            stats = await prisma.$queryRaw`
+                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
+                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
+                WHERE YEAR(o.PickedDate) = YEAR(CURDATE()) AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
+                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
+            `;
+        } else {
+            // daily
+            stats = await prisma.$queryRaw`
+                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
+                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
+                WHERE DATE(o.PickedDate) = CURDATE() AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
+                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
+            `;
+        }
+
         const serializedStats = stats.map(s => ({
             ...s,
             TotalOrdersPicked: Number(s.TotalOrdersPicked),
@@ -498,22 +544,38 @@ router.get('/stats/daily', authMiddleware, async (req, res) => {
         res.json({ success: true, stats: serializedStats });
     } catch (error) {
         console.error('İstatistik getirme hatası:', error);
-        try { require('fs').appendFileSync('error.log', new Date().toISOString() + ' [MOBILE API HATASI] ' + (error.stack || error) + '\n'); } catch(e) {}
         res.status(500).json({ success: false, message: 'İstatistikler getirilemedi.' });
     }
 });
 
-// GET: Paketlenecek siparişleri (Hazır) listele
+// GET: Paketlenecek siparişleri (Hazır) listele veya Elden Teslim olanları getir
 router.get('/orders/ready-for-packaging', authMiddleware, async (req, res) => {
     try {
         const userId = req.user?.id;
+        const { searchQuery } = req.query;
+
+        let whereClause = {
+            OR: [
+                { OrderStatus: 'Haz_r' },
+                { OrderStatus: 'Paketleniyor', PackerId: userId }
+            ]
+        };
+
+        if (searchQuery && searchQuery.trim().length > 0) {
+            whereClause = {
+                ...whereClause,
+                OrderNumber: { contains: searchQuery.trim() }
+            };
+        } else {
+            // Sadece Elden Teslim olanları getir (arama yoksa)
+            whereClause = {
+                ...whereClause,
+                ShippingAddress: 'Elden Teslim'
+            };
+        }
+
         const orders = await prisma.orders.findMany({
-            where: {
-                OR: [
-                    { OrderStatus: 'Haz_r' },
-                    { OrderStatus: 'Paketleniyor', PackerId: userId }
-                ]
-            },
+            where: whereClause,
             include: { customers: true },
             orderBy: { PickedDate: 'asc' }
         });
@@ -523,7 +585,7 @@ router.get('/orders/ready-for-packaging', authMiddleware, async (req, res) => {
             CustomerName: o.customers?.CustomerName
         }));
 
-        res.json({ success: true, orders: formattedOrders });
+        res.json({ success: true, data: formattedOrders });
     } catch (error) {
         console.error('Paketlenecek siparişleri getirme hatası:', error);
         res.status(500).json({ success: false, message: 'Siparişler getirilemedi.' });
@@ -612,6 +674,8 @@ router.post('/picking_carts/finish-picking', authMiddleware, async (req, res) =>
         res.status(500).json({ success: false, message: 'İşlem başarısız.' });
     }
 });
+
+
 
 // GET: Paketleme için arabayı okut ve bölümleri/siparişleri getir
 router.get('/picking_carts/scan-for-packaging', authMiddleware, async (req, res) => {

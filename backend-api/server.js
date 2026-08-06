@@ -211,9 +211,12 @@ app.use('/api/boxes', boxesRouter);
 const whatsappRoutes = require('./routes/whatsappEntries');
 const mobileRoutes = require('./routes/mobile');
 const pickingCartsRouter = require('./routes/picking_carts');
+const couponsRoute = require('./routes/coupons');
+
 app.use('/api/whatsapp-entries', whatsappRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/picking_carts', pickingCartsRouter);
+app.use('/api/coupons', couponsRoute);
 
 app.get('/api/brands', async (req, res) => {
     try {

@@ -1,11 +1,21 @@
+/**
+ * @file SummaryScreen.js
+ * @description Sipariş paketleme işlemi tamamlandıktan sonra gösterilen özet (başarı) ekranı.
+ * Kutu bilgisi, toplam ağırlık ve oluşturulan kargo barkodunu ekranda görüntüler.
+ */
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
+/**
+ * SummaryScreen Bileşeni
+ * Paketleme sonrası sonuç detaylarını kullanıcıya sunar ve ana menüye dönüş butonu içerir.
+ */
 export default function SummaryScreen({ route, navigation }) {
     const { cargoBarcode, finalWeight, boxInfo } = route.params;
 
+    // Arayüz render işlemleri: Gelen verileri ekrana yazar.
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.card}>
@@ -41,6 +51,7 @@ export default function SummaryScreen({ route, navigation }) {
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: {
         flex: 1,

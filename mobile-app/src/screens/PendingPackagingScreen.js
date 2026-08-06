@@ -1,3 +1,8 @@
+/**
+ * @file PendingPackagingScreen.js
+ * @description Paketleme işlemi için taşıma arabası (cart) seçimi ve 
+ * arabadaki bölümlere atanan siparişlerin paketlemeye başlanması ekranı.
+ */
 import React, { useState, useContext } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +11,10 @@ import { Camera, CameraView } from 'expo-camera';
 import api from '../api/api';
 import { AuthContext } from '../context/AuthContext';
 
+/**
+ * PendingPackagingScreen Bileşeni
+ * Araba barkodunu okutup içindeki sipariş bölümlerini listeler.
+ */
 export default function PendingPackagingScreen({ navigation }) {
     const [cartBarcode, setCartBarcode] = useState('');
     const [loading, setLoading] = useState(false);
@@ -15,6 +24,11 @@ export default function PendingPackagingScreen({ navigation }) {
     const [hasPermission, setHasPermission] = useState(null);
     const [scanned, setScanned] = useState(false);
     const [isCameraActive, setIsCameraActive] = useState(false);
+    
+    // Elden Teslim ve Arama için state'ler
+    const [searchQuery, setSearchQuery] = useState('');
+    const [readyOrders, setReadyOrders] = useState([]);
+    const [fetchingReady, setFetchingReady] = useState(false);
 
     React.useEffect(() => {
         const getBarCodeScannerPermissions = async () => {
@@ -22,7 +36,46 @@ export default function PendingPackagingScreen({ navigation }) {
             setHasPermission(status === 'granted');
         };
         getBarCodeScannerPermissions();
+        fetchReadyOrders();
     }, []);
+
+    const fetchReadyOrders = async (query = '') => {
+        setFetchingReady(true);
+        try {
+            const res = await api.get(`/mobile/orders/ready-for-packaging?searchQuery=${query}`);
+            if (res.data.success) {
+                setReadyOrders(res.data.data || []);
+            }
+        } catch (error) {
+            console.error('Ready orders fetch error:', error);
+        } finally {
+            setFetchingReady(false);
+        }
+    };
+
+    /**
+     * Arabasız / Elden teslim olan siparişleri doğrudan paketlemeye alır.
+     */
+    const handleSelectDirectOrder = async (order) => {
+        setAssigningId(order.Id);
+        try {
+            const res = await api.post(`/mobile/orders/package/assign/${order.Id}`);
+            if (res.data.success) {
+                navigation.navigate('Packaging', { order: res.data.order, items: res.data.items });
+            } else {
+                Alert.alert('Hata', res.data.message || 'Sipariş atanamadı.');
+            }
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Hata', 'İşlem başarısız.');
+        } finally {
+            setAssigningId(null);
+        }
+    };
+
+    const handleSearchSubmit = () => {
+        fetchReadyOrders(searchQuery);
+    };
 
     const handleBarcodeScanned = ({ type, data }) => {
         if (scanned || loading) return;
@@ -36,6 +89,10 @@ export default function PendingPackagingScreen({ navigation }) {
         }, 1500);
     };
 
+    /**
+     * Araba barkodunu API'ye göndererek arabadaki dolu bölümleri (section) getiren fonksiyon.
+     * @param {string} barcode - Okutulan veya elle girilen araba barkodu
+     */
     const handleScanCartWithData = async (barcode) => {
         if (!barcode.trim()) return;
         setLoading(true);
@@ -64,6 +121,11 @@ export default function PendingPackagingScreen({ navigation }) {
         handleScanCartWithData(cartBarcode);
     };
 
+    /**
+     * Arabadaki belirli bir bölümü seçip, o bölümdeki siparişi paketlemeye atayan fonksiyon.
+     * İşlem başarılı olursa Packaging (Paketleme) ekranına yönlendirir.
+     * @param {Object} section - Seçilen raf/bölüm objesi
+     */
     const handleSelectSection = async (section) => {
         if (!section.orders || section.orders.length === 0) {
             Alert.alert('Uyarı', 'Bu bölümde sipariş bulunmuyor.');
@@ -102,7 +164,7 @@ export default function PendingPackagingScreen({ navigation }) {
                 <View style={styles.cardHeader}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Feather name="layers" size={18} color={hasOrders ? "#f59e0b" : "#94a3b8"} style={{ marginRight: 6 }} />
-                        <Text style={styles.orderNumber}>{item.section_name} ({item.barcode})</Text>
+                        <Text style={styles.orderNumber}>{item.section_name || item.name} ({item.barcode})</Text>
                     </View>
                     {assigningId === item.id ? (
                         <ActivityIndicator size="small" color="#f59e0b" />
@@ -129,6 +191,37 @@ export default function PendingPackagingScreen({ navigation }) {
         );
     };
 
+    const renderDirectOrderItem = ({ item }) => {
+        return (
+            <TouchableOpacity 
+                style={styles.card}
+                onPress={() => handleSelectDirectOrder(item)}
+                disabled={assigningId === item.Id}
+            >
+                <View style={styles.cardHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Feather name="box" size={18} color="#f59e0b" style={{ marginRight: 6 }} />
+                        <Text style={styles.orderNumber}>{item.OrderNumber}</Text>
+                    </View>
+                    {assigningId === item.Id ? (
+                        <ActivityIndicator size="small" color="#f59e0b" />
+                    ) : (
+                        <View style={[styles.statusBadge, { backgroundColor: '#fef08a' }]}>
+                            <Text style={[styles.statusText, { color: '#854d0e' }]}>{item.ShippingAddress || 'Kargo'}</Text>
+                        </View>
+                    )}
+                </View>
+                <View style={styles.cardBody}>
+                    <View style={styles.infoRow}>
+                        <Feather name="user" size={14} color="#64748b" />
+                        <Text style={styles.infoText}>{item.customers?.CustomerName || 'Bilinmiyor'}</Text>
+                    </View>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
+    // Arayüz render işlemleri: Barkod okuma alanı ve bölümlerin listesi
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
@@ -177,27 +270,36 @@ export default function PendingPackagingScreen({ navigation }) {
                         </TouchableOpacity>
                     )}
 
-                    <Text style={styles.label}>Taşıma Arabası / Raf Barkodu</Text>
+                    <Text style={styles.label}>Taşıma Arabası veya Sipariş Ara</Text>
                     <View style={styles.inputWrapper}>
-                        <Feather name="maximize" size={20} color="#94a3b8" style={{ marginRight: 10 }} />
+                        <Feather name="search" size={20} color="#94a3b8" style={{ marginRight: 10 }} />
                         <TextInput
                             style={styles.input}
-                            placeholder="Araba barkodunu okutun..."
-                            value={cartBarcode}
-                            onChangeText={setCartBarcode}
-                            onSubmitEditing={handleScanCart}
+                            placeholder="Araba barkodu veya Sipariş No (SIP-123)"
+                            value={searchQuery}
+                            onChangeText={(text) => {
+                                setSearchQuery(text);
+                                setCartBarcode(text); // İkisini de aynı inputta tutuyoruz
+                            }}
+                            onSubmitEditing={() => {
+                                handleScanCart();
+                                handleSearchSubmit();
+                            }}
                         />
                     </View>
                     <TouchableOpacity 
                         style={styles.scanButton} 
-                        onPress={handleScanCart}
-                        disabled={loading}
+                        onPress={() => {
+                            handleScanCart();
+                            handleSearchSubmit();
+                        }}
+                        disabled={loading || fetchingReady}
                     >
-                        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.scanButtonText}>Sorgula</Text>}
+                        {loading || fetchingReady ? <ActivityIndicator color="#fff" /> : <Text style={styles.scanButtonText}>Sorgula</Text>}
                     </TouchableOpacity>
                 </View>
 
-                {cartData && (
+                {cartData ? (
                     <View style={{ flex: 1 }}>
                         <View style={styles.cartInfoBox}>
                             <Text style={styles.cartInfoTitle}>Seçili Araba: {cartData.cart.name}</Text>
@@ -216,12 +318,35 @@ export default function PendingPackagingScreen({ navigation }) {
                             }
                         />
                     </View>
+                ) : (
+                    <View style={{ flex: 1 }}>
+                        {readyOrders && readyOrders.length > 0 && (
+                            <View style={styles.cartInfoBox}>
+                                <Text style={styles.cartInfoTitle}>{searchQuery ? 'Arama Sonuçları' : 'Elden Teslim Bekleyenler'}</Text>
+                                <Text style={styles.cartInfoSubtitle}>Araba seçmeden doğrudan paketlemeye başlayabilirsiniz.</Text>
+                            </View>
+                        )}
+                        <FlatList
+                            data={readyOrders}
+                            keyExtractor={(item) => item.Id.toString()}
+                            renderItem={renderDirectOrderItem}
+                            contentContainerStyle={styles.listContent}
+                            ListEmptyComponent={
+                                !fetchingReady && searchQuery ? (
+                                    <View style={styles.emptyContainer}>
+                                        <Text style={styles.emptyText}>Aranan sipariş bulunamadı.</Text>
+                                    </View>
+                                ) : null
+                            }
+                        />
+                    </View>
                 )}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
 
+// Sayfa içi görsel stil tanımlamaları
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#f8fafc' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
-import Barcode from 'react-barcode';
+import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const PickingCarts = ({ currentUser }) => {
     const [carts, setCarts] = useState([]);
@@ -10,9 +10,12 @@ const PickingCarts = ({ currentUser }) => {
     const [successMessage, setSuccessMessage] = useState('');
 
     // Modal state
+    const [searchTerm, setSearchTerm] = useState('');
+    const [searchBarcodeModalOpen, setSearchBarcodeModalOpen] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editCartId, setEditCartId] = useState(null);
-    const [viewBarcode, setViewBarcode] = useState(null);
+    const [viewBarcode, setViewBarcode] = useState({ value: '', title: '' });
+    const [viewBarcodeOpen, setViewBarcodeOpen] = useState(false);
     const [barcodeModalIndex, setBarcodeModalIndex] = useState(null);
     const [tempBarcode, setTempBarcode] = useState('');
     const [cartBarcodeModalOpen, setCartBarcodeModalOpen] = useState(false);
@@ -211,14 +214,55 @@ const PickingCarts = ({ currentUser }) => {
                     <h2 style={{ margin: 0, fontSize: '24px', color: '#0f172a', fontWeight: '800' }}>Taşıma Arabaları</h2>
                     <p style={{ margin: '4px 0 0 0', color: '#64748b' }}>Sipariş toplama arabalarını ve bölümlerini yönetin.</p>
                 </div>
-                {hasPerm('warehouse_manage') && (
-                    <button 
-                        onClick={() => { setEditCartId(null); setIsModalOpen(true); }}
-                        style={{ padding: '10px 20px', backgroundColor: '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(79, 70, 229, 0.2)' }}
-                    >
-                        <span>+</span> Yeni Taşıma Arabası Ekle
-                    </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input 
+                            type="text"
+                            placeholder="Ad, Bölüm veya Barkod Ara..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            style={{ padding: '10px 14px 10px 44px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', width: '280px', outline: 'none', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}
+                        />
+                        <button 
+                            onClick={() => {
+                                setSearchBarcodeModalOpen(!searchBarcodeModalOpen);
+                                setTimeout(() => document.getElementById('search-barcode-popup-input')?.focus(), 50);
+                            }}
+                            style={{ position: 'absolute', left: '6px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', padding: '6px', cursor: 'pointer', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px' }}
+                            title="Barkod Okut"
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
+                        </button>
+                        
+                        {searchBarcodeModalOpen && (
+                            <div style={{ position: 'absolute', top: '100%', left: '0', zIndex: 50, marginTop: '8px', backgroundColor: 'white', padding: '16px', borderRadius: '8px', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <label style={{ fontSize: '13px', fontWeight: '700', color: '#334155' }}>Barkod Okutun:</label>
+                                <input 
+                                    id="search-barcode-popup-input"
+                                    type="text" 
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            setSearchTerm(e.target.value);
+                                            setSearchBarcodeModalOpen(false);
+                                        }
+                                    }}
+                                    placeholder="Okutun veya yazın..." 
+                                    style={{ padding: '8px 12px', borderRadius: '6px', border: '2px solid #3b82f6', outline: 'none', width: '200px', fontSize: '14px' }} 
+                                />
+                                <div style={{ fontSize: '11px', color: '#64748b' }}>Okuttuktan sonra otomatik aranır.</div>
+                            </div>
+                        )}
+                    </div>
+                    {hasPerm('warehouse_manage') && (
+                        <button 
+                            onClick={() => { setEditCartId(null); setIsModalOpen(true); }}
+                            style={{ padding: '10px 20px', backgroundColor: '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(79, 70, 229, 0.2)' }}
+                        >
+                            <span>+</span> Yeni Taşıma Arabası Ekle
+                        </button>
+                    )}
+                </div>
             </div>
 
             {error && <div style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '8px', marginBottom: '20px' }}>{error}</div>}
@@ -240,13 +284,27 @@ const PickingCarts = ({ currentUser }) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {carts.length === 0 ? (
+                        {carts.filter(cart => {
+                            if (!searchTerm) return true;
+                            const term = searchTerm.toLowerCase();
+                            if (cart.name?.toLowerCase().includes(term)) return true;
+                            if (cart.barcode?.toLowerCase().includes(term)) return true;
+                            if (cart.sections?.some(s => s.barcode?.toLowerCase().includes(term) || s.section_name?.toLowerCase().includes(term))) return true;
+                            return false;
+                        }).length === 0 ? (
                             <tr>
-                                <td colSpan="7" style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>Henüz kayıtlı taşıma arabası bulunmuyor.</td>
+                                <td colSpan="7" style={{ padding: '24px', textAlign: 'center', color: '#64748b' }}>Henüz kayıtlı veya aranan kritere uygun taşıma arabası bulunmuyor.</td>
                             </tr>
                         ) : (
-                            carts.map((cart, idx) => (
-                                <tr key={cart.id} style={{ borderBottom: idx === carts.length - 1 ? 'none' : '1px solid #e2e8f0' }}>
+                            carts.filter(cart => {
+                                if (!searchTerm) return true;
+                                const term = searchTerm.toLowerCase();
+                                if (cart.name?.toLowerCase().includes(term)) return true;
+                                if (cart.barcode?.toLowerCase().includes(term)) return true;
+                                if (cart.sections?.some(s => s.barcode?.toLowerCase().includes(term) || s.section_name?.toLowerCase().includes(term))) return true;
+                                return false;
+                            }).map((cart, idx, filteredArray) => (
+                                <tr key={cart.id} style={{ borderBottom: idx === filteredArray.length - 1 ? 'none' : '1px solid #e2e8f0' }}>
                                     <td style={{ padding: '16px', color: '#0f172a', fontWeight: '500' }}>#{cart.id}</td>
                                     <td style={{ padding: '16px', color: '#0f172a', fontWeight: '700' }}>{cart.name}</td>
                                     <td style={{ padding: '16px', color: '#475569' }}>{cart.warehouse_name}</td>
@@ -294,14 +352,14 @@ const PickingCarts = ({ currentUser }) => {
             {/* Yeni Ekleme Modalı */}
             {isModalOpen && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '20px' }}>
-                    <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '500px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
+                    <div style={{ backgroundColor: 'white', borderRadius: '16px', width: '100%', maxWidth: '600px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}>
                         <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
                             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>{editCartId ? 'Taşıma Arabasını Düzenle' : 'Yeni Taşıma Arabası Ekle'}</h2>
                             <button onClick={closeModal} style={{ background: 'none', border: 'none', fontSize: '24px', color: '#64748b', cursor: 'pointer' }}>&times;</button>
                         </div>
                         
                         <form onSubmit={handleFormSubmit} style={{ padding: '24px' }}>
-                            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', alignItems: 'flex-end' }}>
                                 <div style={{ flex: 1 }}>
                                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>Araba Adı *</label>
                                     <input 
@@ -311,12 +369,12 @@ const PickingCarts = ({ currentUser }) => {
                                         onChange={handleInputChange}
                                         required
                                         placeholder="Örn: Taşıma Arabası 1"
-                                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                                        style={{ width: '100%', height: '42px', padding: '0 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box', margin: 0 }}
                                     />
                                 </div>
                                 <div>
                                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', marginBottom: '6px', textAlign: 'center' }}>Barkod</label>
-                                    <div style={{ position: 'relative' }}>
+                                    <div style={{ position: 'relative', height: '42px', display: 'flex', alignItems: 'center' }}>
                                         <button
                                             type="button"
                                             onClick={() => {
@@ -342,6 +400,8 @@ const PickingCarts = ({ currentUser }) => {
                                                 justifyContent: 'center',
                                                 height: '42px',
                                                 width: '42px',
+                                                boxSizing: 'border-box',
+                                                margin: 0
                                             }}
                                         >
                                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
@@ -357,7 +417,8 @@ const PickingCarts = ({ currentUser }) => {
                                                     onKeyDown={e => {
                                                         if (e.key === 'Enter') {
                                                             e.preventDefault();
-                                                            setFormData(prev => ({ ...prev, barcode: tempBarcode }));
+                                                            const finalBarcode = e.target.value;
+                                                            setFormData(prev => ({ ...prev, barcode: finalBarcode }));
                                                             setCartBarcodeModalOpen(false);
                                                         }
                                                     }}
@@ -386,9 +447,18 @@ const PickingCarts = ({ currentUser }) => {
                                     </div>
                                 </div>
                                 {formData.barcode && (
-                                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                                        <button type="button" onClick={() => setViewBarcode(formData.barcode)} style={{ height: '42px', padding: '0 12px', backgroundColor: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
-                                            Görüntüle
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '42px' }}>
+                                        <span style={{ fontSize: '13px', color: '#64748b', whiteSpace: 'nowrap' }}>Araba Barkodu:</span>
+                                        <span style={{ fontWeight: '600', color: '#0f172a', whiteSpace: 'nowrap' }}>{formData.barcode}</span>
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setViewBarcode({ value: formData.barcode, title: `Araba: ${formData.name || 'Yeni Araba'}` });
+                                                setViewBarcodeOpen(true);
+                                            }}
+                                            style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', color: '#3b82f6', display: 'flex', alignItems: 'center' }} title="Barkodu Görüntüle / Yazdır"
+                                        >
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                                         </button>
                                     </div>
                                 )}
@@ -445,9 +515,9 @@ const PickingCarts = ({ currentUser }) => {
                                         <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#334155', margin: 0 }}>Araba Bölümleri</label>
                                         <button type="button" onClick={addSectionToEdit} style={{ padding: '4px 10px', backgroundColor: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>+ Yeni Ekle</button>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', overflowX: 'hidden', paddingRight: '4px' }}>
                                         {formData.sections.map((sec, index) => (
-                                            <div key={index} style={{ display: 'flex', gap: '8px', alignItems: 'center', backgroundColor: 'white', padding: '0', borderRadius: '8px' }}>
+                                            <div key={index} style={{ display: 'flex', gap: '12px', alignItems: 'center', backgroundColor: 'white', padding: '0', borderRadius: '8px' }}>
                                                 <input 
                                                     type="text"
                                                     value={sec.section_name}
@@ -455,10 +525,10 @@ const PickingCarts = ({ currentUser }) => {
                                                     required
                                                     placeholder="Örn: B1"
                                                     title="Bölüm Adı"
-                                                    style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                                                    style={{ width: '130px', flexShrink: 0, height: '42px', padding: '0 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box', margin: 0 }}
                                                 />
                                                 
-                                                <div style={{ position: 'relative' }}>
+                                                <div style={{ position: 'relative', flexShrink: 0, height: '42px', display: 'flex', alignItems: 'center' }}>
                                                     <button
                                                         type="button"
                                                         onClick={() => {
@@ -484,6 +554,8 @@ const PickingCarts = ({ currentUser }) => {
                                                             justifyContent: 'center',
                                                             height: '42px',
                                                             width: '42px',
+                                                            boxSizing: 'border-box',
+                                                            margin: 0
                                                         }}
                                                     >
                                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
@@ -499,7 +571,8 @@ const PickingCarts = ({ currentUser }) => {
                                                                 onKeyDown={e => {
                                                                     if (e.key === 'Enter') {
                                                                         e.preventDefault();
-                                                                        handleSectionChange(index, 'barcode', tempBarcode);
+                                                                        const finalBarcode = e.target.value;
+                                                                        handleSectionChange(index, 'barcode', finalBarcode);
                                                                         setBarcodeModalIndex(null);
                                                                     }
                                                                 }}
@@ -528,11 +601,21 @@ const PickingCarts = ({ currentUser }) => {
                                                 </div>
 
                                                 {sec.barcode && (
-                                                    <button type="button" onClick={() => setViewBarcode(sec.barcode)} style={{ height: '42px', width: '42px', padding: '0', backgroundColor: '#e0e7ff', color: '#4f46e5', border: 'none', borderRadius: '6px', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Görüntüle">
-                                                        👁
-                                                    </button>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '42px', flexShrink: 0 }}>
+                                                        <span style={{ fontWeight: '600', color: '#0f172a', whiteSpace: 'nowrap', width: '120px', display: 'inline-block' }}>{sec.barcode}</span>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setViewBarcode({ value: sec.barcode, title: `Bölüm: ${sec.section_name}` });
+                                                                setViewBarcodeOpen(true);
+                                                            }}
+                                                            style={{ background: 'none', border: 'none', padding: '0', cursor: 'pointer', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '42px', width: '42px', boxSizing: 'border-box', margin: 0 }} title="Barkodu Görüntüle / Yazdır"
+                                                        >
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                                        </button>
+                                                    </div>
                                                 )}
-                                                <button type="button" onClick={() => removeSectionFromEdit(index)} style={{ height: '42px', width: '42px', padding: '0', backgroundColor: 'transparent', color: '#ef4444', border: 'none', borderRadius: '6px', fontSize: '20px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Sil">
+                                                <button type="button" onClick={() => removeSectionFromEdit(index)} style={{ height: '42px', width: '42px', flexShrink: 0, padding: '0', backgroundColor: 'transparent', color: '#ef4444', border: 'none', borderRadius: '6px', fontSize: '24px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', margin: 0 }} title="Sil">
                                                     &times;
                                                 </button>
                                             </div>
@@ -555,17 +638,12 @@ const PickingCarts = ({ currentUser }) => {
                     </div>
                 </div>
             )}
-
-            {/* Barcode Preview Modal */}
-            {viewBarcode && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000, padding: '20px' }} onClick={() => setViewBarcode(null)}>
-                    <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '32px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)', position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setViewBarcode(null)} style={{ position: 'absolute', top: '12px', right: '12px', background: 'none', border: 'none', fontSize: '24px', color: '#64748b', cursor: 'pointer' }}>&times;</button>
-                        <h3 style={{ margin: '0 0 16px 0', color: '#0f172a' }}>Barkod Görünümü</h3>
-                        <Barcode value={viewBarcode} width={2} height={80} fontSize={16} />
-                    </div>
-                </div>
-            )}
+            <BarcodePrintModal 
+                isOpen={viewBarcodeOpen}
+                onClose={() => setViewBarcodeOpen(false)}
+                barcodeValue={viewBarcode?.value}
+                title={viewBarcode?.title}
+            />
         </div>
     );
 };
