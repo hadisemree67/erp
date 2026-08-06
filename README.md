@@ -2,7 +2,7 @@
 
 Modern teknolojilerle geliştirilmiş, uçtan uca Depo Yönetim (WMS), Üretim, Satın Alma, Satış ve Müşteri İlişkileri (CRM) süreçlerini yöneten tam kapsamlı bir ERP uygulamasıdır. Sistem; Masaüstü (Electron/React), Mobil (React Native/Expo) ve Güçlü bir Backend (Node.js/Express) altyapısından oluşmaktadır.
 
-## 🚀 Temel Özellikler ve Modüller
+## Temel Özellikler ve Modüller
 
 ### 1. Gelişmiş Depo Yönetim Sistemi (WMS - Akıllı Raf ve Yerleşim)
 Sistemin en güçlü yanlarından biri olan WMS modülü, depoların hacimsel (m³) ve fiziksel özelliklerine göre tamamen otonom yerleşim algoritmaları kullanır.
