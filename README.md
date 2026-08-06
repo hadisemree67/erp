@@ -40,11 +40,11 @@ Paketleme sırasına giren siparişler deponun içinde personelin telefonuna (ve
 ### 8. Gelişmiş Raporlama (Excel Dışa Aktarım)
 Sistemdeki tüm hareketler; Müşteri, Sipariş, Stok ve Yaş/Cinsiyet/Şehir filtrelerine göre analiz edilip tek tıkla Excel formatında indirilebilir. İşletmenin anlık durumu (Nereden kim ne almış, hangi rafta ne var) en ince ayrıntısına kadar raporlanır.
 
-### 9. Güvenli Sayım Modu (Sistemi Durdurma)
-Depolarda genel sayım (Inventory Count) yapılacağı zaman, işlemlerin birbirine karışmasını engellemek için **Sistem Durdurma (Zamanı Dondurma)** özelliği devreye alınır.
-* Ayarlardan "Sistemi Durdur" butonuna basıldığında tüm sistemde güçlü bir kalkan (Global Middleware) aktif olur.
-* Sistem o saniyede donar; personel veya dış API'ler yeni ürün, stok veya sipariş ekleyemez (Uygulama arka planda HTTP 503 güvenliğiyle istekleri reddeder).
-* Sayım bittiğinde kilit açılır ve sistem normal akışına sorunsuz devam eder. Hiçbir veri bozulması veya çakışma yaşanmaz.
+### 9. Güvenli Sayım Modu / Acil Durum Kalkanı (Kill Switch)
+Depolarda genel sayım (Inventory Count) yapılacağı zaman veya **olası bir siber saldırı / iç sabotaj durumunda**, işlemlerin durdurulması için **Sistem Durdurma (Zamanı Dondurma)** özelliği devreye alınır.
+* Ayarlardan "Sistemi Durdur" butonuna basıldığı milisaniyede tüm sistemde çok güçlü bir güvenlik kalkanı (Global Middleware) aktif olur.
+* Sistem o saniyede donar; personel, dış API'ler veya hacker botları yeni ürün, stok ekleyemez ve en önemlisi **hiçbir veriyi SİLEMEZ** (Uygulama arka planda HTTP 503 güvenliğiyle tüm veritabanı yazma/silme isteklerini reddeder).
+* Sayım bittiğinde veya tehdit geçtiğinde kilit açılır ve sistem normal akışına sorunsuz devam eder. Hiçbir veri bozulması veya çakışma yaşanmaz.
 
 ---
 
