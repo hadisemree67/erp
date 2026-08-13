@@ -21,7 +21,7 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
         Address: customer?.Address || '',
         City: customer?.City || '',
         Gender: customer?.Gender || '',
-        Age: customer?.Age || ''
+        BirthDate: customer?.BirthDate || customer?.Age || ''
     });
 
     const [loading, setLoading] = useState(false);
@@ -178,16 +178,13 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
 
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
-                            Yaş
+                            Doğum Tarihi
                         </label>
                         <input
-                            type="number"
-                            name="Age"
-                            value={formData.Age}
+                            type="date"
+                            name="BirthDate"
+                            value={formData.BirthDate}
                             onChange={handleChange}
-                            placeholder="Örn: 35"
-                            min="0"
-                            max="120"
                             style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '14px', outline: 'none' }}
                         />
                     </div>

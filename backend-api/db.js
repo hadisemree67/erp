@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * DOSYA ADI: db.js
  * MODÜL / KATMAN: Arkayüz Çekirdeği - Veritabanı Bağlantı ve Sorgu Havuzu
@@ -23,6 +23,16 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
+const requiredEnvVars = ['DB_HOST', 'DB_USER', 'DB_NAME'];
+for (const key of requiredEnvVars) {
+    if (!process.env[key]) {
+        throw new Error(`CRITICAL ERROR: ${key} environment variable is missing or empty!`);
+    }
+}
+if (process.env.DB_PASSWORD === undefined) {
+    throw new Error(`CRITICAL ERROR: DB_PASSWORD environment variable is missing! (It can be empty, but must be defined in .env)`);
+}
+
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -46,56 +56,5 @@ pool.getConnection()
         console.error('Veritabanına bağlanırken hata oluştu:', err);
     });
 
-// Güvenlik Kalkanı: MySQL2 "Bind parameters must not contain undefined" hatasını engellemek için
-// gelen sorgu parametrelerindeki tüm 'undefined' değerleri otomatik olarak 'null'a çevirir.
-const originalQuery = pool.query.bind(pool);
-const originalExecute = pool.execute.bind(pool);
-const originalGetConnection = pool.getConnection.bind(pool);
-
-function sanitizeParams(params) {
-    if (Array.isArray(params)) {
-        return params.map(p => p === undefined ? null : p);
-    }
-    if (params && typeof params === 'object') {
-        const cleaned = {};
-        for (const key of Object.keys(params)) {
-            cleaned[key] = params[key] === undefined ? null : params[key];
-        }
-        return cleaned;
-    }
-    return params;
-}
-
-pool.query = function (sql, params) {
-    return originalQuery(sql, sanitizeParams(params));
-};
-
-pool.execute = function (sql, params) {
-    return originalExecute(sql, sanitizeParams(params));
-};
-
-// ⚠️ MÜSTAKİL BAĞLANTILAR (TRANSACTION) İÇİN KORUMA
-// pool.getConnection ile alınan bağımsız connection nesnelerinin kendi .query ve .execute
-// metotlarını da "sanitizeParams" filtresinden geçirmek için override (ezme) işlemi yapıyoruz.
-pool.getConnection = async function() {
-    const connection = await originalGetConnection();
-    
-    // Eğer bağlantı nesnesi daha önce ezilmemişse (sadece 1 kez eziyoruz)
-    if (!connection.__isSanitized) {
-        const connOriginalQuery = connection.query.bind(connection);
-        const connOriginalExecute = connection.execute.bind(connection);
-
-        connection.query = function(sql, params) {
-            return connOriginalQuery(sql, sanitizeParams(params));
-        };
-        connection.execute = function(sql, params) {
-            return connOriginalExecute(sql, sanitizeParams(params));
-        };
-        
-        connection.__isSanitized = true;
-    }
-    
-    return connection;
-};
 
 module.exports = pool;

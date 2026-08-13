@@ -12,6 +12,7 @@ const prisma = require('../prisma');
 const db = require('../db');
 const { toFrontendStatus, toPrismaStatus } = require('../utils/enumMapper');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 
 function sortLocation(a, b) {
@@ -26,7 +27,7 @@ function sortLocation(a, b) {
 async function getOrderItemsWithRoute(orderId) {
     const rawItems = await prisma.orderitems.findMany({
         where: { OrderId: orderId },
-        include: { products: true }
+        include: { products: { include: { product_barcodes: true } } }
     });
 
     let routeSteps = [];
@@ -51,7 +52,7 @@ async function getOrderItemsWithRoute(orderId) {
                 Quantity: takeQty,
                 ProductId: product.Id,
                 ProductName: product.ProductName,
-                Barcode: product.Barcode,
+                Barcode: product.product_barcodes ? JSON.stringify(product.product_barcodes.map(pb => pb.barcode)) : '[]',
                 Weight: product.Weight,
                 ImagePath: product.ImagePath,
                 DefaultLocation: product.Location,
@@ -66,7 +67,7 @@ async function getOrderItemsWithRoute(orderId) {
                 Quantity: remainingQty,
                 ProductId: product.Id,
                 ProductName: product.ProductName,
-                Barcode: product.Barcode,
+                Barcode: product.product_barcodes ? JSON.stringify(product.product_barcodes.map(pb => pb.barcode)) : '[]',
                 Weight: product.Weight,
                 ImagePath: product.ImagePath,
                 DefaultLocation: product.Location,
@@ -80,7 +81,7 @@ async function getOrderItemsWithRoute(orderId) {
 }
 
 // GET: Onaylanmış siparişlerin listesini al
-router.get('/orders/pending', authMiddleware, async (req, res) => {
+router.get('/orders/pending', authMiddleware, checkPermission('view_wms'), async (req, res) => {
     try {
         const userId = req.user?.id;
         
@@ -111,7 +112,7 @@ router.get('/orders/pending', authMiddleware, async (req, res) => {
 });
 
 // POST: Belirli bir siparişi al (atama)
-router.post('/orders/assign/:id', authMiddleware, async (req, res) => {
+router.post('/orders/assign/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
     const userId = req.user?.id;
     
@@ -173,6 +174,30 @@ router.post('/orders/assign/:id', authMiddleware, async (req, res) => {
             cartId = cart.id;
             cartSectionIds = sections.map(s => s.id);
 
+            // GÜVENLİK: Bölüm (Section) Müsaitlik Kontrolü (Race condition / Çakışma önleme)
+            const activeOrdersInCart = await prisma.orders.findMany({
+                where: {
+                    CartId: cart.id,
+                    OrderStatus: {
+                        in: ['Haz_rlan_yor', 'Toplamada', 'Haz_r']
+                    }
+                }
+            });
+
+            for (const activeOrder of activeOrdersInCart) {
+                if (activeOrder.Id === id) continue; // Mevcut siparişi yoksay
+                if (activeOrder.CartSectionIds && Array.isArray(activeOrder.CartSectionIds)) {
+                    for (const section of sections) {
+                        if (activeOrder.CartSectionIds.includes(section.id)) {
+                             return res.status(400).json({ 
+                                 success: false, 
+                                 message: `Bu bölüm zaten Sipariş #${activeOrder.OrderNumber || activeOrder.Id} için kullanılıyor. Lütfen başka bir bölüm seçin.` 
+                             });
+                        }
+                    }
+                }
+            }
+
             // Update cart status to PICKING if it's IDLE
             if (cart.status === 'IDLE') {
                 await prisma.picking_carts.update({
@@ -188,8 +213,8 @@ router.post('/orders/assign/:id', authMiddleware, async (req, res) => {
             data: { 
                 OrderStatus: 'Haz_rlan_yor', 
                 PickerId: userId,
-                ...(cartId ? { CartId: cartId } : {}),
-                ...(cartSectionIds ? { CartSectionIds: cartSectionIds } : {})
+                CartId: cartId !== undefined ? cartId : undefined,
+                CartSectionIds: cartSectionIds !== undefined ? cartSectionIds : undefined
             }
         });
 
@@ -221,7 +246,7 @@ router.post('/orders/assign/:id', authMiddleware, async (req, res) => {
 });
 
 // POST: Siparişe yeni bölüm (raf) ekle
-router.post('/orders/:id/add-section', authMiddleware, async (req, res) => {
+router.post('/orders/:id/add-section', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
     const userId = req.user?.id;
     const { section_barcode } = req.body;
@@ -235,6 +260,14 @@ router.post('/orders/:id/add-section', authMiddleware, async (req, res) => {
         });
 
         if (!order || order.PickerId !== userId || order.OrderStatus !== 'Haz_rlan_yor') {
+            // GÜVENLİK: Şüpheli İşlem - Başkasının siparişine müdahale girişimi
+            if (order && order.PickerId && order.PickerId !== userId) {
+                await prisma.users.update({ where: { id: userId }, data: { is_active: false } });
+                const authMiddleware = require('../middleware/auth');
+                authMiddleware.clearAuthCache(userId);
+                console.error(`[SECURITY ALERT] User ${userId} tried to access order ${id} belonging to user ${order.PickerId}. Account suspended.`);
+                return res.status(403).json({ success: false, message: 'Şüpheli işlem tespit edildi. Güvenlik ihlali nedeniyle hesabınız askıya alındı.' });
+            }
             return res.json({ success: false, message: 'Sipariş size atanmamış veya durumu uygun değil.' });
         }
         if (!order.CartId) {
@@ -251,6 +284,28 @@ router.post('/orders/:id/add-section', authMiddleware, async (req, res) => {
 
         if (!section) {
             return res.json({ success: false, message: 'Bu bölüm, bulunduğunuz arabaya ait değil veya bulunamadı.' });
+        }
+
+        // GÜVENLİK: Bölüm (Section) Müsaitlik Kontrolü
+        const activeOrdersInCart = await prisma.orders.findMany({
+            where: {
+                CartId: order.CartId,
+                OrderStatus: {
+                    in: ['Haz_rlan_yor', 'Toplamada', 'Haz_r']
+                }
+            }
+        });
+
+        for (const activeOrder of activeOrdersInCart) {
+            if (activeOrder.Id === id) continue; // Kendi siparişimizi atla
+            if (activeOrder.CartSectionIds && Array.isArray(activeOrder.CartSectionIds)) {
+                if (activeOrder.CartSectionIds.includes(section.id)) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: `Bu bölüm zaten Sipariş #${activeOrder.OrderNumber || activeOrder.Id} için kullanılıyor.` 
+                    });
+                }
+            }
         }
 
         // Append to CartSectionIds
@@ -277,7 +332,7 @@ router.post('/orders/:id/add-section', authMiddleware, async (req, res) => {
 });
 
 // GET: Sonraki rastgele siparişi al
-router.get('/orders/next', authMiddleware, async (req, res) => {
+router.get('/orders/next', authMiddleware, checkPermission('view_wms'), async (req, res) => {
     const userId = req.user?.id;
     
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
@@ -343,12 +398,12 @@ router.get('/orders/next', authMiddleware, async (req, res) => {
 
     } catch (error) {
         console.error('Mobil sipariş alma hatası:', error);
-        res.status(500).json({ success: false, message: 'Sipariş getirilemedi. Hata: ' + (error.message || error.toString()) });
+        res.status(500).json({ success: false, message: 'Sipariş getirilemedi.' });
     }
 });
 
 // POST: Toplama işlemini iptal et (Geri Dön)
-router.post('/orders/cancel/:id', authMiddleware, async (req, res) => {
+router.post('/orders/cancel/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
     const userId = req.user?.id;
 
@@ -374,7 +429,7 @@ router.post('/orders/cancel/:id', authMiddleware, async (req, res) => {
 });
 
 // POST: Siparişi tamamla
-router.post('/orders/complete/:id', authMiddleware, async (req, res) => {
+router.post('/orders/complete/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
     const userId = req.user?.id;
 
@@ -414,7 +469,7 @@ router.post('/orders/complete/:id', authMiddleware, async (req, res) => {
 });
 
 // POST: Siparişi paketle (Kargo etiketini oluştur ve doğrula)
-router.post('/orders/package/complete/:id', authMiddleware, async (req, res) => {
+router.post('/orders/package/complete/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
     const { scannedBarcode, boxBarcode } = req.body; // Yeni üretilen kargo barkodu ve kutu barkodu
     const userId = req.user?.id;
@@ -468,7 +523,7 @@ router.post('/orders/package/complete/:id', authMiddleware, async (req, res) => 
 });
 
 // POST: Kargoya Ver (Kargo Barkodu ile)
-router.post('/orders/ship', authMiddleware, async (req, res) => {
+router.post('/orders/ship', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const { cargoBarcode } = req.body;
     const userId = req.user?.id;
 
@@ -512,7 +567,7 @@ router.post('/orders/ship', authMiddleware, async (req, res) => {
 });
 
 // GET: İstatistikler (Liderlik Tablosu) - Filtreli
-router.get('/stats', authMiddleware, async (req, res) => {
+router.get('/stats', authMiddleware, checkPermission('view_wms'), async (req, res) => {
     const range = req.query.range || 'daily';
     try {
         let stats;
@@ -562,28 +617,33 @@ router.get('/stats', authMiddleware, async (req, res) => {
 });
 
 // GET: Paketlenecek siparişleri (Hazır) listele veya Elden Teslim olanları getir
-router.get('/orders/ready-for-packaging', authMiddleware, async (req, res) => {
+router.get('/orders/ready-for-packaging', authMiddleware, checkPermission('view_wms'), async (req, res) => {
     try {
         const userId = req.user?.id;
         const { searchQuery } = req.query;
 
-        let whereClause = {
-            OR: [
-                { OrderStatus: 'Haz_r' },
-                { OrderStatus: 'Paketleniyor', PackerId: userId }
-            ]
-        };
+        let whereClause = {};
 
         if (searchQuery && searchQuery.trim().length > 0) {
             whereClause = {
-                ...whereClause,
-                OrderNumber: { contains: searchQuery.trim() }
+                OrderNumber: { contains: searchQuery.trim() },
+                OR: [
+                    { OrderStatus: 'Haz_r' },
+                    { OrderStatus: 'Paketleniyor', PackerId: userId },
+                    { ShippingAddress: { contains: 'Elden Teslim' } }
+                ]
             };
         } else {
-            // Sadece Elden Teslim olanları getir (arama yoksa)
+            // Arama yoksa sadece paketlemeye hazır olanları VEYA elden teslimleri (durumdan bağımsız) getir
             whereClause = {
-                ...whereClause,
-                ShippingAddress: 'Elden Teslim'
+                OR: [
+                    { OrderStatus: 'Haz_r' },
+                    { OrderStatus: 'Paketleniyor', PackerId: userId },
+                    { 
+                        ShippingAddress: { contains: 'Elden Teslim' },
+                        OrderStatus: { in: ['Bekliyor', 'Haz_r', 'Paketleniyor'] } // Elden teslimler toplanmaya girmez
+                    }
+                ]
             };
         }
 
@@ -606,7 +666,7 @@ router.get('/orders/ready-for-packaging', authMiddleware, async (req, res) => {
 });
 
 // POST: Paketleme görevini al (Assign)
-router.post('/orders/package/assign/:id', authMiddleware, async (req, res) => {
+router.post('/orders/package/assign/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
@@ -644,7 +704,7 @@ router.post('/orders/package/assign/:id', authMiddleware, async (req, res) => {
 });
 
 // POST: Paketlemeyi iptal et (Geri bırak)
-router.post('/orders/package/cancel/:id', authMiddleware, async (req, res) => {
+router.post('/orders/package/cancel/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
     const userId = req.user?.id;
     try {
@@ -663,7 +723,7 @@ router.post('/orders/package/cancel/:id', authMiddleware, async (req, res) => {
 });
 
 // POST: Arabayı paketlemeye gönder
-router.post('/picking_carts/finish-picking', authMiddleware, async (req, res) => {
+router.post('/picking_carts/finish-picking', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const { cart_barcode } = req.body;
     if (!cart_barcode) return res.status(400).json({ success: false, message: 'Araba barkodu gerekli.' });
 
@@ -690,8 +750,34 @@ router.post('/picking_carts/finish-picking', authMiddleware, async (req, res) =>
 
 
 
+// POST: Arabanın tüm siparişleri paketlendi, arabayı boşa çıkar
+router.post('/picking_carts/empty-cart', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
+    const { cart_id } = req.body;
+    if (!cart_id) return res.status(400).json({ success: false, message: 'Araba kimliği gerekli.' });
+
+    try {
+        const cart = await prisma.picking_carts.findUnique({
+            where: { id: parseInt(cart_id) }
+        });
+
+        if (!cart) {
+            return res.status(404).json({ success: false, message: 'Araba bulunamadı.' });
+        }
+
+        await prisma.picking_carts.update({
+            where: { id: parseInt(cart_id) },
+            data: { status: 'IDLE' }
+        });
+
+        res.json({ success: true, message: 'Araba başarıyla boşaltıldı.' });
+    } catch (error) {
+        console.error('Araba boşaltma hatası:', error);
+        res.status(500).json({ success: false, message: 'Araba boşaltılamadı.' });
+    }
+});
+
 // GET: Paketleme için arabayı okut ve bölümleri/siparişleri getir
-router.get('/picking_carts/scan-for-packaging', authMiddleware, async (req, res) => {
+router.get('/picking_carts/scan-for-packaging', authMiddleware, checkPermission('view_wms'), async (req, res) => {
     const { cart_barcode } = req.query;
     if (!cart_barcode) return res.status(400).json({ success: false, message: 'Araba barkodu gerekli.' });
 
@@ -735,7 +821,7 @@ router.get('/picking_carts/scan-for-packaging', authMiddleware, async (req, res)
         const orderGroups = {};
         
         cart.orders.forEach(order => {
-            if (!order.CartSectionIds || order.CartSectionIds.length === 0) return;
+            if (!order.CartSectionIds || !Array.isArray(order.CartSectionIds) || order.CartSectionIds.length === 0) return;
             
             // Sort to ensure same combination yields same key
             const sortedIds = [...order.CartSectionIds].sort();

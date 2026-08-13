@@ -23,6 +23,7 @@ import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect, Fragment } from 'react';
 import StockEntry from './StockEntry';
 import * as XLSX from 'xlsx';
+import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const StockList = ({ currentUser, initialEntryVisible = false }) => {
   // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -38,6 +39,10 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState([]);
 
+  // Barkod Yazdırma State
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printBarcodeData, setPrintBarcodeData] = useState({ value: '', title: '' });
+
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState('');
   
@@ -46,6 +51,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   const [fastDeductQty, setFastDeductQty] = useState('');
   const [fastDeductLoading, setFastDeductLoading] = useState(false);
   const [fastDeductSelectedShelf, setFastDeductSelectedShelf] = useState(''); // "warehouseId_shelfCode" format
+  const [fastDeductDescription, setFastDeductDescription] = useState('');
 
   // Edit State
   const [editingStock, setEditingStock] = useState(null);
@@ -157,6 +163,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                 body: JSON.stringify({ 
                     barcode: fastDeductBarcode, 
                     quantity: fastDeductQty,
+                    description: fastDeductDescription,
                     warehouseId,
                     shelfCode
                 })
@@ -168,6 +175,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                 setFastDeductBarcode('');
                 setFastDeductQty('');
                 setFastDeductSelectedShelf('');
+                setFastDeductDescription('');
                 fetchStockList();
             } else {
                 alert('Hata: ' + data.message);
@@ -228,11 +236,22 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
 
     const filteredItems = stockItems.filter(item => {
         const search = searchTerm.toLowerCase();
+        const searchInField = (field) => {
+            if (!field) return false;
+            if (typeof field === 'string') return field.toLowerCase().includes(search);
+            if (Array.isArray(field)) return field.some(i => i.toLowerCase().includes(search));
+            return JSON.stringify(field).toLowerCase().includes(search);
+        };
         const matchesSearch = (
             item.product_name?.toLowerCase().includes(search) ||
             item.barcode?.toLowerCase().includes(search) ||
             item.warehouse_name?.toLowerCase().includes(search) ||
-            item.shelf_code?.toLowerCase().includes(search)
+            item.shelf_code?.toLowerCase().includes(search) ||
+            item.category?.toLowerCase().includes(search) ||
+            item.brand?.toLowerCase().includes(search) ||
+            searchInField(item.web_categories) ||
+            searchInField(item.web_subcategories) ||
+            searchInField(item.web_subtitles)
         );
         const matchesWarehouse = selectedWarehouseFilter ? item.warehouse_name === selectedWarehouseFilter : true;
         return matchesSearch && matchesWarehouse;
@@ -342,7 +361,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
               border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.3)'
             }}
           >
-            - Acil Çıkış
+            - Stok Çıkışı
           </button>
           <button 
             onClick={() => setIsEntryVisible(true)}
@@ -537,8 +556,11 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
             ) : (
               groupedItems.map(group => {
                 let displayBarcode = group.barcode;
+                let barcodeList = [];
                 if (displayBarcode?.startsWith('[')) {
-                    try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch(e){}
+                    try { barcodeList = JSON.parse(displayBarcode); } catch(e){}
+                } else if (displayBarcode) {
+                    barcodeList = displayBarcode.split(',').map(b => b.trim());
                 }
 
                 let sktBadge = null;
@@ -569,7 +591,34 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                     <tr key={group.groupKey} className="hover-row" onClick={() => setSelectedGroup(group)} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.15s', cursor: 'pointer', backgroundColor: 'white' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'white'}>
                         <td style={{ padding: '16px' }}>
                             <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px', marginBottom: '2px' }}>{group.product_name}</div>
-                            <div style={{ color: '#64748b', fontSize: '12px' }}>{displayBarcode || 'Barkod Yok'}</div>
+                            {barcodeList.length > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        {barcodeList.map((b, idx) => (
+                                            <div key={idx} style={{ color: '#64748b', fontSize: '12px' }}>{b}</div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        title="Yazdır"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPrintBarcodeData({ value: barcodeList.filter(b => b), title: group.product_name });
+                                            setPrintModalOpen(true);
+                                        }}
+                                        style={{
+                                            padding: '4px', backgroundColor: 'transparent', border: 'none', color: '#64748b',
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px'
+                                        }}
+                                        onMouseOver={(e) => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.backgroundColor = '#e0f2fe'; }}
+                                        onMouseOut={(e) => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                    </button>
+                                </div>
+                            ) : (
+                                <div style={{ color: '#64748b', fontSize: '12px' }}>Barkod Yok</div>
+                            )}
                         </td>
                         <td style={{ padding: '16px', color: '#475569', fontSize: '14px' }}>
                             {group.category} / {group.brand}
@@ -621,7 +670,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                             <span style={{ fontSize: '13px', color: '#0369a1' }}>
                                                 {formatDualStr(group.total_quantity, totalCap, group.product.unit_type)} <br/>
                                                 <span style={{ fontSize: '11px' }}>
-                                                    ({Math.ceil(group.total_quantity / group.product?.package_capacity)} {group.product?.package_name || 'Kap'} x {formatUnitStr(group.product?.package_capacity, group.product?.unit_type)})
+                                                    ({parseFloat((group.total_quantity / group.product?.package_capacity).toFixed(2))} {group.product?.package_name || 'Kap'} x {formatUnitStr(group.product?.package_capacity, group.product?.unit_type)})
                                                 </span>
                                             </span>
                                         ) : (
@@ -969,7 +1018,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                     <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
                         <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                            Acil Çıkış
+                            Stok Çıkışı
                         </h3>
                         <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px', marginTop: 0 }}>Okuttuğunuz barkoddan belirttiğiniz miktar, son kullanma tarihi en yakın raflardan otomatik düşülecektir.</p>
                         
@@ -1033,7 +1082,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                 return null;
                             })()}
                             
-                            <div style={{ marginBottom: '24px' }}>
+                            <div style={{ marginBottom: '16px' }}>
                                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>Düşülecek Miktar</label>
                                 <input 
                                     type="number" 
@@ -1045,6 +1094,17 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                 />
                             </div>
 
+                            <div style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>Açıklama / Not</label>
+                                <textarea 
+                                    value={fastDeductDescription} 
+                                    onChange={(e) => setFastDeductDescription(e.target.value)} 
+                                    placeholder="Çıkış nedenini yazınız..." 
+                                    rows="2"
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', boxSizing: 'border-box', resize: 'vertical' }}
+                                ></textarea>
+                            </div>
+
                             <div style={{ display: 'flex', gap: '12px' }}>
                                 <button type="button" onClick={() => setIsFastDeductVisible(false)} disabled={fastDeductLoading} style={{ flex: 1, padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: 'pointer', fontWeight: '600', color: '#475569' }}>İptal</button>
                                 <button type="submit" disabled={fastDeductLoading} style={{ flex: 1, padding: '12px', border: 'none', borderRadius: '8px', background: '#ef4444', cursor: fastDeductLoading ? 'not-allowed' : 'pointer', fontWeight: '600', color: 'white', display: 'flex', justifyContent: 'center' }}>
@@ -1054,6 +1114,15 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                         </form>
                     </div>
                 </div>
+            )}
+            {/* Barkod Yazdırma Modalı */}
+            {printModalOpen && (
+                <BarcodePrintModal
+                    isOpen={printModalOpen}
+                    onClose={() => setPrintModalOpen(false)}
+                    barcodeValue={printBarcodeData.value}
+                    title={printBarcodeData.title}
+                />
             )}
     </div>
   );

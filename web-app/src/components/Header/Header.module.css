@@ -1,0 +1,360 @@
+.headerTop {
+  background-color: var(--primary);
+  color: var(--white);
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.topContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.topInfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topFeatures {
+  display: flex;
+  gap: 24px;
+}
+
+.featureItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.headerMain {
+  background-color: var(--white);
+  padding: 14px 0;
+  position: relative;
+  z-index: 100;
+}
+
+.mainContainer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.searchBar {
+  width: 550px;
+  max-width: 100%;
+  display: flex;
+  position: relative;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 12px 20px;
+  border: 1px solid var(--border-color);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  font-size: 14px;
+  color: var(--text-dark);
+  outline: none;
+  background-color: var(--white);
+  transition: border-color 0.2s;
+}
+
+.searchInput::placeholder {
+  color: #9ca3af;
+}
+
+.searchInput:focus {
+  border-color: var(--primary);
+}
+
+.searchButton {
+  width: 54px;
+  background-color: var(--primary);
+  color: var(--white);
+  border: none;
+  border-radius: 0 8px 8px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.searchButton:hover {
+  background-color: var(--primary-dark);
+}
+
+.userActions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-shrink: 0;
+}
+
+.actionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dark);
+  transition: color 0.2s;
+}
+
+.actionItem:hover {
+  color: var(--primary);
+}
+
+.actionText {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  line-height: 1.2;
+}
+
+.actionLabel {
+  font-size: 11px;
+  color: var(--text-light);
+  font-weight: 500;
+}
+
+.actionValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.actionItem:hover .actionValue {
+  color: var(--primary);
+}
+
+.cartItem {
+  position: relative;
+}
+
+.cartBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background-color: var(--primary);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+}
+
+.userAccountItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dark);
+  transition: color 0.2s;
+  position: relative;
+  cursor: pointer;
+}
+
+.userAccountItem:hover {
+  color: var(--primary);
+}
+
+.userAccountItem:hover .actionValue {
+  color: var(--primary);
+}
+
+/* User Dropdown Styles */
+.userDropdown {
+  position: absolute;
+  top: calc(100% + 15px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  background-color: var(--white);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: 8px 0;
+  z-index: 50;
+  border: 1px solid var(--border-color);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, top 0.2s, visibility 0.2s;
+}
+
+.userAccountItem:hover .userDropdown {
+  opacity: 1;
+  visibility: visible;
+  top: calc(100% + 10px);
+}
+
+/* Dropdown Arrow/Triangle */
+.userDropdown::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background-color: var(--white);
+  border-left: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
+  border-radius: 2px 0 0 0;
+}
+
+.dropdownHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 8px;
+}
+
+.userInitials {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: #e6f6f4;
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.userName {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-dark);
+  margin-bottom: 2px;
+}
+
+.userEmail {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.profileLink {
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.profileLink:hover {
+  text-decoration: underline;
+}
+
+.dropdownList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dropdownItem {
+  padding: 0;
+  margin: 0;
+}
+
+.dropdownLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  color: var(--text-dark);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.dropdownLinkLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dropdownLinkIcon {
+  color: #6b7280;
+  transition: color 0.2s;
+}
+
+.dropdownLinkArrow {
+  color: #d1d5db;
+  transition: color 0.2s;
+  transform: translateX(0);
+}
+
+.dropdownLink:hover {
+  background-color: #f9fafb;
+  color: var(--primary);
+}
+
+.dropdownLink:hover .dropdownLinkIcon,
+.dropdownLink:hover .dropdownLinkArrow {
+  color: var(--primary);
+}
+
+.dropdownLink:hover .dropdownLinkArrow {
+  transform: translateX(3px);
+}
+
+.dropdownDivider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 8px 0;
+}
+
+.logoutBtn {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  color: #ef4444;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.logoutBtn:hover {
+  background-color: #fef2f2;
+}
+
+.logoutIcon {
+  color: #ef4444;
+}

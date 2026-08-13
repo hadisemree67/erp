@@ -1,0 +1,157 @@
+.carouselWrapper {
+  margin-top: 32px;
+  margin-bottom: 48px;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.viewAll {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.productGrid {
+  display: flex;
+  gap: 16px;
+}
+
+.productCard {
+  flex: 1;
+  background-color: var(--white);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px;
+  position: relative;
+  transition: box-shadow 0.2s, transform 0.2s;
+  cursor: pointer;
+}
+
+.productCard:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.favoriteBtn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  color: var(--text-light);
+  transition: color 0.2s;
+  z-index: 2;
+}
+
+.favoriteBtn:hover {
+  color: #ef4444;
+}
+
+.badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  z-index: 2;
+}
+
+.badge.discount {
+  background-color: var(--primary);
+  color: var(--white);
+}
+
+.badge.new {
+  background-color: #fef3c7;
+  color: #d97706;
+}
+
+.productImage {
+  width: 100%;
+  height: 180px;
+  object-fit: contain;
+  margin-bottom: 12px;
+  mix-blend-mode: multiply;
+}
+
+.productBrand {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-bottom: 2px;
+}
+
+.productName {
+  font-size: 13px;
+  color: var(--text-dark);
+  font-weight: 500;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  height: 36px;
+  line-height: 1.4;
+}
+
+.productPrice {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.oldPrice {
+  font-size: 13px;
+  color: var(--text-light);
+  text-decoration: line-through;
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+.ratingRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.star {
+  color: #fbbf24;
+}
+
+.ratingCount {
+  font-size: 11px;
+  color: var(--text-light);
+  margin-left: 2px;
+}
+
+.addToCartBtn {
+  width: 100%;
+  background-color: var(--secondary);
+  color: var(--primary);
+  padding: 8px 0;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+
+.addToCartBtn:hover {
+  background-color: var(--primary);
+  color: var(--white);
+}

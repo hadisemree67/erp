@@ -21,6 +21,7 @@
 
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
+import WebCategorySelector from './WebCategorySelector';
 
 const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
     // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -31,9 +32,15 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
     const [purchasePriceData, setPurchasePriceData] = useState({ actionType: 'percentage', direction: 'decrease', numValue: '' });
     const [categoryValue, setCategoryValue] = useState('');
     const [brandValue, setBrandValue] = useState('');
+    const [isActiveValue, setIsActiveValue] = useState('');
 
     const [categories, setCategories] = useState([]);
     const [brands, setBrands] = useState([]);
+    
+    // Web category states
+    const [selectedWebCategories, setSelectedWebCategories] = useState([]);
+    const [selectedWebSubcategories, setSelectedWebSubcategories] = useState([]);
+    const [selectedWebSubtitles, setSelectedWebSubtitles] = useState([]);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -83,14 +90,22 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
             });
         }
 
-        // Kategoriyi kontrol et
-        if (categoryValue) {
-            updates.push({ field: 'Category', type: 'string', value: categoryValue });
-        }
 
         // Markayı kontrol et
         if (brandValue) {
             updates.push({ field: 'Brand', type: 'string', value: brandValue });
+        }
+
+        // Durumu kontrol et
+        if (isActiveValue) {
+            updates.push({ field: 'is_active', type: 'string', value: isActiveValue === 'Aktif' ? 1 : 0 });
+        }
+
+        // Web kategorileri kontrol et
+        if (field === 'WebCategories') {
+            updates.push({ field: 'web_categories', type: 'json', value: selectedWebCategories });
+            updates.push({ field: 'web_subcategories', type: 'json', value: selectedWebSubcategories });
+            updates.push({ field: 'web_subtitles', type: 'json', value: selectedWebSubtitles });
         }
 
         if (updates.length === 0) {
@@ -152,8 +167,9 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
                             {[
                                 { id: 'SalePrice', label: 'Satış Fiyatı' },
                                 { id: 'PurchasePrice', label: 'Alış Fiyatı' },
-                                { id: 'Category', label: 'Kategori' },
-                                { id: 'Brand', label: 'Marka' }
+                                { id: 'Brand', label: 'Marka' },
+                                { id: 'is_active', label: 'Durum' },
+                                { id: 'WebCategories', label: 'Kategori' }
                             ].map(opt => (
                                 <button
                                     key={opt.id}
@@ -175,8 +191,9 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
                                     {opt.label}
                                     {((opt.id === 'SalePrice' && salePriceData.numValue) || 
                                       (opt.id === 'PurchasePrice' && purchasePriceData.numValue) || 
-                                      (opt.id === 'Category' && categoryValue) || 
-                                      (opt.id === 'Brand' && brandValue)) && (
+                                      (opt.id === 'Brand' && brandValue) ||
+                                      (opt.id === 'is_active' && isActiveValue) ||
+                                      (opt.id === 'WebCategories' && (selectedWebCategories.length > 0 || selectedWebSubcategories.length > 0 || selectedWebSubtitles.length > 0))) && (
                                         <span style={{ marginLeft: '6px', color: '#10b981', fontWeight: 'bold' }}>✓</span>
                                     )}
                                 </button>
@@ -223,23 +240,50 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
                                     placeholder={(field === 'SalePrice' ? salePriceData.actionType : purchasePriceData.actionType) === 'percentage' ? 'Örn: 20' : 'Örn: 50'}
                                     style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} 
                                 />
+                                </div>
+                            </>
+                        ) : field === 'WebCategories' ? (
+                            <div style={{ marginBottom: '24px' }}>
+                                <WebCategorySelector 
+                                    value={{
+                                        category_name: selectedWebCategories[0] || '',
+                                        subcategory_name: selectedWebSubcategories[0] || '',
+                                        subtitle_name: selectedWebSubtitles[0] || ''
+                                    }}
+                                    onChange={(selection) => {
+                                        setSelectedWebCategories(selection.category_name ? [selection.category_name] : []);
+                                        setSelectedWebSubcategories(selection.subcategory_name ? [selection.subcategory_name] : []);
+                                        setSelectedWebSubtitles(selection.subtitle_name ? [selection.subtitle_name] : []);
+                                    }}
+                                />
                             </div>
-                        </>
-                    ) : (
+                        ) : field === 'is_active' ? (
                         <div style={{ marginBottom: '24px' }}>
                             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
-                                Yeni {field === 'Category' ? 'Kategori' : 'Marka'} Seçin
+                                Yeni Durum Seçin
                             </label>
                             <select 
-                                value={field === 'Category' ? categoryValue : brandValue} 
-                                onChange={e => field === 'Category' ? setCategoryValue(e.target.value) : setBrandValue(e.target.value)} 
+                                value={isActiveValue} 
+                                onChange={e => setIsActiveValue(e.target.value)} 
                                 style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}
                             >
                                 <option value="">Seçiniz...</option>
-                                {field === 'Category' && categories.map(c => (
-                                    <option key={c.id} value={c.name}>{c.name}</option>
-                                ))}
-                                {field === 'Brand' && brands.map(b => (
+                                <option value="Aktif">Aktif (Satışa Açık)</option>
+                                <option value="Pasif">Pasif (Satışa Kapalı)</option>
+                            </select>
+                        </div>
+                    ) : (
+                        <div style={{ marginBottom: '24px' }}>
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                                Yeni Marka Seçin
+                            </label>
+                            <select 
+                                value={brandValue} 
+                                onChange={e => setBrandValue(e.target.value)} 
+                                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}
+                            >
+                                <option value="">Seçiniz...</option>
+                                {brands.map(b => (
                                     <option key={b.id} value={b.name}>{b.name}</option>
                                 ))}
                             </select>

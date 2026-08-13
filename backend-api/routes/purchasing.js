@@ -9,11 +9,12 @@ const router = express.Router();
 const db = require('../db');
 const nodemailer = require('nodemailer');
 const authMiddleware = require('../middleware/auth');
+const { checkRole, checkPermission } = require('../middleware/rbac');
 const crypto = require('crypto');
 const { logActivity } = require('../utils/logger');
 
 // GET /api/purchasing/requests - Tüm satın alma taleplerini listele
-router.get('/requests', authMiddleware, async (req, res) => {
+router.get('/requests', authMiddleware, checkPermission('view_procurement'), async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT pr.*, u.name as employee_name, s.SupplierName as supplier_name, s.Email as supplier_email
@@ -30,7 +31,7 @@ router.get('/requests', authMiddleware, async (req, res) => {
 });
 
 // POST /api/purchasing/requests - Yeni bir satın alma talebi oluştur
-router.post('/requests', authMiddleware, async (req, res) => {
+router.post('/requests', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
     const { employee_id, product_name, quantity, description, supplier_id } = req.body;
 
     if (!product_name || !quantity) {
@@ -52,7 +53,7 @@ router.post('/requests', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/purchasing/requests/:id/status - Talep durumunu güncelle
-router.put('/requests/:id/status', authMiddleware, async (req, res) => {
+router.put('/requests/:id/status', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { status } = req.body; // 'Bekliyor', 'Onaylandı', 'Reddedildi'
 
@@ -80,7 +81,7 @@ router.put('/requests/:id/status', authMiddleware, async (req, res) => {
 });
 
 // POST /api/purchasing/requests/:id/send-order - E-posta gönder ve satın alma siparişi oluştur
-router.post('/requests/:id/send-order', authMiddleware, async (req, res) => {
+router.post('/requests/:id/send-order', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { quantity, description, supplier_id, supplier_email, product_name } = req.body;
 
@@ -111,6 +112,18 @@ router.post('/requests/:id/send-order', authMiddleware, async (req, res) => {
             },
         });
 
+        // GÜVENLİK: HTML Injection / XSS önleme — Tüm kullanıcı girdileri escape ediliyor
+        const escapeHtml = (str) => String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+
+        const safeProductName = escapeHtml(product_name);
+        const safeQuantity = escapeHtml(quantity);
+        const safeDescription = description ? escapeHtml(description) : null;
+
         const mailHtml = `
             <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px;">
                 <h2 style="color: #0284c7; margin-top: 0;">Yeni Sipariş Talebi</h2>
@@ -123,12 +136,12 @@ router.post('/requests/:id/send-order', authMiddleware, async (req, res) => {
                         <th style="padding: 12px; text-align: left;">Sipariş Miktarı</th>
                     </tr>
                     <tr>
-                        <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>${product_name}</strong></td>
-                        <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>${quantity}</strong></td>
+                        <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>${safeProductName}</strong></td>
+                        <td style="padding: 12px; border-bottom: 1px solid #e2e8f0;"><strong>${safeQuantity}</strong></td>
                     </tr>
                 </table>
 
-                ${description ? `<p style="margin-top: 20px; padding: 15px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;"><strong>Ek Açıklama:</strong><br>${description}</p>` : ''}
+                ${safeDescription ? `<p style="margin-top: 20px; padding: 15px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;"><strong>Ek Açıklama:</strong><br>${safeDescription}</p>` : ''}
 
                 <div style="margin-top: 30px; padding: 20px; background-color: #f8fafc; border-radius: 8px; text-align: center;">
                     <h3 style="margin-top: 0; color: #0f172a;">Durum Bildirim Butonları</h3>
@@ -215,7 +228,7 @@ router.get('/orders/action', async (req, res) => {
 });
 
 // GET /api/purchasing/orders - Tüm satın alma siparişlerini listele
-router.get('/orders', authMiddleware, async (req, res) => {
+router.get('/orders', authMiddleware, checkPermission('view_procurement'), async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT po.*, s.SupplierName as supplier_name, s.Email as supplier_email, s.Phone as supplier_phone, s.Address as supplier_address, s.ContactPerson as supplier_contact, p.shelf_life_months as shelf_life_months, p.Id as product_id, p.PurchasePrice as product_price, p.unit_type as unit_type,
@@ -233,7 +246,7 @@ router.get('/orders', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/purchasing/orders/:id/status - Sipariş durumunu güncelle
-router.put('/orders/:id/status', authMiddleware, async (req, res) => {
+router.put('/orders/:id/status', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
@@ -261,7 +274,7 @@ router.put('/orders/:id/status', authMiddleware, async (req, res) => {
 });
 
 // POST /api/purchasing/orders/:id/receive - Depoya mal kabul işlemini gerçekleştir
-router.post('/orders/:id/receive', authMiddleware, async (req, res) => {
+router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { quantity, shelfAllocations, location_id, warehouse_id, shelf_code, batch_number, expiration_date, user_id } = req.body;
 
@@ -410,7 +423,7 @@ router.post('/orders/:id/receive', authMiddleware, async (req, res) => {
     } catch (err) {
         await db.query('ROLLBACK');
         console.error('Error receiving goods:', err);
-        res.status(500).json({ success: false, message: 'Mal kabul işlemi sırasında hata oluştu: ' + (err.sqlMessage || err.message || String(err)) });
+        res.status(500).json({ success: false, message: 'Mal kabul işlemi sırasında sunucu hatası oluştu.' });
     }
 });
 

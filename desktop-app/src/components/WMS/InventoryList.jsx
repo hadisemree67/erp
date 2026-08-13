@@ -23,6 +23,7 @@ import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect, Fragment } from 'react';
 import StockEntry from './StockEntry';
 import InventoryEntry from './InventoryEntry';
+import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -50,6 +51,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   const [fastDeductBarcode, setFastDeductBarcode] = useState('');
   const [fastDeductQty, setFastDeductQty] = useState('');
   const [fastDeductLoading, setFastDeductLoading] = useState(false);
+  const [fastDeductDescription, setFastDeductDescription] = useState('');
 
   // Edit State
   const [editingStock, setEditingStock] = useState(null);
@@ -59,6 +61,10 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   const [requestQty, setRequestQty] = useState('');
   const [warehouses, setWarehouses] = useState([]);
   const [allShelvesCapacity, setAllShelvesCapacity] = useState({});
+  
+  // Barkod Yazdırma State
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printBarcodeData, setPrintBarcodeData] = useState({ value: '', title: '' });
 
   // 3. Backend API İstekleri (Veri Çekme)
 
@@ -172,7 +178,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
             const res = await apiFetch('http://localhost:3000/api/wms/deduct-fefo', {
                 method: 'POST',
                 headers: { 'x-user-id': currentUser?.id, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ barcode: fastDeductBarcode, quantity: fastDeductQty })
+                body: JSON.stringify({ barcode: fastDeductBarcode, quantity: fastDeductQty, description: fastDeductDescription })
             });
             const data = await res.json();
             if (data.success) {
@@ -180,6 +186,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                 setIsFastDeductVisible(false);
                 setFastDeductBarcode('');
                 setFastDeductQty('');
+                setFastDeductDescription('');
                 fetchStockList();
             } else {
                 alert('Hata: ' + data.message);
@@ -240,9 +247,20 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
 
     const groupedItems = stockItems.filter(group => {
         const search = searchTerm.toLowerCase();
+        const searchInField = (field) => {
+            if (!field) return false;
+            if (typeof field === 'string') return field.toLowerCase().includes(search);
+            if (Array.isArray(field)) return field.some(i => i.toLowerCase().includes(search));
+            return JSON.stringify(field).toLowerCase().includes(search);
+        };
         const matchesSearch = (
             group.product_name?.toLowerCase().includes(search) ||
-            group.barcode?.toLowerCase().includes(search)
+            group.barcode?.toLowerCase().includes(search) ||
+            group.category?.toLowerCase().includes(search) ||
+            group.brand?.toLowerCase().includes(search) ||
+            searchInField(group.product?.web_categories) ||
+            searchInField(group.product?.web_subcategories) ||
+            searchInField(group.product?.web_subtitles)
         );
         const matchesWarehouse = selectedWarehouseFilter ? group.batches.some(b => b.warehouse_name === selectedWarehouseFilter) : true;
         return matchesSearch && matchesWarehouse;
@@ -344,7 +362,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
               border: 'none', fontWeight: '600', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(239, 68, 68, 0.3)'
             }}
           >
-            - Acil Çıkış
+            Stok Çıkışı
           </button>
           <button 
             onClick={() => setIsEntryVisible(true)}
@@ -534,10 +552,12 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
             ) : (
               groupedItems.map(group => {
                 let displayBarcode = group.barcode;
+                let barcodeList = [];
                 if (displayBarcode?.startsWith('[')) {
-                    try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch(e){}
+                    try { barcodeList = JSON.parse(displayBarcode); } catch(e){}
+                } else if (displayBarcode) {
+                    barcodeList = displayBarcode.split(',').map(b => b.trim());
                 }
-
                 let sktBadge = null;
                 const validBatches = group.batches.filter(b => b.expiration_date);
                 if (validBatches.length > 0) {
@@ -566,7 +586,34 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                     <tr key={group.groupKey} className="hover-row" onClick={() => setSelectedGroup(group)} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.15s', cursor: 'pointer', backgroundColor: 'white' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'white'}>
                         <td style={{ padding: '16px' }}>
                             <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px', marginBottom: '2px' }}>{group.product_name}</div>
-                            <div style={{ color: '#64748b', fontSize: '12px' }}>{displayBarcode || 'Barkod Yok'}</div>
+                            {barcodeList.length > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        {barcodeList.map((b, idx) => (
+                                            <div key={idx} style={{ color: '#64748b', fontSize: '12px' }}>{b}</div>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        title="Yazdır"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPrintBarcodeData({ value: barcodeList.filter(b => b), title: group.product_name });
+                                            setPrintModalOpen(true);
+                                        }}
+                                        style={{
+                                            padding: '4px', backgroundColor: 'transparent', border: 'none', color: '#64748b',
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px'
+                                        }}
+                                        onMouseOver={(e) => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.backgroundColor = '#e0f2fe'; }}
+                                        onMouseOut={(e) => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                    >
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                    </button>
+                                </div>
+                            ) : (
+                                <div style={{ color: '#64748b', fontSize: '12px' }}>Barkod Yok</div>
+                            )}
                         </td>
                         <td style={{ padding: '16px', color: '#475569', fontSize: '14px' }}>
                             {(() => {
@@ -584,13 +631,19 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                             })()}
                         </td>
                         <td style={{ padding: '16px', fontSize: '13px' }}>
-                            <span style={{ color: '#334155', fontWeight: '500' }}>
-                            {group.batches.length === 0 ? 'Depo Yok' : ([...new Set(group.batches.map(b => b.warehouse_name).filter(Boolean))].length > 1 ? 'Çoklu Depo' : (group.batches[0]?.warehouse_name || 'Ana Depo'))}
-                            </span>
-                            <span style={{ color: '#94a3b8', margin: '0 6px' }}>•</span>
-                            <span style={{ color: '#64748b' }}>
-                            Raf: {group.batches.length === 0 ? 'Atanmadı' : ([...new Set(group.batches.map(b => b.shelf_code).filter(Boolean))].length > 1 ? 'Çoklu Raf' : (group.batches[0]?.shelf_code || '-'))}
-                            </span>
+                            {group.total_quantity === 0 && !group.batches[0]?.shelf_code ? (
+                                <span style={{ color: '#ef4444', fontWeight: '600', backgroundColor: '#fee2e2', padding: '4px 8px', borderRadius: '4px' }}>Raf Atanmadı</span>
+                            ) : (
+                                <>
+                                    <span style={{ color: '#334155', fontWeight: '500' }}>
+                                    {group.batches.length === 0 ? 'Depo Yok' : ([...new Set(group.batches.map(b => b.warehouse_name).filter(Boolean))].length > 1 ? 'Çoklu Depo' : (group.batches[0]?.warehouse_name || 'Ana Depo'))}
+                                    </span>
+                                    <span style={{ color: '#94a3b8', margin: '0 6px' }}>•</span>
+                                    <span style={{ color: '#64748b' }}>
+                                    Raf: {group.batches.length === 0 ? 'Atanmadı' : ([...new Set(group.batches.map(b => b.shelf_code).filter(Boolean))].length > 1 ? 'Çoklu Raf' : (group.batches[0]?.shelf_code || '-'))}
+                                    </span>
+                                </>
+                            )}
                         </td>
                         <td style={{ padding: '16px', fontWeight: 'bold', color: '#0f172a', fontSize: '15px', textAlign: 'center' }}>
                             <div>
@@ -619,7 +672,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                                         <span style={{ fontSize: '13px', color: '#0369a1' }}>
                                             {formatDualStr(group.total_quantity, totalCap, group.product.unit_type)} <br/>
                                             <span style={{ fontSize: '11px' }}>
-                                                ({Math.ceil(group.total_quantity / group.product?.package_capacity)} {group.product?.package_name || 'Kap'} x {formatUnitStr(group.product?.package_capacity, group.product?.unit_type)})
+                                                ({parseFloat((group.total_quantity / group.product?.package_capacity).toFixed(2))} {group.product?.package_name || 'Kap'} x {formatUnitStr(group.product?.package_capacity, group.product?.unit_type)})
                                             </span>
                                         </span>
                                     ) : (
@@ -965,7 +1018,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                     <div style={{ backgroundColor: 'white', padding: '24px', borderRadius: '12px', width: '90%', maxWidth: '400px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
                         <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                            Acil Çıkış
+                            Stok Çıkışı
                         </h3>
                         <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px', marginTop: 0 }}>Okuttuğunuz barkoddan belirttiğiniz miktar, son kullanma tarihi en yakın raflardan otomatik düşülecektir.</p>
                         
@@ -978,11 +1031,11 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                                     value={fastDeductBarcode} 
                                     onChange={(e) => setFastDeductBarcode(e.target.value)} 
                                     placeholder="Barkod okutun..." 
-                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '2px solid #ef4444', outline: 'none', fontSize: '16px' }}
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '2px solid #ef4444', outline: 'none', fontSize: '16px', boxSizing: 'border-box' }}
                                 />
                             </div>
                             
-                            <div style={{ marginBottom: '24px' }}>
+                            <div style={{ marginBottom: '16px' }}>
                                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>Düşülecek Miktar</label>
                                 <input 
                                     type="number" 
@@ -990,8 +1043,19 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                                     value={fastDeductQty} 
                                     onChange={(e) => setFastDeductQty(e.target.value)} 
                                     placeholder="Örn: 25" 
-                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '16px' }}
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '16px', boxSizing: 'border-box' }}
                                 />
+                            </div>
+
+                            <div style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>Açıklama / Not</label>
+                                <textarea 
+                                    value={fastDeductDescription} 
+                                    onChange={(e) => setFastDeductDescription(e.target.value)} 
+                                    placeholder="Çıkış nedenini yazınız..." 
+                                    rows="2"
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '14px', boxSizing: 'border-box', resize: 'vertical' }}
+                                ></textarea>
                             </div>
 
                             <div style={{ display: 'flex', gap: '12px' }}>
@@ -1003,6 +1067,16 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Barkod Yazdırma Modalı */}
+            {printModalOpen && (
+                <BarcodePrintModal
+                    isOpen={printModalOpen}
+                    onClose={() => setPrintModalOpen(false)}
+                    barcodeValue={printBarcodeData.value}
+                    title={printBarcodeData.title}
+                />
             )}
     </div>
   );

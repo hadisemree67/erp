@@ -8,9 +8,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
 // GET: Genel Raporlar ve Depo Doluluk Oranları
-router.get('/summary', authMiddleware, async (req, res) => {
+router.get('/summary', authMiddleware, checkPermission('view_reports'), async (req, res) => {
     try {
         // 1. Depolar ve Raflar
         const [warehouses] = await db.query('SELECT * FROM warehouses ORDER BY name ASC');
@@ -156,9 +157,16 @@ router.get('/summary', authMiddleware, async (req, res) => {
 });
 
 // GET: En Çok Satılan Ürünler (Dinamik Periyot)
-router.get('/top-selling', authMiddleware, async (req, res) => {
+router.get('/top-selling', authMiddleware, checkPermission('view_reports'), async (req, res) => {
     try {
         const period = req.query.period || 'this_month';
+
+        // GÜVENLİK: period değeri whitelist ile doğrulanıyor
+        const ALLOWED_PERIODS = ['this_month', 'last_3_months', 'last_6_months', 'this_year', 'last_1_year', 'all'];
+        if (!ALLOWED_PERIODS.includes(period)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz periyot değeri.' });
+        }
+
         let dateCondition = "1=1";
 
         if (period === 'this_month') {

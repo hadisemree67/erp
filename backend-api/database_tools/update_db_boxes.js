@@ -1,27 +1,15 @@
 /*
- * SQL veritabanına `boxes` (Kutular) adlı yeni bir tablo oluşturur.
- * Kargo ve ambalaj kutularının tanımını tutar.
+ * SQL veritabanına `packaging_boxes` (Kutular) adlı yeni bir tablo oluşturur.
+ * Kargo ve ambalaj kutularının tanımını tutar. Ayrıca orders tablosuna gerekli kolonları ekler.
  */
 
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+const db = require('../db'); // Ortak ve güvenli db havuzunu kullanıyoruz (şifre/env kontrolleri burada yapılıyor)
 
 async function run() {
-  // env kontrolleri şifreyi direkt yazmıyoruz .env dosyasından çekiyoruz herhangi bir
-  // güvenlik açığı kalmaması için 
-  if (!process.env.DB_NAME) {
-    console.warn('UYARI: .env dosyası bulunamadı veya DB_NAME tanımlanmadı, varsayılanlar kullanılıyor.');
-  }
-
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'stokerp'
-  });
-
   try {
-    await connection.query(`
+    console.log('Veritabanı güncelleniyor: packaging_boxes tablosu ve orders güncellemeleri');
+
+    await db.query(`
       CREATE TABLE IF NOT EXISTS packaging_boxes (
         id INT AUTO_INCREMENT PRIMARY KEY,
         box_name VARCHAR(255) NOT NULL,
@@ -37,28 +25,32 @@ async function run() {
     `);
     console.log('packaging_boxes tablosu kontrol edildi / oluşturuldu.');
 
-    // 3.ALTER TABLE işlemleri için güvenli yardımcı fonksiyon
-    async function addColumnSafe(tableName, columnDef) {
-      try {
-        await connection.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnDef}`);
-      } catch (e) {
-        // 1060: Duplicate column name (Kolon zaten varsa hatayı yut, farklı hataysa bas)
-        if (e.errno !== 1060) {
-          console.warn(`Kolon eklenirken uyarı (${columnDef}):`, e.message);
-        }
-      }
+    // orders tablosuna eklenecek kolonların güvenli ve tek seferde (toplu) eklenmesi
+    const [cols] = await db.query('SHOW COLUMNS FROM orders');
+    const existing = cols.map(c => c.Field);
+
+    const toAdd = [
+        ['cargo_barcode', 'VARCHAR(255)'],
+        ['total_weight', 'DECIMAL(10,2)'],
+        ['packaging_info', 'JSON']
+    ];
+
+    const colsToAdd = toAdd.filter(([name]) => !existing.includes(name));
+
+    if (colsToAdd.length > 0) {
+        const addClauses = colsToAdd.map(([name, type]) => `ADD COLUMN ${name} ${type}`).join(', ');
+        await db.query(`ALTER TABLE orders ${addClauses}`);
+        colsToAdd.forEach(([name]) => console.log('Eklendi:', name));
+        console.log('✅ orders tablosu sütunları güncellendi.');
+    } else {
+        console.log('✅ orders tablosu sütunları zaten güncel (Eklenecek kolon yok).');
     }
-
-    await addColumnSafe('orders', 'cargo_barcode VARCHAR(255)');
-    await addColumnSafe('orders', 'total_weight DECIMAL(10,2)');
-    await addColumnSafe('orders', 'packaging_info JSON');
-
-    console.log('✅ orders tablosu sütunları güncellendi.');
 
   } catch (err) {
     console.error('❌ Veritabanı Migration Hatası:', err);
+    process.exitCode = 1;
   } finally {
-    await connection.end();
+    await db.end();
   }
 }
 

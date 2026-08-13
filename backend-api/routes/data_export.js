@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 const { toPrismaStatus, toFrontendStatus } = require('../utils/enumMapper');
 
 // GET /api/data-export
@@ -10,9 +9,12 @@ const { toPrismaStatus, toFrontendStatus } = require('../utils/enumMapper');
 // - filterKey: e.g. 'status', 'warehouse'
 // - filterValue: e.g. 'Teslim Edildi', 'Depo 1'
 
-router.get('/', async (req, res) => {
+const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
+
+router.get('/', authMiddleware, checkPermission('view_reports'), async (req, res) => {
     try {
-        const { module, status, warehouse, category, brand, department, city, gender, ageGroup } = req.query;
+        const { module, status, warehouse, category, brand, department, city, gender, ageGroup, filterKey, filterValue } = req.query;
         let data = [];
 
         // Pre-fetch warehouses for potential filtering in multiple modules
@@ -115,7 +117,7 @@ router.get('/', async (req, res) => {
         else if (module === 'stock') {
             const balances = await prisma.wms_stock_balances.findMany({
                 include: {
-                    products: true
+                    products: { include: { product_barcodes: true } }
                 }
             });
 
@@ -134,7 +136,7 @@ router.get('/', async (req, res) => {
             data = filteredBalances.map(b => ({
                 'Ürün Kodu': b.product_id,
                 'Ürün Adı': b.products?.ProductName || '-',
-                'Barkod': b.products?.Barcode || '-',
+                'Barkod': b.products?.product_barcodes ? JSON.stringify(b.products.product_barcodes.map(pb => pb.barcode)) : '-',
                 'Kategori': b.products?.Category || '-',
                 'Depo': whMap[b.warehouse_id] || '-',
                 'Raf': b.shelf_code || '-',
@@ -161,7 +163,8 @@ router.get('/', async (req, res) => {
             }
 
             const products = await prisma.products.findMany({
-                where: whereClause
+                where: whereClause,
+                include: { product_barcodes: true }
             });
 
             data = products.map(p => ({
@@ -169,7 +172,7 @@ router.get('/', async (req, res) => {
                 'Ürün Adı': p.ProductName,
                 'Marka': p.Brand,
                 'Kategori': p.Category,
-                'Barkod': p.Barcode || '-',
+                'Barkod': p.product_barcodes ? JSON.stringify(p.product_barcodes.map(pb => pb.barcode)) : '-',
                 'Alış Fiyatı': p.PurchasePrice ? `${parseFloat(p.PurchasePrice).toFixed(2)} TL` : '-',
                 'Satış Fiyatı': p.SalePrice ? `${parseFloat(p.SalePrice).toFixed(2)} TL` : '-',
                 'Stok Miktarı': p.StockQuantity || 0,
@@ -196,14 +199,15 @@ router.get('/', async (req, res) => {
             }
 
             const products = await prisma.products.findMany({
-                where: whereClause
+                where: whereClause,
+                include: { product_barcodes: true }
             });
 
             data = products.map(p => ({
                 'Hammadde ID': p.Id,
                 'Hammadde Adı': p.ProductName,
                 'Kategori': p.Category,
-                'Barkod': p.Barcode || '-',
+                'Barkod': p.product_barcodes ? JSON.stringify(p.product_barcodes.map(pb => pb.barcode)) : '-',
                 'Tedarik Süresi (Gün)': p.lead_time_days || 0,
                 'Maliyet': p.PurchasePrice ? `${parseFloat(p.PurchasePrice).toFixed(2)} TL` : '-',
                 'Mevcut Stok': p.StockQuantity || 0,

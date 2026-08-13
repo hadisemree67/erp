@@ -110,6 +110,8 @@ function App() {
 
   const fetchPendingRequests = async () => {
     if (!isLoggedIn) return;
+    const canSee = currentUser?.role === 'admin' || currentUser?.role === 'Üretim' || (currentUser?.permissions || []).includes('view_production');
+    if (!canSee) return;
     try {
       const res = await apiFetch('http://localhost:3000/api/production/requests');
       const data = await res.json();
@@ -183,7 +185,19 @@ function App() {
         <Sidebar 
           currentUser={currentUser}
           userRole={currentUser?.role}
-          onLogout={() => { setIsLoggedIn(false); setCurrentUser(null); }} 
+          onLogout={async () => { 
+            try {
+              // Sunucu tarafında token'ı kara listeye al (Blacklist)
+              await apiFetch('http://localhost:3000/api/logout', { method: 'POST' });
+            } catch (e) {
+              console.error("Logout API hatası:", e);
+            }
+            // İstemci tarafında temizle
+            localStorage.removeItem('token');
+            setIsLoggedIn(false); 
+            setCurrentUser(null); 
+            window.location.reload();
+          }}
           onNavigate={(view) => {
             setCurrentView(view);
             if (view === 'anasayfa') fetchStats();

@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 
 // Yardımcı fonksiyonlar
@@ -17,10 +18,16 @@ const safeNum = (val, def = 0) => {
 };
 
 // GET /api/finance/accounts?tab=GİDER (veya GELİR)
-router.get('/accounts', authMiddleware, async (req, res) => {
+router.get('/accounts', authMiddleware, checkPermission('view_finance'), async (req, res) => {
     try {
         const tab = req.query.tab || 'GİDER';
         const period = req.query.period || 'this_month';
+
+        // GÜVENLİK: period değeri whitelist ile doğrulanıyor, bilinmeyen değerler reddediliyor
+        const ALLOWED_PERIODS = ['this_month', 'last_3_months', 'last_6_months', 'this_year'];
+        if (period !== 'all' && !ALLOWED_PERIODS.includes(period)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz periyot değeri.' });
+        }
 
         let dateConditionTx = "1=1";
         let dateConditionPO = "1=1";
@@ -274,7 +281,7 @@ router.get('/accounts', authMiddleware, async (req, res) => {
 });
 
 // POST /api/finance/transactions - Yeni Manüel Gelir / Gider Ekle
-router.post('/transactions', authMiddleware, async (req, res) => {
+router.post('/transactions', authMiddleware, checkPermission('finance_add_transaction'), async (req, res) => {
     try {
         const { type, category, amount, description, transaction_date } = req.body;
         
@@ -305,7 +312,7 @@ router.post('/transactions', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/finance/transactions/:id - Manüel İşlemi Sil
-router.delete('/transactions/:id', authMiddleware, async (req, res) => {
+router.delete('/transactions/:id', authMiddleware, checkPermission('finance_add_transaction'), async (req, res) => {
     try {
         const { id } = req.params;
         const [rows] = await db.query("SELECT * FROM finance_transactions WHERE id = ?", [id]);

@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
 const requireAdmin = (req, res, next) => {
     if (req.user && req.user.role === 'admin') return next();
@@ -16,7 +17,7 @@ const requireAdmin = (req, res, next) => {
 
 
 // GET /api/settings
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('staff_manage'), async (req, res) => {
     try {
         const [rows] = await db.query('SELECT setting_key, setting_value, description FROM system_settings');
         const settings = {};
@@ -26,12 +27,12 @@ router.get('/', authMiddleware, async (req, res) => {
         res.json({ success: true, data: settings, raw: rows });
     } catch (error) {
         console.error('Ayarlar alınırken hata:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası', error: error.message });
+        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
     }
 });
 
 // POST /api/settings
-router.post('/', authMiddleware, requireAdmin, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('staff_manage'), requireAdmin, async (req, res) => {
     try {
         const { updates } = req.body; // updates = { system_paused: true }
         if (!updates || typeof updates !== 'object') {

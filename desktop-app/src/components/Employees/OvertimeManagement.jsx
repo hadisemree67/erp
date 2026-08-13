@@ -161,6 +161,7 @@ const OvertimeManagement = ({ currentUser }) => {
                                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sabit Maaş</th>
                                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Bu Ayki Mesai Saati</th>
                                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Mesai Ücreti</th>
+                                <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Rapor Kesintisi</th>
                                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Toplam Ödenecek Maaş</th>
                             </tr>
                         </thead>
@@ -179,6 +180,10 @@ const OvertimeManagement = ({ currentUser }) => {
                                         </span>
                                     </td>
                                     <td style={{ padding: '16px 24px', textAlign: 'right', color: '#10b981', fontWeight: '600', fontSize: '14px' }}>+{formatCurrency(emp.total_overtime_pay)}</td>
+                                    <td style={{ padding: '16px 24px', textAlign: 'right', color: '#ef4444', fontWeight: '600', fontSize: '14px' }}>
+                                        {emp.report_deduction > 0 ? `-${formatCurrency(emp.report_deduction)}` : '-'}
+                                        {emp.report_leave_days > 0 && <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 'normal', marginTop: '2px' }}>({emp.report_leave_days} Gün Rapor)</div>}
+                                    </td>
                                     <td style={{ padding: '16px 24px', textAlign: 'right', fontSize: '15px', fontWeight: '700', color: '#0369a1' }}>{formatCurrency(emp.total_salary)}</td>
                                 </tr>
                             ))}

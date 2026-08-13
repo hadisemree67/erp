@@ -2,8 +2,9 @@
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM shippers ORDER BY CompanyName ASC');
         res.json({ success: true, data: rows });

@@ -50,7 +50,7 @@ export default function PendingOrdersScreen({ navigation, route }) {
 
         const intervalId = setInterval(() => {
             fetchPendingOrders();
-        }, 60000);
+        }, 10000);
         return () => clearInterval(intervalId);
     }, [route.params?.autoStartOrderId]);
 

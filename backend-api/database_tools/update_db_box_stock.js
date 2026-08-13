@@ -11,7 +11,7 @@ async function updateDb() {
         // 1. packaging_boxes tablosuna StockQuantity sütununu ekle
         console.log('packaging_boxes tablosuna StockQuantity sütunu ekleniyor...');
         try {
-            await db.query(`ALTER TABLE packaging_boxes ADD COLUMN StockQuantity INT DEFAULT 0;`);
+            await db.query(`ALTER TABLE packaging_boxes ADD COLUMN StockQuantity INT DEFAULT 0 CHECK (StockQuantity >= 0);`);
             console.log('StockQuantity başarıyla eklendi.');
         } catch (e) {
             if (e.code === 'ER_DUP_FIELDNAME') {
@@ -27,7 +27,7 @@ async function updateDb() {
             CREATE TABLE IF NOT EXISTS box_stock_entries (
                 Id INT AUTO_INCREMENT PRIMARY KEY,
                 BoxId INT NOT NULL,
-                Quantity INT NOT NULL,
+                Quantity INT NOT NULL CHECK (Quantity >= 0),
                 SupplierName VARCHAR(255) NULL,
                 Price DECIMAL(10,2) NULL,
                 ContractNo VARCHAR(100) NULL,
@@ -38,10 +38,11 @@ async function updateDb() {
         console.log('box_stock_entries oluşturuldu.');
 
         console.log('Veritabanı güncellemesi tamamlandı!');
-        process.exit(0);
     } catch (err) {
         console.error('Hata:', err);
-        process.exit(1);
+        process.exitCode = 1;
+    } finally {
+        await db.end();
     }
 }
 

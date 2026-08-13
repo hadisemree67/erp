@@ -24,10 +24,11 @@ async function updatePermissions() {
         }
 
         console.log('Yetkiler başarıyla güncellendi.');
-        process.exit(0);
     } catch (error) {
         console.error('Yetkiler güncellenirken hata oluştu:', error);
-        process.exit(1);
+        process.exitCode = 1;
+    } finally {
+        await db.end();
     }
 }
 

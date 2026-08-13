@@ -9,9 +9,10 @@ const router = express.Router();
 const db = require('../db');
 const { logActivity } = require('../utils/logger');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
 // Tüm müşterileri listele
-router.get('/', authMiddleware, async (req, res, next) => {
+router.get('/', authMiddleware, checkPermission('view_crm'), async (req, res, next) => {
     try {
         const { search, page, limit } = req.query;
         let query = 'SELECT * FROM customers';
@@ -54,8 +55,8 @@ router.get('/', authMiddleware, async (req, res, next) => {
 });
 
 // Yeni müşteri ekle
-router.post('/', authMiddleware, async (req, res, next) => {
-    const { CustomerName, Phone, Email, Address, City, Gender, Age } = req.body;
+router.post('/', authMiddleware, checkPermission('crm_customer_add'), async (req, res, next) => {
+    const { CustomerName, Phone, Email, Address, City, Gender, BirthDate } = req.body;
 
     if (!CustomerName || !CustomerName.trim()) {
         return res.status(400).json({ success: false, message: 'Müşteri adı / ünvanı zorunludur.' });
@@ -67,19 +68,15 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
     try {
         // SQL Injection'a karşı tüm değişkenler '?' parametresi ile güvenli şekilde gönderilir
-        // City (Şehir), Gender (Cinsiyet) ve Age (Yaş) alanları demografik analizler (Örn: DataExport) için eklenmiştir.
-        // Güvenlik: Age (Yaş) alanına sayı yerine metin girilirse sistemin çökmemesi için isNaN kontrolü yapılıyor.
-        let safeAge = null;
-        if (Age !== undefined && Age !== null && Age !== '') {
-            safeAge = parseInt(Age);
-            if (isNaN(safeAge)) {
-                return res.status(400).json({ success: false, message: 'Yaş alanı sadece rakamlardan oluşmalıdır (Metin girilemez).' });
-            }
+        // City (Şehir), Gender (Cinsiyet) ve BirthDate (Doğum Tarihi) alanları demografik analizler (Örn: DataExport) için eklenmiştir.
+        let safeBirthDate = null;
+        if (BirthDate !== undefined && BirthDate !== null && BirthDate !== '') {
+            safeBirthDate = BirthDate.trim();
         }
 
         const [result] = await db.query(
-            'INSERT INTO customers (CustomerName, Phone, Email, Address, City, Gender, Age) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [CustomerName.trim(), Phone ? Phone.trim() : null, Email ? Email.trim() : null, Address ? Address.trim() : null, City ? City.trim() : null, Gender ? Gender.trim() : null, safeAge]
+            'INSERT INTO customers (CustomerName, Phone, Email, Address, City, Gender, BirthDate) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [CustomerName.trim(), Phone ? Phone.trim() : null, Email ? Email.trim() : null, Address ? Address.trim() : null, City ? City.trim() : null, Gender ? Gender.trim() : null, safeBirthDate]
         );
 
         await logActivity(
@@ -94,7 +91,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
         res.status(201).json({
             success: true,
             message: 'Müşteri başarıyla eklendi.',
-            data: { Id: result.insertId, CustomerName, Phone, Email, Address, City, Gender, Age }
+            data: { Id: result.insertId, CustomerName, Phone, Email, Address, City, Gender, BirthDate }
         });
     } catch (error) {
         next(error);
@@ -102,9 +99,9 @@ router.post('/', authMiddleware, async (req, res, next) => {
 });
 
 // Müşteri bilgisini güncelle
-router.put('/:id', authMiddleware, async (req, res, next) => {
+router.put('/:id', authMiddleware, checkPermission('crm_customer_add'), async (req, res, next) => {
     const { id } = req.params;
-    const { CustomerName, Phone, Email, Address, City, Gender, Age } = req.body;
+    const { CustomerName, Phone, Email, Address, City, Gender, BirthDate } = req.body;
 
     if (!CustomerName || !CustomerName.trim()) {
         return res.status(400).json({ success: false, message: 'Müşteri adı / ünvanı zorunludur.' });
@@ -120,18 +117,14 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
             return res.status(404).json({ success: false, message: 'Müşteri bulunamadı.' });
         }
 
-        // Güvenlik: Age (Yaş) alanına sayı yerine metin girilirse sistemin çökmemesi için isNaN kontrolü yapılıyor.
-        let safeAge = null;
-        if (Age !== undefined && Age !== null && Age !== '') {
-            safeAge = parseInt(Age);
-            if (isNaN(safeAge)) {
-                return res.status(400).json({ success: false, message: 'Yaş alanı sadece rakamlardan oluşmalıdır (Metin girilemez).' });
-            }
+        let safeBirthDate = null;
+        if (BirthDate !== undefined && BirthDate !== null && BirthDate !== '') {
+            safeBirthDate = BirthDate.trim();
         }
 
         await db.query(
-            'UPDATE customers SET CustomerName = ?, Phone = ?, Email = ?, Address = ?, City = ?, Gender = ?, Age = ? WHERE Id = ?',
-            [CustomerName.trim(), Phone ? Phone.trim() : null, Email ? Email.trim() : null, Address ? Address.trim() : null, City ? City.trim() : null, Gender ? Gender.trim() : null, safeAge, id]
+            'UPDATE customers SET CustomerName = ?, Phone = ?, Email = ?, Address = ?, City = ?, Gender = ?, BirthDate = ? WHERE Id = ?',
+            [CustomerName.trim(), Phone ? Phone.trim() : null, Email ? Email.trim() : null, Address ? Address.trim() : null, City ? City.trim() : null, Gender ? Gender.trim() : null, safeBirthDate, id]
         );
 
         await logActivity(
@@ -150,7 +143,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
 });
 
 // Müşteri sil
-router.delete('/:id', authMiddleware, async (req, res, next) => {
+router.delete('/:id', authMiddleware, checkPermission('crm_customer_add'), async (req, res, next) => {
     const { id } = req.params;
 
     try {

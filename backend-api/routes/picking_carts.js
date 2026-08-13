@@ -1,31 +1,52 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 const authMiddleware = require('../middleware/auth');
+const { checkRole, checkPermission } = require('../middleware/rbac');
+const { logActivity } = require('../utils/logger');
 
 // GET /api/picking_carts - List all carts
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     try {
         const carts = await prisma.picking_carts.findMany({
             include: {
                 warehouse: { select: { name: true } },
-                sections: true
+                sections: true,
+                orders: {
+                    where: { OrderStatus: { in: ['Toplamada', 'Haz_rlan_yor', 'Haz_r', 'Paketleniyor'] } },
+                    select: { CartSectionIds: true }
+                }
             },
             orderBy: { created_at: 'desc' }
         });
 
         // Format for frontend
-        const formattedCarts = carts.map(cart => ({
-            id: cart.id,
-            name: cart.name,
-            warehouse_id: cart.warehouse_id,
-            warehouse_name: cart.warehouse ? cart.warehouse.name : 'Bilinmeyen Depo',
-            section_count: cart.sections.length,
-            sections: cart.sections, // Return sections
-            is_active: cart.is_active,
-            barcode: cart.barcode
-        }));
+        const formattedCarts = carts.map(cart => {
+            const activeSectionIds = new Set();
+            if (cart.orders) {
+                cart.orders.forEach(order => {
+                    if (order.CartSectionIds && Array.isArray(order.CartSectionIds)) {
+                        order.CartSectionIds.forEach(id => activeSectionIds.add(id));
+                    }
+                });
+            }
+
+            const sectionsWithStatus = cart.sections.map(sec => ({
+                ...sec,
+                is_full: activeSectionIds.has(sec.id)
+            }));
+
+            return {
+                id: cart.id,
+                name: cart.name,
+                warehouse_id: cart.warehouse_id,
+                warehouse_name: cart.warehouse ? cart.warehouse.name : 'Bilinmeyen Depo',
+                section_count: cart.sections.length,
+                sections: sectionsWithStatus,
+                is_active: cart.is_active,
+                barcode: cart.barcode
+            };
+        });
 
         res.json({ success: true, data: formattedCarts });
     } catch (error) {
@@ -35,7 +56,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST /api/picking_carts - Create new cart and its sections
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('wms_transfer'),  checkRole(['Depo']), async (req, res) => {
     const { name, warehouse_id, sections, barcode } = req.body;
 
     if (!name || !warehouse_id || !sections || !Array.isArray(sections) || sections.length === 0) {
@@ -78,7 +99,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/picking_carts/:id - Update cart details and sections
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('wms_transfer'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { name, warehouse_id, sections, barcode } = req.body; // sections: [{id?: number, section_name: string, barcode?: string}]
 
@@ -149,7 +170,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/picking_carts/:id/toggle-active - Toggle active status
-router.put('/:id/toggle-active', authMiddleware, async (req, res) => {
+router.put('/:id/toggle-active', authMiddleware, checkPermission('wms_transfer'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { is_active } = req.body;
 
@@ -166,7 +187,7 @@ router.put('/:id/toggle-active', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/picking_carts/:id - Delete a cart
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('wms_transfer'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     
     try {

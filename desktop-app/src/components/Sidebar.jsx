@@ -32,6 +32,10 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
   // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
   useEffect(() => {
+    // Sadece yetkili kullanıcılar için istek at
+    const canSee = userRole === 'admin' || userRole === 'Üretim' || (currentUser?.permissions || []).includes('view_production');
+    if (!canSee) return;
+
     // 3. Backend API İstekleri (Veri Çekme)
     const fetchPendingCount = async () => {
       try {
@@ -45,7 +49,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
     fetchPendingCount();
     const interval = setInterval(fetchPendingCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [userRole, currentUser]);
   const isResizing = useRef(false);
 
   const toggleDropdown = (menuName) => {
@@ -96,23 +100,23 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
 
   const hasPerm = (key) => userRole === 'admin' || (currentUser?.permissions || []).includes(key);
 
-  const canSeeProducts = hasPerm('view_products');
-  const canSeeHR = hasPerm('view_employees');
-  const canSeeOffboarding = hasPerm('view_offboarding');
+  const canSeeProducts = hasPerm('view_products') || ['Depo', 'Üretim'].includes(userRole);
+  const canSeeHR = hasPerm('view_employees') || ['hr'].includes(userRole);
+  const canSeeOffboarding = hasPerm('view_offboarding') || ['hr'].includes(userRole);
   const canSeeStaff = hasPerm('view_staff');
   const canSeeActivity = hasPerm('view_activity_log');
-  const canSeeCRM = hasPerm('view_crm');
-  const canSeeFinance = hasPerm('view_finance');
-  const canSeeWMS = hasPerm('view_wms');
-  const canSeeProcurement = hasPerm('view_procurement');
-  const canSeeOrders = hasPerm('view_orders');
-  const canSeeProduction = hasPerm('view_production');
-  const canSeeCampaigns = hasPerm('view_campaigns');
+  const canSeeCRM = hasPerm('view_crm') || ['Satış'].includes(userRole);
+  const canSeeFinance = hasPerm('view_finance') || ['finance'].includes(userRole);
+  const canSeeWMS = hasPerm('view_wms') || ['Depo'].includes(userRole);
+  const canSeeProcurement = hasPerm('view_procurement') || ['Depo', 'Satınalma'].includes(userRole);
+  const canSeeOrders = hasPerm('view_orders') || ['Depo', 'Satış'].includes(userRole);
+  const canSeeProduction = hasPerm('view_production') || ['Üretim'].includes(userRole);
+  const canSeeCampaigns = hasPerm('view_campaigns') || ['Satış'].includes(userRole);
   const canSeeReports = hasPerm('view_reports');
-  const canManageBoxes = hasPerm('box_manage');
-  const canManageStockEntry = hasPerm('stock_entry');
-  const canViewInventory = hasPerm('inventory_view');
-  const canManageSuppliers = hasPerm('supplier_manage');
+  const canManageBoxes = hasPerm('box_manage') || ['Depo'].includes(userRole);
+  const canManageStockEntry = hasPerm('stock_entry') || ['Depo'].includes(userRole);
+  const canViewInventory = hasPerm('inventory_view') || ['Depo', 'Üretim'].includes(userRole);
+  const canManageSuppliers = hasPerm('supplier_manage') || ['Satınalma'].includes(userRole);
 
   const roleNameMap = {
     admin: 'Sistem Yöneticisi',
@@ -121,7 +125,15 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
     legal: 'Hukuk Yetkilisi',
     finance: 'Finans Yetkilisi',
     idari: 'İdari İşler',
-    manager: 'Alt Yönetici'
+    manager: 'Alt Yönetici',
+    Depo: 'Depo ve Lojistik',
+    Üretim: 'Üretim',
+    Satış: 'Satış ve Müşteri',
+    Satınalma: 'Satınalma',
+    Kargo: 'Kargo ve Sevkiyat',
+    Paketleme: 'Paketleme',
+    Muhasebe: 'Muhasebe',
+    bilgi_islem: 'Bilgi İşlem'
   };
 
   // 5. Arayüz (UI) Çizimi ve Render Edilmesi

@@ -32,10 +32,11 @@ async function updateOrdersTable() {
         }
 
         console.log('İşlem başarıyla tamamlandı!');
-        process.exit(0);
     } catch (err) {
         console.error('Sistem Hatası:', err);
-        process.exit(1);
+        process.exitCode = 1;
+    } finally {
+        await db.end();
     }
 }
 

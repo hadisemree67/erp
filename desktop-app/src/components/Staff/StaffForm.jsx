@@ -185,6 +185,14 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
                             <option value="finance">Finans Yetkilisi (Sadece Finans Çıkış Onayı)</option>
                             <option value="idari">İdari İşler Sorumlusu (Sadece İdari Onay)</option>
                             <option value="manager">Alt Yönetici (Sadece Görüntüleme)</option>
+                            <option value="Depo">Depo ve Lojistik Görevlisi</option>
+                            <option value="Üretim">Üretim Operatörü</option>
+                            <option value="Satış">Satış ve Müşteri Danışmanı</option>
+                            <option value="Satınalma">Satınalma Uzmanı</option>
+                            <option value="Kargo">Kargo ve Sevkiyat Sorumlusu</option>
+                            <option value="Paketleme">Sipariş Paketleme Görevlisi</option>
+                            <option value="Muhasebe">Muhasebe Yetkilisi</option>
+                            <option value="bilgi_islem">Bilgi İşlem ve BT Destek</option>
                         </select>
                     </div>
 

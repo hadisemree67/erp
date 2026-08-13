@@ -8,10 +8,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 
 // Tüm tedarikçileri getir
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('supplier_manage'), async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM suppliers ORDER BY SupplierName ASC');
         res.json({ success: true, data: rows });
@@ -22,7 +23,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // Yeni tedarikçi ekle
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('supplier_manage'), async (req, res) => {
     const { SupplierName, ContactPerson, Phone, Email, Address, supplier_type } = req.body;
 
     if (!SupplierName) {
@@ -43,7 +44,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // Tedarikçi güncelle
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('supplier_manage'), async (req, res) => {
     const { id } = req.params;
     const { SupplierName, ContactPerson, Phone, Email, Address, supplier_type } = req.body;
 
@@ -70,7 +71,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // Tedarikçi sil
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('supplier_manage'), async (req, res) => {
     const { id } = req.params;
 
     try {

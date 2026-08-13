@@ -8,10 +8,11 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkRole, checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 
 // GET: Tüm depoları ve onlara bağlı rafları getir
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('wms_location'), async (req, res) => {
     try {
         const [warehouses] = await db.query('SELECT * FROM warehouses ORDER BY created_at DESC');
         const [shelves] = await db.query('SELECT * FROM warehouse_shelves');
@@ -34,7 +35,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // GET: Raf kapasitelerini hesapla
-router.get('/shelf-capacities', authMiddleware, async (req, res) => {
+router.get('/shelf-capacities', authMiddleware, checkPermission('wms_location'), async (req, res) => {
     const { productId } = req.query;
     try {
         if (!productId) {
@@ -112,7 +113,7 @@ router.get('/shelf-capacities', authMiddleware, async (req, res) => {
 });
 
 // POST: Yeni depo ekle
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('wms_location'),  checkRole(['Depo']), async (req, res) => {
     const { name, location, address, shelves, max_capacity, warehouse_type } = req.body;
 
     if (!name) {
@@ -169,7 +170,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // PUT: Depo güncelle
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('wms_location'),  checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { name, location, address, shelves, max_capacity, warehouse_type } = req.body;
 
@@ -233,15 +234,39 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // DELETE: Depo sil
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkRole(['admin']), async (req, res) => {
     const { id } = req.params;
+    
+    let connection;
     try {
-        // ON DELETE CASCADE olduğu için warehouse_shelves otomatik silinecek
-        const [result] = await db.query('DELETE FROM warehouses WHERE id = ?', [id]);
-        if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Depo bulunamadı.' });
-        await logActivity(req.user?.id, 'DELETE', 'warehouses', id, 'Depo silindi.');
-        res.json({ success: true, message: 'Depo başarıyla silindi.' });
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+
+        // 1. Depoya ait stokları tamamen sil
+        await connection.query('DELETE FROM wms_stock_balances WHERE warehouse_id = ?', [id]);
+        
+        // 2. Depoya ait rafları sil
+        await connection.query('DELETE FROM warehouse_shelves WHERE warehouse_id = ?', [id]);
+
+        // 3. Depoyu sil
+        const [result] = await connection.query('DELETE FROM warehouses WHERE id = ?', [id]);
+        
+        if (result.affectedRows === 0) {
+            await connection.rollback();
+            connection.release();
+            return res.status(404).json({ success: false, message: 'Depo bulunamadı.' });
+        }
+
+        await connection.commit();
+        connection.release();
+
+        await logActivity(req.user?.id, 'DELETE', 'warehouses', id, 'Depo, içindeki raflar ve tüm stoklarla birlikte sistemden tamamen silindi.');
+        res.json({ success: true, message: 'Depo ve içindeki tüm veriler başarıyla silindi.' });
     } catch (error) {
+        if (connection) {
+            await connection.rollback();
+            connection.release();
+        }
         console.error('Depo silinirken hata:', error);
         res.status(500).json({ success: false, message: 'Sunucu hatası.' });
     }

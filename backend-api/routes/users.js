@@ -11,16 +11,11 @@ const bcrypt = require('bcrypt');
 const authMiddleware = require('../middleware/auth');
 const { logActivity } = require('../utils/logger');
 
-const requireAdminOrManager = (req, res, next) => {
-    if (req.user && (req.user.role === 'admin' || req.user.permissions?.includes('staff_manage'))) {
-        return next();
-    }
-    return res.status(403).json({ success: false, message: 'GÜVENLİK İHLALİ: Bu işlem için Yönetici yetkisi gereklidir.' });
-};
+const { checkRole, checkPermission } = require('../middleware/rbac');
 
 
 // GET: Tüm yetkileri (permissions) getir
-router.get('/permissions', authMiddleware, async (req, res) => {
+router.get('/permissions', authMiddleware, checkPermission('staff_manage'), async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM permissions');
         res.json(rows);
@@ -31,9 +26,9 @@ router.get('/permissions', authMiddleware, async (req, res) => {
 });
 
 // GET: Tüm personelleri getir (şifreler hariç) ve atanmış yetkilerini al
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('staff_manage'), async (req, res) => {
     try {
-        const [users] = await db.query('SELECT id, username, name, email, role, created_at FROM users');
+        const [users] = await db.query('SELECT id, username, name, email, role, is_active, created_at FROM users');
 
         // Her kullanıcı için yetkilerini çek (daha optimize bir JOIN de yazılabilir ama basitlik için loop)
         for (let user of users) {
@@ -54,11 +49,25 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // POST: Yeni personel ekle
-router.post('/', authMiddleware, requireAdminOrManager, async (req, res) => {
+router.post('/', authMiddleware, checkRole(['admin']), async (req, res) => {
     const { username, name, email, password, role, permissions } = req.body;
 
     if (!username || !name || !email || !password) {
         return res.status(400).json({ success: false, message: 'Gerekli alanları doldurun.' });
+    }
+
+    // GÜVENLİK: Şifre politikası kontrolü
+    if (password.length < 8) {
+        return res.status(400).json({ success: false, message: 'Şifre en az 8 karakter olmalıdır.' });
+    }
+    if (!/[A-Z]/.test(password)) {
+        return res.status(400).json({ success: false, message: 'Şifre en az bir büyük harf içermelidir.' });
+    }
+    if (!/[a-z]/.test(password)) {
+        return res.status(400).json({ success: false, message: 'Şifre en az bir küçük harf içermelidir.' });
+    }
+    if (!/[0-9]/.test(password)) {
+        return res.status(400).json({ success: false, message: 'Şifre en az bir rakam içermelidir.' });
     }
 
     try {
@@ -100,7 +109,7 @@ router.post('/', authMiddleware, requireAdminOrManager, async (req, res) => {
 });
 
 // PUT: Personel güncelle
-router.put('/:id', authMiddleware, requireAdminOrManager, async (req, res) => {
+router.put('/:id', authMiddleware, checkRole(['admin']), async (req, res) => {
     const { id } = req.params;
     const { username, name, email, role, permissions } = req.body; // Şifreyi almadık (sadece SQLden demiştik)
 
@@ -142,6 +151,9 @@ router.put('/:id', authMiddleware, requireAdminOrManager, async (req, res) => {
 
         await logActivity(req.user?.id, 'UPDATE', 'users', id, `"${name}" adlı personeli güncelledi.`, oldData);
 
+        // Yetkiler / rol değişmiş olabileceği için anında cache temizlenir
+        authMiddleware.clearAuthCache(id);
+
         res.json({ success: true, message: 'Personel güncellendi.' });
     } catch (error) {
         console.error('Personel güncellenirken hata:', error);
@@ -150,7 +162,7 @@ router.put('/:id', authMiddleware, requireAdminOrManager, async (req, res) => {
 });
 
 // DELETE: Personel sil
-router.delete('/:id', authMiddleware, requireAdminOrManager, async (req, res) => {
+router.delete('/:id', authMiddleware, checkRole(['admin']), async (req, res) => {
     const { id } = req.params;
     try {
         const [oldRows] = await db.query('SELECT * FROM users WHERE id = ?', [id]);
@@ -162,10 +174,43 @@ router.delete('/:id', authMiddleware, requireAdminOrManager, async (req, res) =>
 
         await logActivity(req.user?.id, 'DELETE', 'users', id, `"${oldData ? oldData.name : 'Bilinmeyen'}" adlı personeli sildi.`, oldData);
 
+        // Kullanıcı silindiği (veya pasif yapıldığı) an anında cache'i temizle
+        authMiddleware.clearAuthCache(id);
+
         res.json({ success: true, message: 'Personel silindi.' });
     } catch (error) {
         console.error('Personel silinirken hata:', error);
         res.status(500).json({ success: false, message: 'Personel silinemedi.' });
+    }
+});
+
+// PUT: Personel Aktif/Pasif durumunu değiştir
+router.put('/:id/status', authMiddleware, checkRole(['admin']), async (req, res) => {
+    const { id } = req.params;
+    const { is_active } = req.body;
+
+    if (is_active === undefined) {
+        return res.status(400).json({ success: false, message: 'is_active durumu gönderilmedi.' });
+    }
+
+    try {
+        const [oldRows] = await db.query('SELECT * FROM users WHERE id = ?', [id]);
+        const oldData = oldRows.length > 0 ? oldRows[0] : null;
+        if (!oldData) return res.status(404).json({ success: false, message: 'Personel bulunamadı.' });
+
+        const activeStatus = is_active ? 1 : 0;
+        await db.query('UPDATE users SET is_active = ? WHERE id = ?', [activeStatus, id]);
+
+        const actionText = activeStatus ? 'Aktif' : 'Pasif';
+        await logActivity(req.user?.id, 'UPDATE', 'users', id, `"${oldData.name}" adlı personeli ${actionText} duruma getirdi.`, oldData);
+
+        // Durum değiştiğinde cache'i temizle, pasif edildiyse sistem atabilsin
+        authMiddleware.clearAuthCache(id);
+
+        res.json({ success: true, message: `Personel durumu başarıyla ${actionText} yapıldı.` });
+    } catch (error) {
+        console.error('Personel durumu güncellenirken hata:', error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
     }
 });
 

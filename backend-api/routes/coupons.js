@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../prisma');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
 // Get all coupons
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('view_campaigns'), async (req, res) => {
     try {
         const coupons = await prisma.coupons.findMany({
             orderBy: { created_at: 'desc' }
@@ -18,7 +18,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // Create a new coupon
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('campaign_manage'), async (req, res) => {
     try {
         const {
             code, discount_type, discount_value, minimum_order_amount,
@@ -59,7 +59,7 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // Update coupon
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('campaign_manage'), async (req, res) => {
     try {
         const { id } = req.params;
         const {
@@ -97,7 +97,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // Delete coupon
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('campaign_manage'), async (req, res) => {
     try {
         const { id } = req.params;
         await prisma.coupons.delete({ where: { id: parseInt(id) } });
@@ -109,7 +109,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 // Validate Coupon
-router.post('/validate', authMiddleware, async (req, res) => {
+router.post('/validate', authMiddleware, checkPermission('campaign_manage'), async (req, res) => {
     try {
         const { code, items } = req.body; // items: [{productId, quantity, unitPrice, Category, ProductName}]
 

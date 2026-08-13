@@ -78,6 +78,38 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
         }
     };
 
+    const handleToggleStatus = async (user) => {
+        const newStatus = !user.is_active;
+        const confirmMsg = newStatus 
+            ? `${user.name} adlı kullanıcıyı aktif etmek istediğinize emin misiniz?`
+            : `${user.name} adlı kullanıcıyı pasif (yasaklı) duruma getirmek istediğinize emin misiniz?`;
+            
+        if (!window.confirm(confirmMsg)) return;
+
+        // Optimistic UI update
+        setStaff(prev => prev.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u));
+
+        try {
+            const res = await apiFetch(`http://localhost:3000/api/users/${user.id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-User-Id': currentUser?.id
+                },
+                body: JSON.stringify({ is_active: newStatus })
+            });
+            const data = await res.json();
+            if (!data.success) {
+                alert(data.message || 'Durum güncellenemedi');
+                // Revert
+                setStaff(prev => prev.map(u => u.id === user.id ? { ...u, is_active: !newStatus } : u));
+            }
+        } catch (err) {
+            alert('Sunucu hatası');
+            setStaff(prev => prev.map(u => u.id === user.id ? { ...u, is_active: !newStatus } : u));
+        }
+    };
+
         // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
         <div>
@@ -102,6 +134,7 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
                             <th style={{ padding: '16px', textAlign: 'left', color: '#64748b', fontSize: '13px', fontWeight: '600' }}>Kullanıcı Adı</th>
                             <th style={{ padding: '16px', textAlign: 'left', color: '#64748b', fontSize: '13px', fontWeight: '600' }}>E-Posta</th>
                             <th style={{ padding: '16px', textAlign: 'left', color: '#64748b', fontSize: '13px', fontWeight: '600' }}>Rol</th>
+                            <th style={{ padding: '16px', textAlign: 'center', color: '#64748b', fontSize: '13px', fontWeight: '600' }}>Durum</th>
                             <th style={{ padding: '16px', textAlign: 'right', color: '#64748b', fontSize: '13px', fontWeight: '600' }}></th>
                         </tr>
                     </thead>
@@ -129,6 +162,25 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
                                         }}>
                                             {roleNameMap[user.role] || user.role}
                                         </span>
+                                    </td>
+                                    <td style={{ padding: '16px', textAlign: 'center' }}>
+                                        <button 
+                                            onClick={() => handleToggleStatus(user)}
+                                            style={{
+                                                background: user.is_active ? '#dcfce7' : '#fee2e2',
+                                                border: `1px solid ${user.is_active ? '#bbf7d0' : '#fecaca'}`,
+                                                color: user.is_active ? '#166534' : '#991b1b',
+                                                padding: '4px 12px',
+                                                borderRadius: '20px',
+                                                fontSize: '12px',
+                                                fontWeight: '600',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s',
+                                                width: '70px'
+                                            }}
+                                        >
+                                            {user.is_active ? 'Aktif' : 'Pasif'}
+                                        </button>
                                     </td>
                                     <td style={{ padding: '16px', textAlign: 'right' }}>
                                         <div className="action-container" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>

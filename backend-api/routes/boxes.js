@@ -9,6 +9,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 
 // Sözleşme dosyaları için multer ayarı
@@ -21,13 +22,32 @@ const storage = multer.diskStorage({
         cb(null, dir);
     },
     filename: function (req, file, cb) {
-        cb(null, Date.now() + '-' + file.originalname);
+        // GÜVENLİK: originalname yerine UUID kullanılıyor (Path Traversal / XSS engeli)
+        const crypto = require('crypto');
+        const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
+        cb(null, `contract-${crypto.randomUUID()}${ext}`);
     }
 });
-const upload = multer({ storage: storage });
+
+// GÜVENLİK: Sadece izin verilen dosya türlerine izin ver
+const fileFilter = (req, file, cb) => {
+    const allowedMimeTypes = [
+        'image/jpeg', 'image/png', 'image/webp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Desteklenmeyen dosya formatı. Sadece resim, PDF ve Word dosyaları yüklenebilir.'), false);
+    }
+};
+
+const upload = multer({ storage: storage, fileFilter: fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // GET /api/boxes - Tüm kutuları getir
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('box_manage'), async (req, res) => {
     try {
         const [boxes] = await db.query(`
             SELECT * FROM packaging_boxes
@@ -112,7 +132,7 @@ const saveBoxSuppliers = async (boxId, suppliersRaw, files) => {
 };
 
 // POST /api/boxes/:id/barcodes - Kutuya yeni barkod ekle
-router.post('/:id/barcodes', authMiddleware, async (req, res) => {
+router.post('/:id/barcodes', authMiddleware, checkPermission('box_manage'), async (req, res) => {
     const { id } = req.params;
     const { barcode } = req.body;
     
@@ -133,7 +153,7 @@ router.post('/:id/barcodes', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/boxes/:id/barcodes/:barcodeId - Kutudan barkod sil
-router.delete('/:id/barcodes/:barcodeId', authMiddleware, async (req, res) => {
+router.delete('/:id/barcodes/:barcodeId', authMiddleware, checkPermission('box_manage'), async (req, res) => {
     const { id, barcodeId } = req.params;
     
     try {
@@ -146,7 +166,7 @@ router.delete('/:id/barcodes/:barcodeId', authMiddleware, async (req, res) => {
 });
 
 // POST /api/boxes - Yeni kutu ekle
-router.post('/', authMiddleware, upload.any(), async (req, res) => {
+router.post('/', authMiddleware, checkPermission('box_manage'), upload.any(), async (req, res) => {
     const { BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost, MinStockLevel, suppliers } = req.body;
 
     if (!BoxName || !Width || !Height || !Depth || !EmptyWeight || !MaxWeightCapacity) {
@@ -170,7 +190,7 @@ router.post('/', authMiddleware, upload.any(), async (req, res) => {
 });
 
 // PUT /api/boxes/:id - Kutu güncelle
-router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('box_manage'), upload.any(), async (req, res) => {
     const { BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost, IsActive, MinStockLevel, suppliers } = req.body;
     const { id } = req.params;
 
@@ -196,7 +216,7 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
 });
 
 // DELETE /api/boxes/:id - Kutu sil (Pasife al)
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('box_manage'), async (req, res) => {
     const { id } = req.params;
     try {
         const [result] = await db.query('UPDATE packaging_boxes SET IsActive = 0 WHERE Id = ?', [id]);
@@ -212,7 +232,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 // POST /api/boxes/:id/add-stock - Kutu stok ekle (veya eksilt)
-router.post('/:id/add-stock', authMiddleware, async (req, res) => {
+router.post('/:id/add-stock', authMiddleware, checkPermission('box_manage'), async (req, res) => {
     const { id } = req.params;
     const { Quantity, SupplierId } = req.body;
 

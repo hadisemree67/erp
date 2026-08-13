@@ -1,5 +1,4 @@
 /**
- * machineNotifier.js
  * Makinelerin periyodik bakım tarihlerini denetleyen ve yaklaşan bakımlar için 
  * tedarikçilere/ilgililere otomatik e-posta bildirimi gönderen arka plan servisi.
  */

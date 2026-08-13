@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkRole, checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 const multer = require('multer');
 const path = require('path');
@@ -18,11 +19,28 @@ const storage = multer.diskStorage({
         cb(null, 'uploads/');
     },
     filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'product-' + uniqueSuffix + path.extname(file.originalname));
+        // GÜVENLİK: Kriptografik UUID kullanımı ve uzantı sanitizasyonu
+        const crypto = require('crypto');
+        const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
+        cb(null, 'product-' + crypto.randomUUID() + ext);
     }
 });
-const upload = multer({ storage: storage });
+
+// GÜVENLİK: Arbitrary File Upload (Rastgele Dosya Yükleme) zafiyetini önlemek için sadece resimlere izin verildi
+const fileFilter = (req, file, cb) => {
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Desteklenmeyen dosya formatı. Sadece resim dosyaları yüklenebilir.'), false);
+    }
+};
+
+const upload = multer({ 
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5 MB sınır
+});
 
 const safeFloat = (val, defaultVal = 0) => {
     if (val === undefined || val === null || val === '') return defaultVal;
@@ -46,7 +64,7 @@ const parseStackable = (val, defaultVal = 0) => {
 
 // GET: Tüm ürünleri getir
 // Bu uç nokta, sistemdeki tüm ürünleri (hammadde, mamul vb.) listelemek için kullanılır.
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('view_products'), async (req, res) => {
     try {
         // Ürünleri çekerken, WMS (Depo) sistemindeki raf stoklarını (wms_stock_balances) topluyoruz.
         // Eğer ürünün WMS'te hiçbir hareketi yoksa (yeni eklenmişse), 'COALESCE' kullanarak
@@ -65,9 +83,13 @@ router.get('/', authMiddleware, async (req, res) => {
             WHERE b.quantity > 0
         `);
 
+        const [barcodes] = await db.query('SELECT product_id, barcode FROM product_barcodes');
+
         const productsWithDetails = rows.map(product => {
             product.suppliers = suppliers.filter(s => s.product_id === product.Id);
             product.locations = locations.filter(l => l.product_id === product.Id);
+            const productBarcodes = barcodes.filter(b => b.product_id === product.Id).map(b => b.barcode);
+            product.Barcode = JSON.stringify(productBarcodes); // Frontendin beklentisini karşılamak için stringify ediyoruz
             return product;
         });
 
@@ -82,8 +104,8 @@ router.get('/', authMiddleware, async (req, res) => {
 // POST: Yeni ürün ekle
 // Bu uç nokta, yeni bir ürün oluşturmak ve aynı anda birden fazla tedarikçi atamak için kullanılır.
 // "upload.any()" kullanılarak multer üzerinden form-data içindeki resim ve pdf (sözleşme) dosyaları yakalanır.
-router.post('/', authMiddleware, upload.any(), async (req, res) => {
-    const { Barcode, ProductName, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type } = req.body;
+router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), async (req, res) => {
+    const { Barcode, ProductName, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type, is_active, web_categories, web_subcategories, web_subtitles } = req.body;
 
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode):', e.message); }
@@ -97,7 +119,6 @@ router.post('/', authMiddleware, upload.any(), async (req, res) => {
     const newFiles = imagesFiles.map(f => `/uploads/${f.filename}`);
     const finalImagesArray = [...parsedExistingImages.filter(Boolean), ...newFiles];
     const finalImagePath = JSON.stringify(finalImagesArray);
-    const finalBarcodeString = JSON.stringify(parsedBarcodes.filter(Boolean));
 
     let parsedSuppliers = [];
     try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch (e) { console.warn('JSON Parse Error (suppliers):', e.message); }
@@ -110,8 +131,8 @@ router.post('/', authMiddleware, upload.any(), async (req, res) => {
 
         // 1. Gelen barkodların sistemde zaten kayıtlı olup olmadığını kontrol et (Çakışma kontrolü)
         if (parsedBarcodes.length > 0) {
-            const conditions = parsedBarcodes.map(() => '(JSON_VALID(Barcode) AND JSON_CONTAINS(Barcode, JSON_QUOTE(?)))').join(' OR ');
-            const [existing] = await db.query(`SELECT Id FROM products WHERE ${conditions}`, parsedBarcodes);
+            const conditions = parsedBarcodes.map(() => 'barcode = ?').join(' OR ');
+            const [existing] = await db.query(`SELECT id FROM product_barcodes WHERE ${conditions}`, parsedBarcodes);
             if (existing.length > 0) {
                 await db.query('ROLLBACK');
                 return res.status(400).json({ success: false, message: 'Bu barkoda sahip bir ürün zaten var.' });
@@ -137,14 +158,15 @@ router.post('/', authMiddleware, upload.any(), async (req, res) => {
         const isStackableVal = parseStackable(is_stackable, 0);
         const maxStackLimitVal = safeInt(max_stack_limit, 1);
 
+        const isActiveVal = (is_active === 'false' || is_active === false || is_active === 0 || is_active === '0') ? 0 : 1;
+
         const query = `
             INSERT INTO products 
-            (Barcode, ProductName, Brand, Category, unit_type, package_capacity, package_name, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit, critical_stock_level, minimum_production_quantity, supplier_id, shelf_life_months, supply_type) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (ProductName, Brand, Category, unit_type, package_capacity, package_name, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit, critical_stock_level, minimum_production_quantity, supplier_id, shelf_life_months, supply_type, is_active, web_categories, web_subcategories, web_subtitles) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const values = [
-            finalBarcodeString,
             ProductName || '',
             Brand || '',
             Category || '',
@@ -173,11 +195,24 @@ router.post('/', authMiddleware, upload.any(), async (req, res) => {
             safeInt(minimum_production_quantity, 0),
             safeInt(supplier_id, null),
             safeInt(shelf_life_months, 0),
-            supply_type || 'MANUFACTURE'
+            supply_type || 'MANUFACTURE',
+            isActiveVal,
+            web_categories ? JSON.stringify(web_categories) : null,
+            web_subcategories ? JSON.stringify(web_subcategories) : null,
+            web_subtitles ? JSON.stringify(web_subtitles) : null
         ];
 
         const [result] = await db.query(query, values);
-        const productId = result.insertId; // Eklenen yeni ürünün veritabanı ID'sini alıyoruz
+        const productId = result.insertId;
+
+        // 2. Barkodları yeni tabloya kaydet
+        if (parsedBarcodes.length > 0) {
+            for (const barcode of parsedBarcodes) {
+                if (barcode && barcode.trim()) {
+                    await db.query('INSERT INTO product_barcodes (product_id, barcode) VALUES (?, ?)', [productId, barcode.trim()]);
+                }
+            }
+        }
 
         // 3. Ürüne ait tedarikçileri (product_suppliers) kaydet ve varsa PDF sözleşme dosyalarını yükle
         for (let i = 0; i < parsedSuppliers.length; i++) {
@@ -205,12 +240,13 @@ router.post('/', authMiddleware, upload.any(), async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Ürün eklenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Ürün eklenirken hata oluştu: ' + (error.sqlMessage || error.message || error) });
+        // GÜVENLİK: Dahili hata detayları istemciye gönderilmiyor
+        res.status(500).json({ success: false, message: 'Ürün eklenirken bir hata oluştu. Lütfen tekrar deneyin.' });
     }
 });
 
 // PUT: Toplu ürün düzenle
-router.put('/bulk-edit', authMiddleware, async (req, res) => {
+router.put('/bulk-edit', authMiddleware, checkPermission('product_edit'), async (req, res) => {
     const { ids, updates } = req.body;
 
     let finalUpdates = updates;
@@ -235,7 +271,7 @@ router.put('/bulk-edit', authMiddleware, async (req, res) => {
 
             for (const update of finalUpdates) {
                 const { field, type, value } = update;
-                if (!['SalePrice', 'PurchasePrice', 'Category', 'Brand', 'is_stackable', 'max_stack_limit', 'critical_stock_level'].includes(field)) continue;
+                if (!['SalePrice', 'PurchasePrice', 'Category', 'Brand', 'is_stackable', 'max_stack_limit', 'critical_stock_level', 'is_active', 'web_categories', 'web_subcategories', 'web_subtitles'].includes(field)) continue;
 
                 let newVal;
                 const isNumeric = ['SalePrice', 'PurchasePrice', 'max_stack_limit', 'critical_stock_level'].includes(field);
@@ -260,7 +296,11 @@ router.put('/bulk-edit', authMiddleware, async (req, res) => {
                         newVal = Math.round(newVal);
                     }
                 } else {
-                    newVal = value;
+                    if (['web_categories', 'web_subcategories', 'web_subtitles'].includes(field)) {
+                        newVal = value ? JSON.stringify(value) : null;
+                    } else {
+                        newVal = value;
+                    }
                 }
 
                 await db.query(`UPDATE products SET ${field} = ? WHERE Id = ?`, [newVal, id]);
@@ -274,14 +314,14 @@ router.put('/bulk-edit', authMiddleware, async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Toplu ürün güncellenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Toplu güncelleme sırasında hata oluştu: ' + (error.sqlMessage || error.message || error) });
+        res.status(500).json({ success: false, message: 'Toplu güncelleme sırasında sunucu hatası oluştu.' });
     }
 });
 
 // PUT: Ürün güncelle
-router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any(), async (req, res) => {
     const { id } = req.params;
-    const { Barcode, ProductName, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type } = req.body;
+    const { Barcode, ProductName, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type, web_categories, web_subcategories, web_subtitles } = req.body;
 
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode update):', e.message); }
@@ -295,7 +335,6 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
     const newFiles = imagesFiles.map(f => `/uploads/${f.filename}`);
     const finalImagesArray = [...parsedExistingImages.filter(Boolean), ...newFiles];
     const finalImagePath = JSON.stringify(finalImagesArray);
-    const finalBarcodeString = JSON.stringify(parsedBarcodes.filter(Boolean));
 
     let parsedSuppliers = [];
     try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch (e) { console.warn('JSON Parse Error (suppliers update):', e.message); }
@@ -305,9 +344,9 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
         await db.query('START TRANSACTION');
 
         if (parsedBarcodes.length > 0) {
-            const conditions = parsedBarcodes.map(() => '(JSON_VALID(Barcode) AND JSON_CONTAINS(Barcode, JSON_QUOTE(?)))').join(' OR ');
+            const conditions = parsedBarcodes.map(() => 'barcode = ?').join(' OR ');
             const queryParams = [...parsedBarcodes, id];
-            const [existing] = await db.query(`SELECT Id FROM products WHERE (${conditions}) AND Id != ?`, queryParams);
+            const [existing] = await db.query(`SELECT id FROM product_barcodes WHERE (${conditions}) AND product_id != ?`, queryParams);
             if (existing.length > 0) {
                 await db.query('ROLLBACK');
                 return res.status(400).json({ success: false, message: 'Bu barkoda sahip başka bir ürün zaten var.' });
@@ -340,7 +379,6 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
         const maxStackLimitVal = req.body.max_stack_limit !== undefined ? safeInt(req.body.max_stack_limit, 1) : safeInt(oldData.max_stack_limit, 1);
 
         const values = [
-            req.body.Barcode !== undefined ? finalBarcodeString : oldData.Barcode,
             req.body.ProductName !== undefined ? req.body.ProductName : oldData.ProductName,
             req.body.Brand !== undefined ? req.body.Brand : oldData.Brand,
             req.body.Category !== undefined ? req.body.Category : oldData.Category,
@@ -370,16 +408,35 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
             req.body.supplier_id !== undefined ? safeInt(req.body.supplier_id, null) : (oldData.supplier_id ? safeInt(oldData.supplier_id, null) : null),
             req.body.shelf_life_months !== undefined ? safeInt(req.body.shelf_life_months, 0) : safeInt(oldData.shelf_life_months, 0),
             req.body.supply_type !== undefined ? req.body.supply_type : (oldData.supply_type || 'MANUFACTURE'),
+            req.body.is_active !== undefined ? ((req.body.is_active === 'false' || req.body.is_active === false || req.body.is_active === 0 || req.body.is_active === '0') ? 0 : 1) : oldData.is_active,
+            req.body.web_categories !== undefined ? (typeof req.body.web_categories === 'string' ? req.body.web_categories : JSON.stringify(req.body.web_categories)) : (typeof oldData.web_categories === 'string' ? oldData.web_categories : (oldData.web_categories ? JSON.stringify(oldData.web_categories) : null)),
+            req.body.web_subcategories !== undefined ? (typeof req.body.web_subcategories === 'string' ? req.body.web_subcategories : JSON.stringify(req.body.web_subcategories)) : (typeof oldData.web_subcategories === 'string' ? oldData.web_subcategories : (oldData.web_subcategories ? JSON.stringify(oldData.web_subcategories) : null)),
+            req.body.web_subtitles !== undefined ? (typeof req.body.web_subtitles === 'string' ? req.body.web_subtitles : JSON.stringify(req.body.web_subtitles)) : (typeof oldData.web_subtitles === 'string' ? oldData.web_subtitles : (oldData.web_subtitles ? JSON.stringify(oldData.web_subtitles) : null)),
             id
         ];
 
         let query = `
             UPDATE products 
-            SET Barcode=?, ProductName=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?, supply_type=?
+            SET ProductName=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?, supply_type=?, is_active=?, web_categories=?, web_subcategories=?, web_subtitles=?
             WHERE Id=?
         `;
 
         await db.query(query, values);
+
+        let barcodesChanged = false;
+        if (req.body.Barcode !== undefined) {
+            const [oldBarcodesRows] = await db.query('SELECT barcode FROM product_barcodes WHERE product_id = ?', [id]);
+            const oldBarcodes = oldBarcodesRows.map(b => b.barcode).sort();
+            const newBarcodes = [...new Set(parsedBarcodes.filter(b => b && b.trim()).map(b => b.trim()))].sort();
+            
+            if (JSON.stringify(oldBarcodes) !== JSON.stringify(newBarcodes)) {
+                barcodesChanged = true;
+                await db.query('DELETE FROM product_barcodes WHERE product_id = ?', [id]);
+                for (const barcode of newBarcodes) {
+                    await db.query('INSERT INTO product_barcodes (product_id, barcode) VALUES (?, ?)', [id, barcode]);
+                }
+            }
+        }
 
         // Tedarikçileri güncelle
         let suppliersChanged = false;
@@ -422,13 +479,13 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
         };
 
         const newValsMap = {
-            ProductName: values[1], Brand: values[2], Category: values[3], unit_type: values[4],
-            package_capacity: values[5], package_name: values[6], PurchasePrice: values[7],
-            SalePrice: values[8], StockQuantity: values[9], ExpirationDate: values[10],
-            BatchNumber: values[11], Description: values[12], Location: values[14], Formula: values[15],
-            ProductionTime: values[16], Width: values[17], Height: values[18], Depth: values[19],
-            Diameter: values[20], Volume: values[21], Weight: values[22], is_stackable: values[23], max_stack_limit: values[24],
-            critical_stock_level: values[25], minimum_production_quantity: values[26], shelf_life_months: values[28]
+            ProductName: values[0], Brand: values[1], Category: values[2], unit_type: values[3],
+            package_capacity: values[4], package_name: values[5], PurchasePrice: values[6],
+            SalePrice: values[7], StockQuantity: values[8], ExpirationDate: values[9],
+            BatchNumber: values[10], Description: values[11], Location: values[13], Formula: values[14],
+            ProductionTime: values[15], Width: values[16], Height: values[17], Depth: values[18],
+            Diameter: values[19], Volume: values[20], Weight: values[21], is_stackable: values[22], max_stack_limit: values[23],
+            critical_stock_level: values[24], minimum_production_quantity: values[25], shelf_life_months: values[27], is_active: values[29]
         };
 
         const changes = [];
@@ -493,16 +550,8 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
                 }
             }
         }
-        if (req.body.Barcode !== undefined) {
-            try {
-                const oldBarcodes = typeof oldData.Barcode === 'string' ? JSON.parse(oldData.Barcode) : (oldData.Barcode || []);
-                const newBarcodes = typeof finalBarcodeString === 'string' ? JSON.parse(finalBarcodeString) : (finalBarcodeString || []);
-                if (JSON.stringify(oldBarcodes) !== JSON.stringify(newBarcodes)) {
-                    changes.push(`Barkodlar güncellendi`);
-                }
-            } catch (e) {
-                if (finalBarcodeString !== oldData.Barcode) changes.push(`Barkodlar güncellendi`);
-            }
+        if (barcodesChanged) {
+            changes.push(`Barkodlar güncellendi`);
         }
         if (imagesFiles.length > 0 || req.body.existingImages !== undefined) {
             try {
@@ -531,12 +580,12 @@ router.put('/:id', authMiddleware, upload.any(), async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Ürün güncellenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Ürün güncellenirken hata oluştu: ' + (error.sqlMessage || error.message || error) });
+        res.status(500).json({ success: false, message: 'Ürün güncellenirken sunucu hatası oluştu: ' + (error.message || 'Bilinmeyen Hata') });
     }
 });
 
 
-router.delete('/bulk', authMiddleware, async (req, res) => {
+router.delete('/bulk', authMiddleware, checkPermission('product_delete'), async (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'Silinecek ürün seçilmedi.' });
@@ -550,6 +599,15 @@ router.delete('/bulk', authMiddleware, async (req, res) => {
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
 
+            const [barcodeRows] = await db.query('SELECT barcode FROM product_barcodes WHERE product_id = ?', [id]);
+            const barcodeStr = barcodeRows.map(b => b.barcode).join(', ');
+
+            oldData._barcodes = barcodeRows.map(b => b.barcode);
+            const [supplierRows] = await db.query('SELECT * FROM product_suppliers WHERE product_id = ?', [id]);
+            oldData._suppliers = supplierRows;
+            const [stockRows] = await db.query('SELECT * FROM wms_stock_balances WHERE product_id = ?', [id]);
+            oldData._stocks = stockRows;
+
             // İlişkili kayıtları sil (Stoklar, Siparişler, Hareketler vb.)
             await db.query('DELETE FROM orderitems WHERE ProductId = ?', [id]);
             await db.query('DELETE FROM product_barcodes WHERE product_id = ?', [id]);
@@ -557,9 +615,14 @@ router.delete('/bulk', authMiddleware, async (req, res) => {
             await db.query('DELETE FROM production_requests WHERE product_id = ?', [id]);
             await db.query('DELETE FROM stockmovements WHERE ProductId = ?', [id]);
             await db.query('DELETE FROM wms_stock_balances WHERE product_id = ?', [id]);
+            await db.query('DELETE FROM production_orders WHERE product_id = ?', [id]);
+            await db.query('DELETE FROM production_materials WHERE material_product_id = ?', [id]);
+            await db.query('DELETE FROM purchase_requests WHERE product_id = ?', [id]);
 
             await db.query('DELETE FROM products WHERE Id = ?', [id]);
-            await logActivity(req.user?.id, 'DELETE', 'products', id, `"${oldData.ProductName}" adlı ürünü toplu silme ile sildi.`, oldData);
+            
+            const barcodeMsg = barcodeStr ? `${barcodeStr} barkodlu ` : '';
+            await logActivity(req.user?.id, 'DELETE', 'products', id, `${barcodeMsg}"${oldData.ProductName}" adlı ürün silindi.`, oldData);
         }
 
         await db.query('COMMIT');
@@ -572,12 +635,25 @@ router.delete('/bulk', authMiddleware, async (req, res) => {
 });
 
 // DELETE: Ürünü sil
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('product_delete'), async (req, res) => {
     const { id } = req.params;
 
     try {
+        await db.query('START TRANSACTION');
+
         const [oldRows] = await db.query('SELECT * FROM products WHERE Id = ?', [id]);
         const oldData = oldRows.length > 0 ? oldRows[0] : null;
+
+        const [barcodeRows] = await db.query('SELECT barcode FROM product_barcodes WHERE product_id = ?', [id]);
+        const barcodeStr = barcodeRows.map(b => b.barcode).join(', ');
+
+        if (oldData) {
+            oldData._barcodes = barcodeRows.map(b => b.barcode);
+            const [supplierRows] = await db.query('SELECT * FROM product_suppliers WHERE product_id = ?', [id]);
+            oldData._suppliers = supplierRows;
+            const [stockRows] = await db.query('SELECT * FROM wms_stock_balances WHERE product_id = ?', [id]);
+            oldData._stocks = stockRows;
+        }
 
         // İlişkili kayıtları sil (Stoklar, Siparişler, Hareketler vb.)
         await db.query('DELETE FROM orderitems WHERE ProductId = ?', [id]);
@@ -586,19 +662,27 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         await db.query('DELETE FROM production_requests WHERE product_id = ?', [id]);
         await db.query('DELETE FROM stockmovements WHERE ProductId = ?', [id]);
         await db.query('DELETE FROM wms_stock_balances WHERE product_id = ?', [id]);
+        await db.query('DELETE FROM production_orders WHERE product_id = ?', [id]);
+        await db.query('DELETE FROM production_materials WHERE material_product_id = ?', [id]);
+        await db.query('DELETE FROM purchase_requests WHERE product_id = ?', [id]);
 
         const [result] = await db.query('DELETE FROM products WHERE Id = ?', [id]);
 
         if (result.affectedRows === 0) {
+            await db.query('ROLLBACK');
             return res.status(404).json({ success: false, message: 'Silinecek ürün bulunamadı.' });
         }
 
-        await logActivity(req.user?.id, 'DELETE', 'products', id, `"${oldData ? oldData.ProductName : 'Bilinmeyen'}" adlı ürünü sildi.`, oldData);
+        const barcodeMsg = barcodeStr ? `${barcodeStr} barkodlu ` : '';
+        await logActivity(req.user?.id, 'DELETE', 'products', id, `${barcodeMsg}"${oldData ? oldData.ProductName : 'Bilinmeyen'}" adlı ürün silindi.`, oldData);
 
+        await db.query('COMMIT');
         res.json({ success: true, message: 'Ürün başarıyla silindi.' });
 
     } catch (error) {
+        await db.query('ROLLBACK');
         console.error('Ürün silinirken hata:', error);
+        require('fs').appendFileSync('error.log', new Date().toISOString() + ' [API HATASI] DELETE PRODUCT : ' + (error.stack || error.message || error) + '\n');
         res.status(500).json({ success: false, message: 'Ürün silinirken sunucu hatası oluştu.' });
     }
 });

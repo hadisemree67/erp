@@ -272,9 +272,18 @@ const WarehouseLayout = ({ currentUser }) => {
         const product = products.find(p => {
             const searchVal = barcodeInput.trim();
             const cleanBarcode = p.Barcode ? p.Barcode.replace(/[\[\]"]/g, '') : '';
+            const searchInField = (field) => {
+                if (!field) return false;
+                if (typeof field === 'string') return field.toLowerCase().includes(searchVal.toLowerCase());
+                if (Array.isArray(field)) return field.some(i => i.toLowerCase().includes(searchVal.toLowerCase()));
+                return JSON.stringify(field).toLowerCase().includes(searchVal.toLowerCase());
+            };
             const matchBarcode = cleanBarcode.split(',').map(b => b.trim()).includes(searchVal);
             const matchName = p.ProductName && p.ProductName.toLowerCase().includes(searchVal.toLowerCase());
-            return matchBarcode || matchName;
+            const matchCat = p.Category && p.Category.toLowerCase().includes(searchVal.toLowerCase());
+            const matchBrand = p.Brand && p.Brand.toLowerCase().includes(searchVal.toLowerCase());
+            const matchWeb = searchInField(p.web_categories) || searchInField(p.web_subcategories) || searchInField(p.web_subtitles);
+            return matchBarcode || matchName || matchCat || matchBrand || matchWeb;
         });
         
         if (!product) {
@@ -328,9 +337,19 @@ const WarehouseLayout = ({ currentUser }) => {
         
         const product = products.find(p => {
             const cleanBarcode = p.Barcode ? p.Barcode.replace(/[\[\]"]/g, '') : '';
-            const matchBarcode = cleanBarcode.split(',').map(b => b.trim()).includes(searchBarcode.trim());
-            const matchName = p.ProductName && p.ProductName.toLowerCase().includes(searchBarcode.trim().toLowerCase());
-            return matchBarcode || matchName;
+            const searchVal = searchBarcode.trim();
+            const searchInField = (field) => {
+                if (!field) return false;
+                if (typeof field === 'string') return field.toLowerCase().includes(searchVal.toLowerCase());
+                if (Array.isArray(field)) return field.some(i => i.toLowerCase().includes(searchVal.toLowerCase()));
+                return JSON.stringify(field).toLowerCase().includes(searchVal.toLowerCase());
+            };
+            const matchBarcode = cleanBarcode.split(',').map(b => b.trim()).includes(searchVal);
+            const matchName = p.ProductName && p.ProductName.toLowerCase().includes(searchVal.toLowerCase());
+            const matchCat = p.Category && p.Category.toLowerCase().includes(searchVal.toLowerCase());
+            const matchBrand = p.Brand && p.Brand.toLowerCase().includes(searchVal.toLowerCase());
+            const matchWeb = searchInField(p.web_categories) || searchInField(p.web_subcategories) || searchInField(p.web_subtitles);
+            return matchBarcode || matchName || matchCat || matchBrand || matchWeb;
         });
 
         if (!product) {
@@ -997,6 +1016,78 @@ const WarehouseLayout = ({ currentUser }) => {
                                             style={{ width: '100%', boxSizing: 'border-box', padding: '10px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
                                             required
                                         />
+                                        {(() => {
+                                            if (!barcodeInput || !shelfDetails) return null;
+                                            const searchVal = barcodeInput.trim();
+                                            if (!searchVal) return null;
+                                            const product = products.find(p => {
+                                                const cleanBarcode = p.Barcode ? p.Barcode.replace(/[\[\]"]/g, '') : '';
+                                                const searchInField = (field) => {
+                                                    if (!field) return false;
+                                                    if (typeof field === 'string') return field.toLowerCase().includes(searchVal.toLowerCase());
+                                                    if (Array.isArray(field)) return field.some(i => i.toLowerCase().includes(searchVal.toLowerCase()));
+                                                    return JSON.stringify(field).toLowerCase().includes(searchVal.toLowerCase());
+                                                };
+                                                const matchBarcode = cleanBarcode.split(',').map(b => b.trim()).includes(searchVal);
+                                                const matchName = p.ProductName && p.ProductName.toLowerCase().includes(searchVal.toLowerCase());
+                                                const matchCat = p.Category && p.Category.toLowerCase().includes(searchVal.toLowerCase());
+                                                const matchBrand = p.Brand && p.Brand.toLowerCase().includes(searchVal.toLowerCase());
+                                                const matchWeb = searchInField(p.web_categories) || searchInField(p.web_subcategories) || searchInField(p.web_subtitles);
+                                                return matchBarcode || matchName || matchCat || matchBrand || matchWeb;
+                                            });
+                                            if (!product) return <div style={{marginTop: '6px', fontSize: '12px', color: '#ef4444'}}>Ürün bulunamadı.</div>;
+                                            
+                                            let maxItems = '∞';
+                                            const sW = parseFloat(shelfDetails.shelfDimensions?.width) || 0;
+                                            const sH = parseFloat(shelfDetails.shelfDimensions?.height) || 0;
+                                            const sD = parseFloat(shelfDetails.shelfDimensions?.depth) || 0;
+                                            
+                                            const pW = parseFloat(product.Width) || 0;
+                                            const pH = parseFloat(product.Height) || 0;
+                                            const pD = parseFloat(product.Depth) || 0;
+                                        
+                                            if (sW > 0 && sH > 0 && sD > 0 && pW > 0 && pH > 0 && pD > 0) {
+                                                const usableW = Math.max(0, sW - 10);
+                                                const usableH = Math.max(0, sH - 5);
+                                                const usableD = Math.max(0, sD - 5);
+                                                const wCount = Math.floor(usableW / pW);
+                                                const dCount = Math.floor(usableD / pD);
+                                                let hCount = Math.floor(usableH / pH);
+                                                const isStackable = product.is_stackable === 1 || product.is_stackable === true || product.is_stackable === '1';
+                                                
+                                                if (isStackable) {
+                                                    const stackLimit = parseInt(product.max_stack_limit) || 1;
+                                                    if (hCount > stackLimit) hCount = stackLimit;
+                                                } else {
+                                                    hCount = 1;
+                                                }
+                                                maxItems = (wCount * dCount) * hCount;
+                                            } else {
+                                                const volPerItem = (parseFloat(product.Volume) || 0) / (parseFloat(product.package_capacity) || 1);
+                                                maxItems = volPerItem > 0 ? Math.floor(shelfDetails.maxVolume / volPerItem) : '∞';
+                                            }
+                                            
+                                            
+                                            const totalOnShelfQty = shelfDetails.products 
+                                                ? shelfDetails.products.filter(p => p.product_id === product.Id).reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0)
+                                                : 0;
+                                                
+                                            let remainingBoxes = '∞';
+                                            if (maxItems !== '∞') {
+                                                const usedBoxes = Math.ceil(totalOnShelfQty / (parseFloat(product.package_capacity) || 1));
+                                                remainingBoxes = Math.max(0, maxItems - usedBoxes);
+                                            }
+                                            
+                                            return (
+                                                <div style={{marginTop: '8px', padding: '10px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '4px'}}>
+                                                    <div style={{fontSize: '13px', color: '#166534', fontWeight: 'bold'}}>{product.ProductName} <small style={{color: '#15803d', fontWeight: 'normal'}}>({product.package_capacity} {product.unit_type} / {product.package_name || 'Kap'})</small></div>
+                                                    <div style={{fontSize: '12px', color: '#15803d', marginTop: '4px'}}>
+                                                        Bu rafa sığabilecek boş kapasite: <strong>{remainingBoxes === '∞' ? 'Sınırsız (Ebat tanımlanmamış)' : `${remainingBoxes} ${product.package_name || 'Kap'}`}</strong>
+                                                        {remainingBoxes !== '∞' && totalOnShelfQty > 0 && <span style={{opacity: 0.8, marginLeft: '6px'}}>(Rafta zaten {totalOnShelfQty} {product.unit_type} var)</span>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                     <div style={{ marginBottom: '12px' }}>
                                         <label style={{ display: 'block', fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Parti No *</label>

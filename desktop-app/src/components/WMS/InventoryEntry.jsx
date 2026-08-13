@@ -366,6 +366,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
     }, [formData.warehouseId, formData.materialName, products, editItem, formData.width, formData.height, formData.depth, formData.is_stackable, formData.max_stack_limit, formData.package_capacity]);
 
     useEffect(() => {
+        return; // DEVRE DIŞI BIRAKILDI: Sonsuz döngü ve sunucu çökmelerini önlemek için.
         if (!shelves || shelves.length === 0 || !allShelvesCapacity || Object.keys(allShelvesCapacity).length === 0) return;
 
         setFormData(prev => {
@@ -1153,32 +1154,57 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                                             </div>
                                         ) : null}
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <input 
-                                            type="number" 
-                                            value={allocation.quantity} 
-                                            onChange={(e) => handleAllocationChange(index, 'quantity', e.target.value)} 
-                                            required 
-                                            min="1"
-                                            placeholder="Giriş Miktarı"
-                                            style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px', borderColor: capData && allocation.quantity && (parseInt(allocation.quantity) > capData.maxItems || !capData.physicallyFits) ? '#ef4444' : '#cbd5e1' }} 
-                                        />
-                                        {formData.unit_type !== 'Adet' && formData.package_capacity > 0 && allocation.quantity > 0 && (
-                                            <div style={{ marginTop: '8px', fontSize: '13px', color: '#0369a1', fontWeight: '600' }}>
-                                                👉 {allocation.quantity} {formData.unit_type} = {Math.ceil(allocation.quantity / formData.package_capacity)} {formData.package_name || 'Ambalaj'} yapar
-                                            </div>
-                                        )}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>{formData.package_name || 'Kutu/Koli/Tank vb.'} Adedi</div>
+                                            <input 
+                                                type="number" 
+                                                value={allocation.packageQuantity !== undefined ? allocation.packageQuantity : (allocation.quantity ? (parseFloat(allocation.quantity) / (parseFloat(formData.package_capacity) || 1)) : '')} 
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    const total = val * (parseFloat(formData.package_capacity) || 1);
+                                                    const newAllocations = [...formData.shelfAllocations];
+                                                    newAllocations[index].packageQuantity = e.target.value;
+                                                    newAllocations[index].quantity = isNaN(total) ? '' : total;
+                                                    setFormData({ ...formData, shelfAllocations: newAllocations });
+                                                }} 
+                                                min="0" step="any"
+                                                placeholder="Adet"
+                                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }} 
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Toplam {formData.unit_type} *</div>
+                                            <input 
+                                                type="number" 
+                                                value={allocation.quantity} 
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value);
+                                                    const packages = val / (parseFloat(formData.package_capacity) || 1);
+                                                    const newAllocations = [...formData.shelfAllocations];
+                                                    newAllocations[index].quantity = e.target.value;
+                                                    newAllocations[index].packageQuantity = isNaN(packages) ? '' : packages;
+                                                    setFormData({ ...formData, shelfAllocations: newAllocations });
+                                                }} 
+                                                required 
+                                                min="0.001" step="any"
+                                                placeholder="Toplam Miktar"
+                                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px', borderColor: capData && allocation.quantity && (parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(formData.package_capacity) || 1)) || !capData.physicallyFits) ? '#ef4444' : '#cbd5e1' }} 
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', marginTop: '4px' }}>
                                         {capData && !capData.physicallyFits && (
                                             <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
                                                 ⚠️ Ürün bu rafa fiziksel olarak sığmıyor! (Boyut Uyuşmazlığı)
                                             </div>
                                         )}
-                                        {capData && capData.physicallyFits && allocation.quantity && parseInt(allocation.quantity) > (capData.maxItems * (formData.package_capacity || 1)) && (
+                                        {capData && capData.physicallyFits && allocation.quantity && parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(formData.package_capacity) || 1)) && (
                                             <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
                                                 {capData.isStackable === false || (capData.isStackable && capData.maxStackLimit < 999) ? (
-                                                    `⚠️ Uyarı: Bu ürün ambalaj yapısı gereği üst üste en fazla ${capData.isStackable ? capData.maxStackLimit : 1} kat dizilebilir. Seçilen rafın alanına göre bu rafa maksimum ${capData.maxItems * (formData.package_capacity || 1)} ${formData.unit_type} (${capData.maxItems} ${formData.package_name || 'Kap'}) koyabilirsiniz.`
+                                                    `⚠️ Uyarı: Bu ürün ambalaj yapısı gereği üst üste en fazla ${capData.isStackable ? capData.maxStackLimit : 1} kat dizilebilir. Seçilen rafın alanına göre bu rafa maksimum ${capData.maxItems * (parseFloat(formData.package_capacity) || 1)} ${formData.unit_type} (${capData.maxItems} ${formData.package_name || 'Kap'}) koyabilirsiniz.`
                                                 ) : (
-                                                    `⚠️ Seçilen ürünün boyutlarına göre bu rafa en fazla ${capData.maxItems * (formData.package_capacity || 1)} ${formData.unit_type} (${capData.maxItems} ${formData.package_name || 'Kap'}) sığabilir!`
+                                                    `⚠️ Seçilen ürünün boyutlarına göre bu rafa en fazla ${capData.maxItems * (parseFloat(formData.package_capacity) || 1)} ${formData.unit_type} (${capData.maxItems} ${formData.package_name || 'Kap'}) sığabilir!`
                                                 )}
                                             </div>
                                         )}

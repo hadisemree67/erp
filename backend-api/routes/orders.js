@@ -9,6 +9,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { toFrontendStatus, toPrismaStatus } = require('../utils/enumMapper');
 const authMiddleware = require('../middleware/auth');
+const { checkRole, checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 
@@ -22,9 +23,12 @@ router.get('/', async (req, res) => {
                 users_orders_PickerIdTousers: true,
                 users_orders_PackerIdTousers: true,
                 users_orders_ShipUserIdTousers: true,
+                picking_carts: {
+                    include: { sections: true }
+                },
                 orderitems: {
                     include: {
-                        products: true
+                        products: { include: { product_barcodes: true } }
                     }
                 }
             },
@@ -45,24 +49,43 @@ router.get('/', async (req, res) => {
             stockMap[sb.product_id] = sb._sum.quantity || 0;
         });
 
-        const formattedOrders = orders.map(o => ({
-            ...o,
-            OrderStatus: toFrontendStatus(o.OrderStatus),
-            CustomerName: o.customers?.CustomerName,
-            CustomerEmail: o.customers?.Email,
-            CustomerPhone: o.customers?.Phone,
-            CargoCompanyName: o.shippers?.CompanyName,
-            PickerName: o.users_orders_PickerIdTousers?.name,
-            PackerName: o.users_orders_PackerIdTousers?.name,
-            ShipUserName: o.users_orders_ShipUserIdTousers?.name,
-            items: o.orderitems.map(oi => ({
-                ...oi,
-                ProductName: oi.products?.ProductName,
-                ProductCode: oi.products?.Barcode,
-                Unit: oi.products?.unit_type,
-                CurrentStock: stockMap[oi.ProductId] || 0
-            }))
-        }));
+        const formattedOrders = orders.map(o => {
+            let cartInfo = null;
+            if (o.picking_carts) {
+                const sectionNames = [];
+                if (Array.isArray(o.CartSectionIds)) {
+                    o.CartSectionIds.forEach(id => {
+                        const sec = o.picking_carts.sections.find(s => s.id === id);
+                        if (sec) sectionNames.push(sec.section_name);
+                    });
+                }
+                if (sectionNames.length > 0) {
+                    cartInfo = `${o.picking_carts.name} (${sectionNames.join(', ')})`;
+                } else {
+                    cartInfo = o.picking_carts.name;
+                }
+            }
+
+            return {
+                ...o,
+                OrderStatus: toFrontendStatus(o.OrderStatus),
+                CustomerName: o.customers?.CustomerName,
+                CustomerEmail: o.customers?.Email,
+                CustomerPhone: o.customers?.Phone,
+                CargoCompanyName: o.shippers?.CompanyName,
+                PickerName: o.users_orders_PickerIdTousers?.name,
+                PackerName: o.users_orders_PackerIdTousers?.name,
+                ShipUserName: o.users_orders_ShipUserIdTousers?.name,
+                CartInfo: cartInfo,
+                items: o.orderitems.map(oi => ({
+                    ...oi,
+                    ProductName: oi.products?.ProductName,
+                    ProductCode: oi.products?.product_barcodes ? JSON.stringify(oi.products.product_barcodes.map(pb => pb.barcode)) : '[]',
+                    Unit: oi.products?.unit_type,
+                    CurrentStock: stockMap[oi.ProductId] || 0
+                }))
+            };
+        });
 
         res.json({ success: true, data: formattedOrders });
     } catch (err) {
@@ -72,15 +95,18 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/orders - Yeni manuel sipariş oluştur ve stok kontrolü / otomatik üretim talebi yap
-router.post('/', authMiddleware, async (req, res) => {
-    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount, shipperId, couponId, couponCode } = req.body;
+router.post('/', authMiddleware, checkPermission('order_create'), async (req, res) => {
+    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount, shipperId, couponId, couponCode, description } = req.body;
+
 
     if (!customerId || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, message: 'Müşteri ve en az bir sipariş kalemi gereklidir.' });
     }
 
     try {
-        const orderNumber = `SIP-${Date.now().toString().slice(-6)}`;
+        // GÜVENLİK: Timestamp tabanlı numara yerine crypto random kullanılıyor (çakışma riski önlendi)
+        const crypto = require('crypto');
+        const orderNumber = `SIP-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         
         let totalAmount = 0;
         for (const item of items) {
@@ -135,6 +161,11 @@ router.post('/', authMiddleware, async (req, res) => {
                 const price = parseFloat(item.unitPrice) || 0;
 
                 if (!productId || qty <= 0) continue;
+
+                const product = await tx.products.findUnique({ where: { Id: productId } });
+                if (product && (product.is_active === 0 || product.is_active === false)) {
+                    throw new Error(`"${product.ProductName}" adlı ürün pasif durumda (satışa kapalı) olduğu için sipariş edilemez.`);
+                }
 
                 await tx.orderitems.create({
                     data: {
@@ -238,7 +269,11 @@ router.post('/', authMiddleware, async (req, res) => {
             return order.Id;
         });
 
-        await logActivity(req.user?.id, 'INSERT', 'orders', orderResult, `Yeni sipariş oluşturuldu: ${orderNumber}`);
+        const logMsg = description && description.trim() 
+            ? `Yeni sipariş oluşturuldu: ${orderNumber} - Açıklama: ${description.trim()}`
+            : `Yeni sipariş oluşturuldu: ${orderNumber}`;
+            
+        await logActivity(req.user?.id, 'INSERT', 'orders', orderResult, logMsg);
 
         for (const item of items) {
             if (item.productId) {
@@ -261,13 +296,35 @@ router.post('/', authMiddleware, async (req, res) => {
 
     } catch (err) {
         console.error('Sipariş oluşturma hatası:', err);
-        res.status(500).json({ success: false, message: 'Sipariş oluşturulurken bir hata meydana geldi: ' + err.message });
+        res.status(500).json({ success: false, message: 'Sipariş oluşturulurken bir hata meydana geldi. Lütfen tekrar deneyin. Error: ' + err.message });
     }
 });
 
 // PUT /api/orders/:id/status - Sipariş durumu güncelle
 router.put('/:id/status', authMiddleware, async (req, res) => {
     const { status } = req.body;
+    
+    // YETKİ KONTROLÜ
+    if (req.user.role !== 'admin' && !['Depo'].includes(req.user.role)) {
+        const perms = req.user.permissions || [];
+        if (status === 'İptal Edildi' || status === 'İptal') {
+            if (!perms.includes('order_cancel')) return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
+        } else if (status === 'Kargoya Verildi' || status === 'Teslim Edildi') {
+            if (!perms.includes('order_ship')) return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
+        } else if (status === 'Onaylandı') { 
+            // "Onaylandı" durumu hem "Beklemede -> Onaylandı" (order_approve) 
+            // hem de "Hazırlanıyor -> Onaylandı" iptali (order_prepare) için kullanılıyor.
+            // Bu nedenle ikisinden birine sahip olması yeterli (veya burada order_approve'a izin verelim).
+            if (!perms.includes('order_approve') && !perms.includes('order_prepare')) {
+                return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
+            }
+        } else if (status === 'Hazırlanıyor') {
+            if (!perms.includes('order_prepare')) return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
+        } else {
+             return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
+        }
+    }
+
     const orderId = Number(req.params.id);
     
     try {
@@ -286,7 +343,7 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
             if (status === 'Hazırlanıyor' && oldStatus === 'Beklemede') {
                 const items = await tx.orderitems.findMany({
                     where: { OrderId: orderId },
-                    include: { products: true }
+                    include: { products: { include: { product_barcodes: true } } }
                 });
 
                 let outOfStockItems = [];
@@ -312,7 +369,7 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
 
                 if (deductedBatches && Array.isArray(deductedBatches)) {
                     for (const d of deductedBatches) {
-                        await tx.wms_stock_balances.update({
+                        await tx.wms_stock_balances.updateMany({
                             where: { id: d.batchId },
                             data: { quantity: { increment: d.quantity } }
                         });
@@ -366,6 +423,11 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
                     where: { Id: orderId },
                     data: { OrderStatus: toPrismaStatus(status), PickerId: null }
                 });
+            } else if (status === 'İptal' || status === 'İptal Edildi') {
+                await tx.orders.update({
+                    where: { Id: orderId },
+                    data: { OrderStatus: toPrismaStatus(status), PickerId: null, CartId: null, CartSectionIds: null }
+                });
             } else {
                 await tx.orders.update({
                     where: { Id: orderId },
@@ -386,7 +448,7 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
 });
 
 // DELETE /api/orders/:id - Siparişi ve kalemlerini sil
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('order_cancel'), async (req, res) => {
     const orderId = Number(req.params.id);
     
     try {
@@ -464,13 +526,13 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/orders/:id/approve - Siparişi Onayla ve Kutu/Kargo Ata
-router.put('/:id/approve', authMiddleware, async (req, res) => {
+router.put('/:id/approve', authMiddleware, checkPermission('order_approve'), async (req, res) => {
     try {
         const orderId = Number(req.params.id);
         
         const items = await prisma.orderitems.findMany({
             where: { OrderId: orderId },
-            include: { products: true }
+            include: { products: { include: { product_barcodes: true } } }
         });
         
         if (items.length === 0) return res.status(400).json({ success: false, message: 'Siparişte ürün yok.' });
@@ -644,7 +706,7 @@ router.get('/by-cargo/:barcode', authMiddleware, async (req, res) => {
             include: {
                 customers: true,
                 orderitems: {
-                    include: { products: true }
+                    include: { products: { include: { product_barcodes: true } } }
                 }
             }
         });
@@ -662,7 +724,7 @@ router.get('/by-cargo/:barcode', authMiddleware, async (req, res) => {
             items: order.orderitems.map(oi => ({
                 ...oi,
                 ProductName: oi.products?.ProductName,
-                ProductCode: oi.products?.Barcode
+                ProductCode: oi.products?.product_barcodes ? JSON.stringify(oi.products.product_barcodes.map(pb => pb.barcode)) : '[]'
             }))
         };
         
@@ -675,7 +737,7 @@ router.get('/by-cargo/:barcode', authMiddleware, async (req, res) => {
 
 
 // PUT /api/orders/:id/pack - Siparişi paketle
-router.put('/:id/pack', authMiddleware, async (req, res) => {
+router.put('/:id/pack', authMiddleware, checkPermission('order_ship'), async (req, res) => {
     const { BoxId, TrackingNumber } = req.body;
     try {
         await prisma.orders.update({

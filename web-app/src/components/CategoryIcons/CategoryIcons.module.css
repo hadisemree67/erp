@@ -1,0 +1,54 @@
+.iconsWrapper {
+  margin-top: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.iconItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  flex: 1;
+}
+
+.iconItem:hover {
+  transform: translateY(-3px);
+}
+
+.iconItem:hover .iconCircle {
+  border-color: var(--primary);
+  color: var(--primary);
+  background-color: var(--secondary);
+}
+
+.iconCircle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-color);
+  background-color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dark);
+  transition: all 0.2s;
+}
+
+.iconTitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dark);
+  text-align: center;
+  line-height: 1.3;
+}
+
+.iconSquare {
+  border-radius: 12px;
+  background-color: var(--bg-gray);
+  border: none;
+  color: var(--text-light);
+}

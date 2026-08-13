@@ -9,6 +9,7 @@ const router = express.Router();
 const db = require('../db');
 const { logActivity } = require('../utils/logger');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
 const formatDatesForMySQL = (data) => {
     const formatted = { ...data };
@@ -22,7 +23,7 @@ const formatDatesForMySQL = (data) => {
 };
 
 // GET: Son 100 hareketi getir
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('view_activity_log'),  checkPermission('view_activity_log'), async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT a.id, a.user_id, a.action_type, a.target_table, a.target_id, a.description, a.created_at, a.is_undone, u.name as user_name
@@ -45,7 +46,7 @@ const ALLOWED_TABLES = [
 ];
 
 // POST: Geri Al (Undo)
-router.post('/:id/undo', authMiddleware, async (req, res) => {
+router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'),  checkPermission('view_activity_log'), async (req, res) => {
     const logId = req.params.id;
 
     // GÜVENLİK DÜZELTMESİ: Header fallback'i kaldırıldı. Yalnızca doğrulanmış JWT user ID kabul edilir.
@@ -96,10 +97,46 @@ router.post('/:id/undo', authMiddleware, async (req, res) => {
                 return res.status(400).json({ success: false, message: 'Geri alınacak eski veri bulunamadı.' });
             }
             const data = formatDatesForMySQL(oldData);
+            
+            const _barcodes = data._barcodes;
+            const _suppliers = data._suppliers;
+            const _stocks = data._stocks;
+            delete data._barcodes;
+            delete data._suppliers;
+            delete data._stocks;
+
             const keys = Object.keys(data);
             const values = keys.map(k => (typeof data[k] === 'object' && data[k] !== null && !(data[k] instanceof Date) ? JSON.stringify(data[k]) : data[k]));
 
             await connection.query(`INSERT INTO ?? (??) VALUES (?)`, [log.target_table, keys, values]);
+
+            if (log.target_table === 'products') {
+                const insertedId = data.Id || data.id || log.target_id;
+                if (_barcodes && Array.isArray(_barcodes)) {
+                    for (const barcode of _barcodes) {
+                         await connection.query('INSERT INTO product_barcodes (product_id, barcode) VALUES (?, ?)', [insertedId, barcode]);
+                    }
+                }
+                if (_suppliers && Array.isArray(_suppliers)) {
+                    for (const supp of _suppliers) {
+                         const startDate = supp.contract_start_date ? new Date(supp.contract_start_date) : null;
+                         const endDate = supp.contract_end_date ? new Date(supp.contract_end_date) : null;
+                         await connection.query(
+                             'INSERT INTO product_suppliers (product_id, supplier_id, contract_file, contract_start_date, contract_end_date, is_primary, unit_price, lead_time_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                             [insertedId, supp.supplier_id, supp.contract_file, startDate, endDate, supp.is_primary, supp.unit_price, supp.lead_time_days]
+                         );
+                    }
+                }
+                if (_stocks && Array.isArray(_stocks)) {
+                    for (const stock of _stocks) {
+                         const expDate = stock.expiration_date ? new Date(stock.expiration_date) : null;
+                         await connection.query(
+                             'INSERT INTO wms_stock_balances (product_id, warehouse_id, shelf_code, batch_number, quantity, expiration_date) VALUES (?, ?, ?, ?, ?, ?)',
+                             [insertedId, stock.warehouse_id, stock.shelf_code, stock.batch_number, stock.quantity, expDate]
+                         );
+                    }
+                }
+            }
         }
         // 3. UPDATE işlemini geri alma -> UPDATE
         else if (log.action_type === 'UPDATE') {

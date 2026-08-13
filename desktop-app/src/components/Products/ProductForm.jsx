@@ -22,6 +22,7 @@
 import { apiFetch } from '../../utils/api';
 import { useState, useEffect } from 'react';
 import Barcode from 'react-barcode';
+import WebCategorySelector from './WebCategorySelector';
 
 const ProductForm = ({ product, onClose, currentUser }) => {
   const isEditing = !!product;
@@ -71,6 +72,20 @@ const ProductForm = ({ product, onClose, currentUser }) => {
       }
   }
 
+  // Web Categories parsing
+  const safeParseJSON = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try {
+          const parsed = JSON.parse(data);
+          return Array.isArray(parsed) ? parsed : [];
+      } catch (e) { return []; }
+  };
+
+  const initialWebCategories = safeParseJSON(product?.web_categories);
+  const initialWebSubcategories = safeParseJSON(product?.web_subcategories);
+  const initialWebSubtitles = safeParseJSON(product?.web_subtitles);
+
   // 1. Durum (State) Tanımlamaları ve Hook'lar
 
   const [formData, setFormData] = useState({
@@ -99,6 +114,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     supplier_id: product?.supplier_id || '',
     critical_stock_level: product?.critical_stock_level || 0,
     shelf_life_months: product?.shelf_life_months || 0,
+    is_active: product ? (product.is_active === 1 || product.is_active === true) : true,
   });
 
   const [barcodes, setBarcodes] = useState(initialBarcodes);
@@ -114,6 +130,20 @@ const ProductForm = ({ product, onClose, currentUser }) => {
   const [materialsList, setMaterialsList] = useState([]);
   const [machineList, setMachineList] = useState([]);
   const [supplierList, setSupplierList] = useState([]);
+  const [webCategorySelection, setWebCategorySelection] = useState(
+    product?.web_categories
+      ? {
+          category_name: typeof product.web_categories === 'string' ? JSON.parse(product.web_categories)[0] : product.web_categories[0],
+          subcategory_name: typeof product.web_subcategories === 'string' ? JSON.parse(product.web_subcategories)[0] : product.web_subcategories?.[0],
+          subtitle_name: typeof product.web_subtitles === 'string' ? JSON.parse(product.web_subtitles)[0] : product.web_subtitles?.[0]
+        }
+      : {}
+  );
+  
+  const [showBrandLogoModal, setShowBrandLogoModal] = useState(false);
+  const [selectedBrandForLogo, setSelectedBrandForLogo] = useState(null);
+  const [brandLogoFile, setBrandLogoFile] = useState(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   
   const [productSuppliers, setProductSuppliers] = useState(
     product?.suppliers && product.suppliers.length > 0 
@@ -234,6 +264,36 @@ const ProductForm = ({ product, onClose, currentUser }) => {
         alert('Sunucu hatası.');
     } finally {
         setAddingBrand(false);
+    }
+  };
+
+  const handleUploadBrandLogo = async () => {
+    if (!brandLogoFile || !selectedBrandForLogo) return;
+    setUploadingLogo(true);
+    
+    const fd = new FormData();
+    fd.append('logo', brandLogoFile);
+
+    try {
+        const res = await apiFetch(`http://localhost:3000/api/brands/${selectedBrandForLogo.id}`, {
+            method: 'PUT',
+            headers: {
+                'X-User-Id': currentUser?.id 
+            },
+            body: fd
+        });
+        const data = await res.json();
+        if (data.success) {
+            setShowBrandLogoModal(false);
+            setBrandLogoFile(null);
+            await fetchBrands();
+        } else {
+            console.error(data.message || 'Hata oluştu.');
+        }
+    } catch (err) {
+        console.error('Sunucu hatası.');
+    } finally {
+        setUploadingLogo(false);
     }
   };
 
@@ -400,6 +460,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     // forEach'ten gelen herhangi bir değeri ezmek için yığın (stacking) alanlarını ekle
     submitData.set('is_stackable', formData.is_stackable ? 1 : 0);
     submitData.set('max_stack_limit', formData.max_stack_limit || 1);
+    submitData.set('is_active', formData.is_active ? 1 : 0);
 
     // Boş barkodları filtrele
     const validBarcodes = barcodes.filter(b => b.trim() !== '');
@@ -410,6 +471,15 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     const combinedExisting = [...existingImages, ...validNewUrls];
     submitData.set('existingImages', JSON.stringify(combinedExisting));
 
+    if (webCategorySelection) {
+        submitData.set('web_categories', JSON.stringify(webCategorySelection.category_name ? [webCategorySelection.category_name] : []));
+        submitData.set('web_subcategories', JSON.stringify(webCategorySelection.subcategory_name ? [webCategorySelection.subcategory_name] : []));
+        submitData.set('web_subtitles', JSON.stringify(webCategorySelection.subtitle_name ? [webCategorySelection.subtitle_name] : []));
+    } else {
+        submitData.set('web_categories', '[]');
+        submitData.set('web_subcategories', '[]');
+        submitData.set('web_subtitles', '[]');
+    }
     // Reçete JSON'ını filtrele ve kaydet
     // Boş adımları ve malzemeleri temizle
     const validSteps = routingSteps.filter(s => s.operation.trim() !== '' || s.machine_id !== '').map(s => ({
@@ -480,6 +550,20 @@ const ProductForm = ({ product, onClose, currentUser }) => {
       {error && <div style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '6px', marginBottom: '20px' }}>{error}</div>}
 
       <form onSubmit={handleSubmit}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', padding: '10px', backgroundColor: formData.is_active ? '#ecfdf5' : '#fef2f2', borderRadius: '6px', border: `1px solid ${formData.is_active ? '#a7f3d0' : '#fecaca'}` }}>
+            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <div style={{ position: 'relative' }}>
+                    <input type="checkbox" name="is_active" checked={formData.is_active} onChange={(e) => setFormData({...formData, is_active: e.target.checked})} style={{ opacity: 0, position: 'absolute', width: 0, height: 0 }} />
+                    <div style={{ width: '44px', height: '24px', backgroundColor: formData.is_active ? '#10b981' : '#ef4444', borderRadius: '12px', transition: 'all 0.3s', position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: '2px', left: formData.is_active ? '22px' : '2px', width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', transition: 'all 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+                    </div>
+                </div>
+                <span style={{ marginLeft: '12px', fontWeight: 'bold', color: formData.is_active ? '#065f46' : '#991b1b' }}>
+                    {formData.is_active ? 'Ürün Aktif (Satışa Açık)' : 'Ürün Pasif (Satışa Kapalı)'}
+                </span>
+            </label>
+        </div>
+        
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
           
           <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -540,123 +624,74 @@ const ProductForm = ({ product, onClose, currentUser }) => {
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ürün Adı *</label>
-            <input type="text" name="ProductName" value={formData.ProductName} onChange={handleChange} required style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+            <input type="text" name="ProductName" value={formData.ProductName} onChange={handleChange} required autoFocus style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Kategori *</label>
-                {!showNewCategoryInput && (
-                    <button type="button" onClick={() => setShowNewCategoryInput(true)} title="Yeni Kategori Ekle" style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>+</button>
-                )}
-            </div>
-            
-            {showNewCategoryInput ? (
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory(); } }} placeholder="Yeni Kategori Adı" style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                    <button type="button" onClick={handleAddCategory} disabled={addingCategory} style={{ padding: '0 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>{addingCategory ? '...' : 'Ekle'}</button>
-                    <button type="button" onClick={() => setShowNewCategoryInput(false)} style={{ padding: '0 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>İptal</button>
-                </div>
-            ) : (
-                <select name="Category" value={formData.Category} onChange={handleChange} required style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
-                  <option value="">Seçiniz...</option>
-                  {Array.isArray(categoryList) && categoryList.map(c => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                  ))}
-                </select>
-            )}
-          </div>
+        </div>{/* grid kapanışı */}
 
+        <div style={{ marginBottom: '24px' }}>
+          <WebCategorySelector
+            value={webCategorySelection}
+            onChange={setWebCategorySelection}
+          />
+        </div>
+
+        {/* MARKA + SATIŞ FİYATI */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', minHeight: '24px' }}>
                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Marka *</label>
                 {!showNewBrandInput && (
-                    <button type="button" onClick={() => setShowNewBrandInput(true)} title="Yeni Marka Ekle" style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>+</button>
+                    <button type="button" onClick={() => setShowNewBrandInput(true)} title="Yeni Marka Ekle" style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', padding: 0, lineHeight: 1 }}>+</button>
                 )}
             </div>
-            
             {showNewBrandInput ? (
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <input type="text" value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddBrand(); } }} placeholder="Yeni Marka Adı" style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    <input type="text" value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddBrand(); } }} placeholder="Yeni Marka Adı" style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
                     <button type="button" onClick={handleAddBrand} disabled={addingBrand} style={{ padding: '0 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>{addingBrand ? '...' : 'Ekle'}</button>
                     <button type="button" onClick={() => setShowNewBrandInput(false)} style={{ padding: '0 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>İptal</button>
                 </div>
             ) : (
-                <select name="Brand" value={formData.Brand} onChange={handleChange} required style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
-                  <option value="">Seçiniz...</option>
-                  {Array.isArray(brandList) && brandList.map(b => (
-                      <option key={b.id} value={b.name}>{b.name}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <select name="Brand" value={formData.Brand} onChange={handleChange} required style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', boxSizing: 'border-box' }}>
+                      <option value="">Seçiniz...</option>
+                      {Array.isArray(brandList) && brandList.map(b => (
+                          <option key={b.id} value={b.name}>{b.name}</option>
+                      ))}
+                    </select>
+                    {formData.Brand && (
+                        <button type="button"
+                            onClick={() => {
+                                const b = brandList.find(x => x.name === formData.Brand);
+                                if(b) {
+                                    setSelectedBrandForLogo(b);
+                                    setShowBrandLogoModal(true);
+                                }
+                            }}
+                            style={{ padding: '0 12px', background: '#f8fafc', color: '#3b82f6', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}
+                            title="Logoyu Düzenle">
+                            📷
+                        </button>
+                    )}
+                </div>
             )}
           </div>
 
-
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Satış Fiyatı (₺) *</label>
-            <input type="number" step="0.01" name="SalePrice" value={formData.SalePrice} onChange={handleChange} required style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px', minHeight: '24px' }}>
+                <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Satış Fiyatı (₺) *</label>
+            </div>
+            <input type="number" step="0.01" name="SalePrice" value={formData.SalePrice} onChange={handleChange} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} />
           </div>
+        </div>
 
+        {/* RAF ÖMRÜ + TEDARİK TİPİ */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Raf Ömrü (Ay)</label>
             <input type="number" step="1" min="0" name="shelf_life_months" value={formData.shelf_life_months} onChange={handleChange} placeholder="Örn: 12" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
           </div>
 
-
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Genişlik (cm)</label>
-              <input type="number" step="0.01" name="Width" value={formData.Width} onChange={handleChange} placeholder="Örn: 10" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Yükseklik (cm)</label>
-              <input type="number" step="0.01" name="Height" value={formData.Height} onChange={handleChange} placeholder="Örn: 5" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Derinlik (cm)</label>
-              <input type="number" step="0.01" name="Depth" value={formData.Depth} onChange={handleChange} placeholder="Örn: 20" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap' }}>Çap (cm) <span style={{color: '#94a3b8', fontWeight: 'normal', fontSize: '11px'}}>(Silindirik)</span></label>
-              <input type="number" step="0.01" name="Diameter" value={formData.Diameter} onChange={handleChange} placeholder="Örn: 8" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ağırlık (kg/gr)</label>
-              <input type="number" step="0.01" name="Weight" value={formData.Weight} onChange={handleChange} placeholder="Örn: 1.5" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                Kritik Stok Seviyesi
-                <span title="Stok miktarı bu seviyenin altına düştüğünde ana sayfada uyarı verir." style={{ cursor: 'help', color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                </span>
-              </label>
-              <input type="number" step="1" min="0" name="critical_stock_level" value={formData.critical_stock_level} onChange={handleChange} placeholder="Örn: 100" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', gridColumn: '1 / -1', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <input type="checkbox" id="is_stackable" name="is_stackable" checked={formData.is_stackable} onChange={(e) => setFormData({...formData, is_stackable: e.target.checked})} style={{ width: '18px', height: '18px', marginRight: '10px', cursor: 'pointer' }} />
-              <label htmlFor="is_stackable" style={{ fontSize: '14px', fontWeight: '600', color: '#166534', cursor: 'pointer' }}>Üst Üste İstiflenebilir mi?</label>
-            </div>
-            
-            {formData.is_stackable && (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <label style={{ fontSize: '13px', fontWeight: '600', color: '#166534', marginBottom: '6px' }}>Maksimum Kat Sayısı</label>
-                <input type="number" min="1" name="max_stack_limit" value={formData.max_stack_limit} onChange={handleChange} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #86efac', backgroundColor: 'white' }} />
-              </div>
-            )}
-          </div>
-          
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Tedarik Tipi *</label>
             <select name="supply_type" value={formData.supply_type} onChange={handleChange} required style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white' }}>
@@ -665,62 +700,109 @@ const ProductForm = ({ product, onClose, currentUser }) => {
               <option value="OUTSOURCED">Fason Üretim (Dışarıda Yaptırılan)</option>
             </select>
           </div>
+        </div>
 
-          {(formData.supply_type === 'PURCHASE' || formData.supply_type === 'OUTSOURCED') && (
-            <div style={{ gridColumn: '1 / -1', marginTop: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <label style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>
-                        {formData.supply_type === 'OUTSOURCED' ? 'Fason Üreticiler & Sözleşmeler' : 'Tedarikçi Firmalar & Sözleşmeler'}
-                    </label>
-                    <button type="button" onClick={addProductSupplier} style={{ fontSize: '12px', padding: '6px 12px', backgroundColor: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}>+ Tedarikçi Ekle</button>
-                </div>
-                
-                {productSuppliers.map((supplier, sIndex) => (
-                    <div key={supplier.localId || sIndex} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>Tedarikçi {sIndex + 1}</span>
-                            {productSuppliers.length > 1 && (
-                                <button type="button" onClick={() => removeProductSupplier(sIndex)} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>Sil ✕</button>
-                            )}
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Firma Seçimi *</label>
-                                <select value={supplier.supplier_id} onChange={(e) => handleProductSupplierChange(sIndex, 'supplier_id', e.target.value)} required style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '13px' }}>
-                                    <option value="">Seçiniz...</option>
-                                    {supplierList.map(s => (
-                                        <option key={s.Id} value={s.Id}>{s.SupplierName}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Birim Fiyat (₺)</label>
-                                <input type="number" step="0.01" value={supplier.unit_price} onChange={(e) => handleProductSupplierChange(sIndex, 'unit_price', e.target.value)} placeholder="0.00" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Başlangıç</label>
-                                <input type="date" value={supplier.contract_start_date} onChange={(e) => handleProductSupplierChange(sIndex, 'contract_start_date', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Bitiş</label>
-                                <input type="date" value={supplier.contract_end_date} onChange={(e) => handleProductSupplierChange(sIndex, 'contract_end_date', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gridColumn: '1 / -1' }}>
-                                <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Dosyası (PDF vb.)</label>
-                                {supplier.contract_file && !supplier.remove_contract && (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', padding: '8px', backgroundColor: '#ecfdf5', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
-                                        <a href={supplier.contract_file.startsWith('http') ? supplier.contract_file : `http://localhost:3000${supplier.contract_file}`} target="_blank" rel="noreferrer" style={{ fontSize: '13px', color: '#059669', textDecoration: 'none', fontWeight: '500' }}>Mevcut Sözleşmeyi Görüntüle</a>
-                                        <button type="button" onClick={() => handleProductSupplierChange(sIndex, 'remove_contract', true)} style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Kaldır</button>
-                                    </div>
-                                )}
-                                <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => handleProductSupplierFileChange(sIndex, e.target.files[0])} style={{ padding: '6px', border: '1px dashed #94a3b8', borderRadius: '6px', fontSize: '12px' }} />
-                            </div>
-                        </div>
-                    </div>
-                ))}
+        {/* GENİŞLİK / YÜKSEKLİK / DERİNLİK / AĞIRLIK / ÇAP / KRİTİK STOK - 6'lı tek satır */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Genişlik (cm)</label>
+            <input type="number" step="0.01" name="Width" value={formData.Width} onChange={handleChange} placeholder="Örn: 10" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Yükseklik (cm)</label>
+            <input type="number" step="0.01" name="Height" value={formData.Height} onChange={handleChange} placeholder="Örn: 5" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Derinlik (cm)</label>
+            <input type="number" step="0.01" name="Depth" value={formData.Depth} onChange={handleChange} placeholder="Örn: 20" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Ağırlık (kg)</label>
+            <input type="number" step="0.01" name="Weight" value={formData.Weight} onChange={handleChange} placeholder="Örn: 1.5" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title="Çap (cm) (Silindirik)">Çap (cm)</label>
+            <input type="number" step="0.01" name="Diameter" value={formData.Diameter} onChange={handleChange} placeholder="Örn: 8" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Kritik Stok
+              <span title="Stok miktarı bu seviyenin altına düştüğünde uyarı verir." style={{ cursor: 'help', color: '#94a3b8', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+              </span>
+            </label>
+            <input type="number" step="1" min="0" name="critical_stock_level" value={formData.critical_stock_level} onChange={handleChange} placeholder="Örn: 100" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+        </div>
+
+        {/* İSTİFLENEBİLİR */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px', padding: '16px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <input type="checkbox" id="is_stackable" name="is_stackable" checked={formData.is_stackable} onChange={(e) => setFormData({...formData, is_stackable: e.target.checked})} style={{ width: '18px', height: '18px', marginRight: '10px', cursor: 'pointer' }} />
+            <label htmlFor="is_stackable" style={{ fontSize: '14px', fontWeight: '600', color: '#166534', cursor: 'pointer' }}>Üst Üste İstiflenebilir mi?</label>
+          </div>
+          {formData.is_stackable && (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ fontSize: '13px', fontWeight: '600', color: '#166534', marginBottom: '6px' }}>Maksimum Kat Sayısı</label>
+              <input type="number" min="1" name="max_stack_limit" value={formData.max_stack_limit} onChange={handleChange} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #86efac', backgroundColor: 'white' }} />
             </div>
           )}
         </div>
+
+        {/* TEDARİKÇİ */}
+        {(formData.supply_type === 'PURCHASE' || formData.supply_type === 'OUTSOURCED') && (
+          <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>
+                      {formData.supply_type === 'OUTSOURCED' ? 'Fason Üreticiler & Sözleşmeler' : 'Tedarikçi Firmalar & Sözleşmeler'}
+                  </label>
+                  <button type="button" onClick={addProductSupplier} style={{ fontSize: '12px', padding: '6px 12px', backgroundColor: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}>+ Tedarikçi Ekle</button>
+              </div>
+              {productSuppliers.map((supplier, sIndex) => (
+                  <div key={supplier.localId || sIndex} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>Tedarikçi {sIndex + 1}</span>
+                          {productSuppliers.length > 1 && (
+                              <button type="button" onClick={() => removeProductSupplier(sIndex)} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>Sil ✕</button>
+                          )}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Firma Seçimi *</label>
+                              <select value={supplier.supplier_id} onChange={(e) => handleProductSupplierChange(sIndex, 'supplier_id', e.target.value)} required style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '13px' }}>
+                                  <option value="">Seçiniz...</option>
+                                  {supplierList.map(s => (
+                                      <option key={s.Id} value={s.Id}>{s.SupplierName}</option>
+                                  ))}
+                              </select>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Birim Fiyat (₺)</label>
+                              <input type="number" step="0.01" value={supplier.unit_price} onChange={(e) => handleProductSupplierChange(sIndex, 'unit_price', e.target.value)} placeholder="0.00" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Başlangıç</label>
+                              <input type="date" value={supplier.contract_start_date} onChange={(e) => handleProductSupplierChange(sIndex, 'contract_start_date', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Bitiş</label>
+                              <input type="date" value={supplier.contract_end_date} onChange={(e) => handleProductSupplierChange(sIndex, 'contract_end_date', e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px' }} />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gridColumn: '1 / -1' }}>
+                              <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Dosyası (PDF vb.)</label>
+                              {supplier.contract_file && !supplier.remove_contract && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', padding: '8px', backgroundColor: '#ecfdf5', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
+                                      <a href={supplier.contract_file.startsWith('http') ? supplier.contract_file : `http://localhost:3000${supplier.contract_file}`} target="_blank" rel="noreferrer" style={{ fontSize: '13px', color: '#059669', textDecoration: 'none', fontWeight: '500' }}>Mevcut Sözleşmeyi Görüntüle</a>
+                                      <button type="button" onClick={() => handleProductSupplierChange(sIndex, 'remove_contract', true)} style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Kaldır</button>
+                                  </div>
+                              )}
+                              <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => handleProductSupplierFileChange(sIndex, e.target.files[0])} style={{ padding: '6px', border: '1px dashed #94a3b8', borderRadius: '6px', fontSize: '12px' }} />
+                          </div>
+                      </div>
+                  </div>
+              ))}
+          </div>
+        )}
 
         <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '24px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -916,6 +998,26 @@ const ProductForm = ({ product, onClose, currentUser }) => {
                           <button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#3b82f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', color: 'white' }}>Ekle</button>
                       </div>
                   </form>
+              </div>
+          </div>
+      )}
+
+      {showBrandLogoModal && selectedBrandForLogo && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+              <div style={{ backgroundColor: 'white', padding: '32px', borderRadius: '12px', width: '400px', textAlign: 'center', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#0f172a' }}>{selectedBrandForLogo.name} Logosu Ekle</h3>
+                  <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Bu marka için bir görsel (.png, .jpg, .svg) seçiniz.</p>
+                  
+                  <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => setBrandLogoFile(e.target.files[0])}
+                      style={{ width: '100%', padding: '12px', marginBottom: '20px' }}
+                  />
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                      <button type="button" onClick={() => { setShowBrandLogoModal(false); setBrandLogoFile(null); }} style={{ flex: 1, padding: '10px', backgroundColor: '#f1f5f9', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', color: '#475569' }}>İptal</button>
+                      <button type="button" onClick={handleUploadBrandLogo} disabled={uploadingLogo || !brandLogoFile} style={{ flex: 1, padding: '10px', backgroundColor: '#3b82f6', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', color: 'white' }}>{uploadingLogo ? 'Yükleniyor...' : 'Kaydet'}</button>
+                  </div>
               </div>
           </div>
       )}

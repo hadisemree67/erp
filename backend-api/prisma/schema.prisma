@@ -54,6 +54,7 @@ model box_suppliers {
 model brands {
   id         Int       @id @default(autoincrement())
   name       String    @unique(map: "name") @db.VarChar(100)
+  logo_url   String?   @db.VarChar(255)
   created_at DateTime? @default(now()) @db.Timestamp(0)
 }
 
@@ -131,10 +132,14 @@ model customers {
   CustomerName String         @db.VarChar(150)
   Phone        String?        @db.VarChar(20)
   Email        String?        @db.VarChar(100)
-  Address      String?        @db.VarChar(255)
+  Address      String?        @db.Text
   City         String?        @db.VarChar(100)
   Gender       String?        @db.VarChar(20)
-  Age          Int?
+  BirthDate    String?        @db.VarChar(20)
+  Password     String?        @db.VarChar(255)
+  IsVerified   Boolean?       @default(false)
+  OtpCode      String?        @db.VarChar(10)
+  OtpExpiry    DateTime?      @db.DateTime(0)
   crm_accounts crm_accounts[]
   crm_tickets  crm_tickets[]
   orders       orders[]
@@ -477,7 +482,7 @@ model production_requests {
 
 model products {
   Id                          Int                   @id @default(autoincrement())
-  Barcode                     String?               @db.Text
+
   ProductName                 String                @db.VarChar(150)
   Brand                       String                @db.VarChar(100)
   Category                    String                @db.VarChar(100)
@@ -504,6 +509,7 @@ model products {
   max_stack_limit             Int?                  @default(1)
   critical_stock_level        Int?                  @default(0)
   minimum_production_quantity Int?                  @default(0)
+  is_active                   Boolean?              @default(true)
   supplier_id                 Int?
   contract_file               String?               @db.VarChar(255)
   contract_start_date         DateTime?             @db.Date
@@ -511,6 +517,9 @@ model products {
   shelf_life_months           Int?                  @default(0)
   lead_time_days              Int?                  @default(0)
   supply_type                 products_supply_type? @default(MANUFACTURE)
+  web_categories              Json?
+  web_subcategories           Json?
+  web_subtitles               Json?
   orderitems                  orderitems[]
   product_barcodes            product_barcodes[]
   product_suppliers           product_suppliers[]
@@ -790,6 +799,40 @@ model picking_carts {
   warehouse       warehouses              @relation(fields: [warehouse_id], references: [id], onDelete: Cascade)
   sections        picking_cart_sections[]
   orders          orders[]
+}
+
+model web_categories {
+  id                Int                 @id @default(autoincrement())
+  name              String              @db.VarChar(100)
+  slug              String              @unique @db.VarChar(150)
+  icon              String?             @db.VarChar(50)
+  is_active         Boolean?            @default(true)
+  created_at        DateTime?           @default(now()) @db.Timestamp(0)
+  web_subcategories web_subcategories[]
+}
+
+model web_subcategories {
+  id             Int                 @id @default(autoincrement())
+  category_id    Int
+  name           String              @db.VarChar(100)
+  slug           String              @db.VarChar(150)
+  is_active      Boolean?            @default(true)
+  web_categories web_categories      @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  web_subtitles  web_subtitles[]
+
+  @@unique([category_id, slug])
+}
+
+model web_subtitles {
+  id                Int                 @id @default(autoincrement())
+  subcategory_id    Int
+  name              String              @db.VarChar(100)
+  slug              String              @db.VarChar(150)
+  url               String?             @db.VarChar(255)
+  is_active         Boolean?            @default(true)
+  web_subcategories web_subcategories   @relation(fields: [subcategory_id], references: [id], onDelete: Cascade)
+
+  @@unique([subcategory_id, slug])
 }
 
 model picking_cart_sections {

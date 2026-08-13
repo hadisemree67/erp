@@ -1,0 +1,6 @@
+﻿POST /api/login HTTP/1.1
+Host: localhost:3000
+Content-Type: application/json
+Connection: close
+
+{"username":"sqlmap_test_user","password":"wrong_password","role":"kullanici"}

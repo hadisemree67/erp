@@ -60,6 +60,24 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [existingDocuments, setExistingDocuments] = useState([]);
+
+    React.useEffect(() => {
+        if (isEditing && employee?.id) {
+            const fetchDocuments = async () => {
+                try {
+                    const res = await apiFetch(`http://localhost:3000/api/employees/${employee.id}/documents`);
+                    const data = await res.json();
+                    if (data.success) {
+                        setExistingDocuments(data.documents);
+                    }
+                } catch (err) {
+                    console.error('Mevcut belgeler yüklenemedi:', err);
+                }
+            };
+            fetchDocuments();
+        }
+    }, [isEditing, employee]);
 
     // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
 
@@ -67,12 +85,42 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
         const { name, value, type, files } = e.target;
         if (type === 'file') {
             if (name === 'documents') {
-                setFormData({ ...formData, documents: files });
+                const newFiles = Array.from(files);
+                const currentDocs = Array.isArray(formData.documents) ? formData.documents : (formData.documents ? Array.from(formData.documents) : []);
+                setFormData({ ...formData, documents: [...currentDocs, ...newFiles] });
+                // Aynı dosyayı tekrar seçebilmek için input'u temizle
+                e.target.value = '';
             } else {
                 setFormData({ ...formData, [name]: files[0] });
             }
         } else {
             setFormData({ ...formData, [name]: value });
+        }
+    };
+
+    const handleRemovePendingDocument = (index) => {
+        const newDocs = [...formData.documents];
+        newDocs.splice(index, 1);
+        setFormData({ ...formData, documents: newDocs });
+    };
+
+    const handleDeleteExistingDocument = async (docId) => {
+        if (!window.confirm('Bu belgeyi kalıcı olarak silmek istediğinize emin misiniz?')) return;
+        
+        try {
+            const res = await apiFetch(`http://localhost:3000/api/employees/documents/${docId}`, {
+                method: 'DELETE',
+                headers: { 'X-User-Id': currentUser?.id }
+            });
+            const data = await res.json();
+            if (data.success) {
+                setExistingDocuments(prev => prev.filter(doc => doc.id !== docId));
+            } else {
+                alert(data.message || 'Belge silinemedi.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Belge silinirken hata oluştu.');
         }
     };
 
@@ -231,6 +279,40 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
                         <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Özlük Dosyaları (Sicil, Kimlik, Diploma, Sözleşme vb.)</label>
                         <input type="file" name="documents" multiple onChange={handleChange} style={{ padding: '10px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
                         <div style={{ marginTop: '8px', fontSize: '12px', color: '#64748b' }}>Birden fazla dosya (PDF, Word, JPG) seçebilirsiniz. Maksimum 10 dosya.</div>
+                        
+                        {formData.documents && formData.documents.length > 0 && (
+                            <div style={{ marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
+                                <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px', display: 'block' }}>Yeni Eklenecek Belgeler (Henüz Kaydedilmedi):</label>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {formData.documents.map((file, index) => (
+                                        <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0f172a', padding: '8px 12px', backgroundColor: '#fffbeb', borderRadius: '6px', border: '1px solid #fde68a' }}>
+                                            📄 <span style={{ fontWeight: '500' }}>{file.name}</span>
+                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px' }}>
+                                                <a href={URL.createObjectURL(file)} target="_blank" rel="noopener noreferrer" style={{ color: '#d97706', textDecoration: 'none', fontSize: '12px', fontWeight: '600' }}>Aç</a>
+                                                <button type="button" onClick={() => handleRemovePendingDocument(index)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: 0 }}>Sil</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {isEditing && existingDocuments.length > 0 && (
+                            <div style={{ marginTop: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
+                                <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '8px', display: 'block' }}>Daha Önce Yüklenen Belgeler:</label>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {existingDocuments.map(doc => (
+                                        <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0f172a', textDecoration: 'none', padding: '8px 12px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #cbd5e1', transition: 'all 0.2s' }} onMouseOver={e => Object.assign(e.currentTarget.style, { borderColor: '#94a3b8', backgroundColor: '#f1f5f9' })} onMouseOut={e => Object.assign(e.currentTarget.style, { borderColor: '#cbd5e1', backgroundColor: 'white' })}>
+                                            📄 <span style={{ fontWeight: '500' }}>{doc.file_name}</span> 
+                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px' }}>
+                                                <a href={`http://localhost:3000${doc.file_path}`} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none', fontSize: '12px', fontWeight: '600' }}>Görüntüle</a>
+                                                <button type="button" onClick={() => handleDeleteExistingDocument(doc.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: 0 }}>Sil</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                 </div>

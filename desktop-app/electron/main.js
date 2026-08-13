@@ -10,18 +10,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ============================================================================
-// WINDOWS GÖRÜNTÜ VE ODAKLANMA (FOCUS / INPUT) HATASI ÇÖZÜMLERİ
-// Windows'ta uygulamanın alta alınıp açılmadan (minimize/restore yapılmadan)
-// liste seçimlerinin (select) açılmaması, yazıların yazılamaması veya arayüzün
-// donması sorununu engellemek için Chromium motor ayarları:
-// ============================================================================
-app.disableHardwareAcceleration(); // Donanım hızlandırmasını kapatmak Windows focus/click hatalarını genelde çözer
-
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
-app.commandLine.appendSwitch('disable-background-timer-throttling');
-app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+// WINDOWS ODAKLANMA (FOCUS / INPUT) HATASI ÇÖZÜMLERİ
+// Donanım hızlandırmasını kapatmak bazen input lag/odak kaybına sebep olduğu için kaldırıldı.
+// Bunun yerine React tarafında inputlara autoFocus eklendi.
 
 let mainWindow;
 

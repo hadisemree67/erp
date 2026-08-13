@@ -20,8 +20,11 @@
  */
 
 export const apiFetch = async (url, options = {}) => {
-    if (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        url = url.replace('localhost:3000', `${window.location.hostname}:3000`).replace('127.0.0.1:3000', `${window.location.hostname}:3000`);
+    const envApiUrl = import.meta.env.VITE_API_URL;
+    if (envApiUrl) {
+        url = url.replace('http://localhost:3000', envApiUrl).replace('http://127.0.0.1:3000', envApiUrl);
+    } else if (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        url = url.replace('http://localhost:3000', window.location.origin).replace('http://127.0.0.1:3000', window.location.origin);
     }
     const token = localStorage.getItem('token');
     

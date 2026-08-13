@@ -203,10 +203,21 @@ const ProductList = ({ onNavigate, currentUser }) => {
 
   const filteredProducts = products.filter(p => p.Category !== 'Hammadde').filter(p => {
       const search = searchTerm.toLowerCase();
+      
+      const searchInField = (field) => {
+          if (!field) return false;
+          if (typeof field === 'string') return field.toLowerCase().includes(search);
+          if (Array.isArray(field)) return field.some(item => item.toLowerCase().includes(search));
+          return JSON.stringify(field).toLowerCase().includes(search);
+      };
+
       return p.ProductName?.toLowerCase().includes(search) || 
              p.Barcode?.toLowerCase().includes(search) ||
              p.Category?.toLowerCase().includes(search) ||
-             p.Brand?.toLowerCase().includes(search);
+             p.Brand?.toLowerCase().includes(search) ||
+             searchInField(p.web_categories) ||
+             searchInField(p.web_subcategories) ||
+             searchInField(p.web_subtitles);
   });
 
   // 5. Arayüz (UI) Çizimi ve Render Edilmesi
@@ -398,6 +409,13 @@ const ProductList = ({ onNavigate, currentUser }) => {
                     }
                 } catch (e) {}
 
+                let webCat = '';
+                try { webCat = Array.isArray(product.web_categories) ? product.web_categories[0] : (typeof product.web_categories === 'string' ? JSON.parse(product.web_categories)[0] : ''); } catch(e) {}
+                let webSub = '';
+                try { webSub = Array.isArray(product.web_subcategories) ? product.web_subcategories[0] : (typeof product.web_subcategories === 'string' ? JSON.parse(product.web_subcategories)[0] : ''); } catch(e) {}
+                let webTitle = '';
+                try { webTitle = Array.isArray(product.web_subtitles) ? product.web_subtitles[0] : (typeof product.web_subtitles === 'string' ? JSON.parse(product.web_subtitles)[0] : ''); } catch(e) {}
+
                 return (
                 <tr key={product.Id} className="hover-row" style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s', backgroundColor: selectedIds.includes(product.Id) ? '#f0f9ff' : 'transparent' }} onMouseOver={e => e.currentTarget.style.backgroundColor = selectedIds.includes(product.Id) ? '#f0f9ff' : '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = selectedIds.includes(product.Id) ? '#f0f9ff' : 'transparent'}>
                   <td style={{ padding: '12px 16px', textAlign: 'center' }}>
@@ -409,8 +427,10 @@ const ProductList = ({ onNavigate, currentUser }) => {
                       />
                   </td>
                   <td style={{ padding: '12px 24px', color: '#0f172a', fontWeight: '500', textAlign: 'left' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>{barcodes.length > 0 ? barcodes.join(', ') : '-'}</span>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            {barcodes.length > 0 ? barcodes.map((b, idx) => <span key={idx}>{b}</span>) : <span>-</span>}
+                        </div>
                         {barcodes.length > 0 && (
                             <button
                                 type="button"
@@ -455,12 +475,20 @@ const ProductList = ({ onNavigate, currentUser }) => {
                                 {product.supply_type === 'PURCHASE' && <span title="Ticari Ürün" style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#dcfce7', color: '#166534' }}>Hazır</span>}
                                 {product.supply_type === 'MANUFACTURE' && <span title="Kendi Üretimimiz" style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#dbeafe', color: '#1e40af' }}>Üretim</span>}
                                 {product.supply_type === 'OUTSOURCED' && <span title="Fason Dış Üretim" style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#ffedd5', color: '#9a3412' }}>Fason</span>}
+                                {(product.is_active === 0 || product.is_active === false || product.is_active === '0' || product.is_active === 'false') && <span title="Bu ürün pasife alınmıştır" style={{ padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>Pasif</span>}
                             </div>
                             <div style={{ fontSize: '13px', color: '#475569', marginTop: '2px' }}>{product.Brand}</div>
                         </div>
                     </div>
                   </td>
-                  <td style={{ padding: '12px 24px', color: '#475569', fontSize: '14px', textAlign: 'left' }}>{product.Category}</td>
+                  <td style={{ padding: '12px 24px', color: '#475569', fontSize: '14px', textAlign: 'left' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {webCat && <span style={{ fontWeight: '600', color: '#0f172a' }}>{webCat}</span>}
+                        {webSub && <span style={{ fontSize: '12px', color: '#64748b' }}>{webSub}</span>}
+                        {webTitle && <span style={{ fontSize: '12px', color: '#94a3b8' }}>{webTitle}</span>}
+                        {!webCat && !webSub && !webTitle && <span>-</span>}
+                    </div>
+                  </td>
                   <td style={{ padding: '12px 24px', textAlign: 'center' }}>
                     <span style={{ 
                       padding: '4px 10px', borderRadius: '12px', fontSize: '13px', fontWeight: '600',

@@ -7,8 +7,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Use 192.168.10.144 for physical device on same WiFi or ngrok URL
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+// Use 192.168.10.165 for physical device on same WiFi or ngrok URL
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:3000/api';
 
 /**
  * Axios Instance Oluşturma

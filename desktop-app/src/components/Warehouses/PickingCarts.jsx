@@ -133,7 +133,7 @@ const PickingCarts = ({ currentUser }) => {
             section_count: '',
             section_prefix: '',
             barcode: cart.barcode || '',
-            sections: cart.sections ? cart.sections.map(s => ({ id: s.id, section_name: s.section_name, barcode: s.barcode || '' })) : []
+            sections: cart.sections ? cart.sections.map(s => ({ id: s.id, section_name: s.section_name, barcode: s.barcode || '', is_full: s.is_full })) : []
         });
         setIsModalOpen(true);
     };
@@ -528,6 +528,20 @@ const PickingCarts = ({ currentUser }) => {
                                                     style={{ width: '130px', flexShrink: 0, height: '42px', padding: '0 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box', margin: 0 }}
                                                 />
                                                 
+                                                {editCartId && (
+                                                    <span style={{ 
+                                                        backgroundColor: sec.is_full ? '#fef3c7' : '#f1f5f9', 
+                                                        color: sec.is_full ? '#d97706' : '#64748b', 
+                                                        padding: '4px 8px', 
+                                                        borderRadius: '6px', 
+                                                        fontSize: '12px', 
+                                                        fontWeight: 'bold',
+                                                        marginLeft: '-4px' 
+                                                    }}>
+                                                        {sec.is_full ? 'Dolu' : 'Boş'}
+                                                    </span>
+                                                )}
+
                                                 <div style={{ position: 'relative', flexShrink: 0, height: '42px', display: 'flex', alignItems: 'center' }}>
                                                     <button
                                                         type="button"

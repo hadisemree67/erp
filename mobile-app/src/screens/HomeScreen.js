@@ -61,12 +61,12 @@ export default function HomeScreen({ navigation }) {
             fetchData();
         }
 
-        // Auto-refresh every 15 seconds
+        // Auto-refresh every 10 seconds
         const intervalId = setInterval(() => {
             if (isFocused) {
                 fetchData();
             }
-        }, 15000);
+        }, 10000);
 
         return () => clearInterval(intervalId);
     }, [isFocused]);

@@ -236,7 +236,7 @@ export default function PackagingScreen({ route, navigation }) {
             if (res.data.success) {
                 isCompletedRef.current = true;
                 Alert.alert('Başarılı', 'Sipariş başarıyla paketlendi ve kargoya hazır.', [
-                    { text: 'Tamam', onPress: () => { setShowBarcodeModal(false); navigation.replace('Home'); } }
+                    { text: 'Tamam', onPress: () => { setShowBarcodeModal(false); navigation.goBack(); } }
                 ]);
             } else {
                 Alert.alert('Hata', res.data.message);

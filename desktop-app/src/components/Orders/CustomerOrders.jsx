@@ -38,6 +38,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
     const [orderItems, setOrderItems] = useState([
         { productId: '', quantity: 1, unitPrice: 0 }
     ]);
+    const [orderDescription, setOrderDescription] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     // Pack Modal state (Removed, using inline selection now)
@@ -330,7 +331,8 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                     discountAmount: calcResult.discount,
                     shipperId: selectedShipperId === 'ELDEN_TESLIM' ? null : selectedShipperId,
                     couponId: appliedCoupon ? appliedCoupon.id : null,
-                    couponCode: appliedCoupon ? appliedCoupon.code : null
+                    couponCode: appliedCoupon ? appliedCoupon.code : null,
+                    description: orderDescription
                 })
             });
 
@@ -346,6 +348,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                 setCouponCodeInput('');
                 setAppliedCoupon(null);
                 setCouponDiscount(0);
+                setOrderDescription('');
                 setOrderItems([{ productId: '', quantity: 1, unitPrice: 0 }]);
                 fetchInitialData();
             } else {
@@ -892,6 +895,11 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                     <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>{order.CargoStatus}</div>
                                                 )}
                                             </span>
+                                            {order.CartInfo && (
+                                                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '8px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                                    🛒 {order.CartInfo}
+                                                </div>
+                                            )}
                                         </td>
                                         <td style={{ padding: '16px', textAlign: 'right' }}>
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', alignItems: 'center' }}>
@@ -1180,10 +1188,12 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                                         
                                                                         const pIdStr = String(p.Id || p.id);
                                                                         const isSelectedElsewhere = orderItems.some((oi, oiIdx) => oiIdx !== index && String(oi.productId) === pIdStr);
+                                                                        const isInactive = p.is_active === 0 || p.is_active === false || p.is_active === '0' || p.is_active === 'false';
+                                                                        const isDisabled = isSelectedElsewhere || isInactive;
                                                                         
                                                                         return (
-                                                                            <option key={p.Id || p.id} value={p.Id || p.id} disabled={isSelectedElsewhere}>
-                                                                                {p.ProductName || p.name} {barcodeStr ? `(${barcodeStr})` : ''} | Stokta: {s} Adet
+                                                                            <option key={p.Id || p.id} value={p.Id || p.id} disabled={isDisabled}>
+                                                                                {p.ProductName || p.name} {barcodeStr ? `(${barcodeStr})` : ''} | Stokta: {s} Adet {isInactive ? '(PASİF)' : ''}
                                                                             </option>
                                                                         );
                                                                     })}

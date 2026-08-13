@@ -358,13 +358,8 @@ body::after {
   transform: translateY(1px);
 }
 
-/* Tablo Satırı İçi İşlem İkonları Hover Efekti */
+/* Tablo Satırı İçi İşlem İkonları Hover Efekti (İptal edildi, her zaman görünür) */
 .hover-row .action-container {
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.hover-row:hover .action-container {
   opacity: 1;
 }
 

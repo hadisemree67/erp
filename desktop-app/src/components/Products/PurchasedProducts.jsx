@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
+import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const PurchasedProducts = ({ currentUser }) => {
     // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -17,6 +18,9 @@ const PurchasedProducts = ({ currentUser }) => {
         quantity: '',
         description: 'Ticari Mal / Hammadde Satın Alma Siparişi'
     });
+
+    const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printBarcodeData, setPrintBarcodeData] = useState({ value: '', title: '' });
 
     // 3. Backend API İstekleri (Veri Çekme)
 
@@ -158,15 +162,45 @@ const PurchasedProducts = ({ currentUser }) => {
                                     const isLowStock = product.StockQuantity <= (product.critical_stock_level || 0);
                                     
                                     let displayBarcode = product.Barcode;
+                                    let barcodeList = [];
                                     if (displayBarcode?.startsWith('[')) {
-                                        try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch(e){}
+                                        try { barcodeList = JSON.parse(displayBarcode); } catch(e){}
+                                    } else if (displayBarcode) {
+                                        barcodeList = displayBarcode.split(',').map(b => b.trim());
                                     }
 
                                     return (
                                         <tr key={product.Id} className="hover-row" style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.15s', backgroundColor: 'white' }} onMouseOver={e => e.currentTarget.style.backgroundColor = '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = 'white'}>
                                             <td style={{ padding: '16px' }}>
                                                 <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '14px', marginBottom: '2px' }}>{product.ProductName}</div>
-                                                <div style={{ color: '#64748b', fontSize: '12px' }}>{displayBarcode || 'Barkod Yok'}</div>
+                                                {barcodeList.length > 0 ? (
+                                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                            {barcodeList.map((b, idx) => (
+                                                                <div key={idx} style={{ color: '#64748b', fontSize: '12px' }}>{b}</div>
+                                                            ))}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            title="Yazdır"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setPrintBarcodeData({ value: barcodeList.filter(b => b), title: product.ProductName });
+                                                                setPrintModalOpen(true);
+                                                            }}
+                                                            style={{
+                                                                padding: '4px', backgroundColor: 'transparent', border: 'none', color: '#64748b',
+                                                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px'
+                                                            }}
+                                                            onMouseOver={(e) => { e.currentTarget.style.color = '#3b82f6'; e.currentTarget.style.backgroundColor = '#e0f2fe'; }}
+                                                            onMouseOut={(e) => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                                                        >
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ color: '#64748b', fontSize: '12px' }}>Barkod Yok</div>
+                                                )}
                                             </td>
                                             <td style={{ padding: '16px', color: '#475569', fontSize: '14px' }}>
                                                 {(() => {
@@ -297,6 +331,15 @@ const PurchasedProducts = ({ currentUser }) => {
                         </form>
                     </div>
                 </div>
+            )}
+            {/* Barkod Yazdırma Modalı */}
+            {printModalOpen && (
+                <BarcodePrintModal
+                    isOpen={printModalOpen}
+                    onClose={() => setPrintModalOpen(false)}
+                    barcodeValue={printBarcodeData.value}
+                    title={printBarcodeData.title}
+                />
             )}
         </div>
     );

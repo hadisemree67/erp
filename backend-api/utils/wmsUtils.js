@@ -1,5 +1,4 @@
 /*
- * ÖZET:
  * Bu modül, Depo (WMS) sistemindeki ortak hesaplama ve kapasite kontrol
  * fonksiyonlarını barındırır. calculateShelf3D gibi hacimsel hesaplamalar
  * bu dosyadan projenin diğer modüllerine dağıtılır.

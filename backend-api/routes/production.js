@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkRole, checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger'); // assuming logger exists
 const { sendMachineMaintenanceReminderEmail, sendMachineBreakdownEmail } = require('../services/emailService');
 const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
@@ -17,7 +18,7 @@ const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 // =======================
 
 // Tüm makineleri getir
-router.get('/machines', authMiddleware, async (req, res) => {
+router.get('/machines', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         // Update status if busy_until has passed
         await db.query(`UPDATE production_machines SET status = 'Boş', busy_until = NULL WHERE status = 'Dolu' AND busy_until < NOW()`);
@@ -50,7 +51,7 @@ router.get('/machines', authMiddleware, async (req, res) => {
 });
 
 // Add a machine
-router.post('/machines', authMiddleware, async (req, res) => {
+router.post('/machines', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { name, last_maintenance, machine_code, max_capacity, min_capacity, allowed_categories, prep_time_minutes, alternative_machine_id, supplier_name, supplier_email, supplier_phone, maintenance_period_months } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Makine adı zorunludur.' });
 
@@ -92,7 +93,7 @@ router.post('/machines', authMiddleware, async (req, res) => {
 });
 
 // Update machine status manually (optional)
-router.put('/machines/:id/status', authMiddleware, async (req, res) => {
+router.put('/machines/:id/status', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { status } = req.body;
     try {
         const [result] = await db.query('UPDATE production_machines SET status = ? WHERE id = ?', [status, req.params.id]);
@@ -105,7 +106,7 @@ router.put('/machines/:id/status', authMiddleware, async (req, res) => {
 });
 
 // Edit a machine
-router.put('/machines/:id', authMiddleware, async (req, res) => {
+router.put('/machines/:id', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { id } = req.params;
     const { name, last_maintenance, machine_code, max_capacity, min_capacity, allowed_categories, prep_time_minutes, alternative_machine_id, supplier_name, supplier_email, supplier_phone, maintenance_period_months } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Makine adı zorunludur.' });
@@ -151,7 +152,7 @@ router.put('/machines/:id', authMiddleware, async (req, res) => {
 });
 
 // Report machine issue / breakdown
-router.post('/machines/:id/report-issue', authMiddleware, async (req, res) => {
+router.post('/machines/:id/report-issue', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { id } = req.params;
     const { issue_description, reporter_name } = req.body;
     try {
@@ -183,7 +184,7 @@ router.post('/machines/:id/report-issue', authMiddleware, async (req, res) => {
 });
 
 // Delete a machine
-router.delete('/machines/:id', authMiddleware, async (req, res) => {
+router.delete('/machines/:id', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { id } = req.params;
     try {
         const [result] = await db.query('DELETE FROM production_machines WHERE id = ?', [id]);
@@ -202,7 +203,7 @@ router.delete('/machines/:id', authMiddleware, async (req, res) => {
 // =======================
 
 // Uygun makineleri bul
-router.post('/orders/match', authMiddleware, async (req, res) => {
+router.post('/orders/match', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { product_id, planned_quantity } = req.body;
     if (!product_id || !planned_quantity) return res.status(400).json({ success: false, message: 'Ürün ve miktar gerekli.' });
 
@@ -284,7 +285,7 @@ router.post('/orders/match', authMiddleware, async (req, res) => {
 });
 
 // Yeni bir üretim siparişi oluştur
-router.post('/orders', authMiddleware, async (req, res) => {
+router.post('/orders', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { product_id, planned_quantity, machine_id, assigned_user_id } = req.body;
 
     if (!product_id || !planned_quantity || !machine_id) {
@@ -462,7 +463,7 @@ router.post('/orders', authMiddleware, async (req, res) => {
 });
 
 // Tüm üretim siparişlerini getir
-router.get('/orders', authMiddleware, async (req, res) => {
+router.get('/orders', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT po.*, p.ProductName as product_name, m.name as machine_name, u.name as user_name, p.Formula as product_formula
@@ -481,7 +482,7 @@ router.get('/orders', authMiddleware, async (req, res) => {
 });
 
 // Siparişi sil
-router.delete('/orders/:id', authMiddleware, async (req, res) => {
+router.delete('/orders/:id', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     try {
         const { id } = req.params;
         const [rows] = await db.query('SELECT status FROM production_orders WHERE id = ?', [id]);
@@ -504,7 +505,7 @@ router.delete('/orders/:id', authMiddleware, async (req, res) => {
 });
 
 // Siparişi arşivle
-router.post('/orders/:id/archive', authMiddleware, async (req, res) => {
+router.post('/orders/:id/archive', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -556,7 +557,7 @@ router.post('/orders/:id/archive', authMiddleware, async (req, res) => {
 });
 
 // Sipariş detaylarını getir (toplanacak malzemeler dahil)
-router.get('/orders/:id', authMiddleware, async (req, res) => {
+router.get('/orders/:id', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         const [orderRows] = await db.query(`
             SELECT po.*, p.ProductName as product_name, m.name as machine_name, u.name as user_name, p.Formula as product_formula
@@ -571,7 +572,8 @@ router.get('/orders/:id', authMiddleware, async (req, res) => {
 
         const [materialRows] = await db.query(`
             SELECT pm.*, p.ProductName as material_name, w.name as warehouse_name,
-                   p.Volume as product_volume, p.package_capacity, p.unit_type, p.package_name, p.Barcode as barcode
+                   p.Volume as product_volume, p.package_capacity, p.unit_type, p.package_name,
+                   (SELECT JSON_ARRAYAGG(barcode) FROM product_barcodes WHERE product_id = p.Id) as barcode
             FROM production_materials pm
             LEFT JOIN products p ON pm.material_product_id = p.Id
             LEFT JOIN warehouses w ON pm.warehouse_id = w.id
@@ -594,7 +596,7 @@ router.get('/orders/:id', authMiddleware, async (req, res) => {
 });
 
 // Malzemeyi toplandı olarak işaretle
-router.post('/orders/:id/pick', authMiddleware, async (req, res) => {
+router.post('/orders/:id/pick', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { material_id, actual_quantity } = req.body;
     try {
         let actQty = null;
@@ -621,7 +623,7 @@ router.post('/orders/:id/pick', authMiddleware, async (req, res) => {
 });
 
 // Üretimi başlat
-router.post('/orders/:id/start', authMiddleware, async (req, res) => {
+router.post('/orders/:id/start', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -662,7 +664,7 @@ router.post('/orders/:id/start', authMiddleware, async (req, res) => {
 });
 
 // Belirli bir üretim adımını başlat
-router.post('/orders/:id/steps/:step_id/start', authMiddleware, async (req, res) => {
+router.post('/orders/:id/steps/:step_id/start', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { id, step_id } = req.params;
     const connection = await db.getConnection();
     try {
@@ -728,7 +730,7 @@ router.post('/orders/:id/steps/:step_id/start', authMiddleware, async (req, res)
 });
 
 // Bir adım için malzemeyi doğrula
-router.post('/orders/:id/steps/:step_id/verify-material', authMiddleware, async (req, res) => {
+router.post('/orders/:id/steps/:step_id/verify-material', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { material_name } = req.body;
     try {
         const [rows] = await db.query('SELECT verified_materials FROM production_order_steps WHERE id = ? AND production_order_id = ?', [req.params.step_id, req.params.id]);
@@ -760,7 +762,7 @@ router.post('/orders/:id/steps/:step_id/verify-material', authMiddleware, async 
 });
 
 // Belirli bir üretim adımını tamamla
-router.post('/orders/:id/steps/:step_id/complete', authMiddleware, async (req, res) => {
+router.post('/orders/:id/steps/:step_id/complete', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { id, step_id } = req.params;
     const connection = await db.getConnection();
     try {
@@ -804,7 +806,7 @@ router.post('/orders/:id/steps/:step_id/complete', authMiddleware, async (req, r
 });
 
 // Üretimi tamamla
-router.post('/orders/:id/complete', authMiddleware, async (req, res) => {
+router.post('/orders/:id/complete', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { actual_quantity, waste_reason, manager_explanation, is_manager_approval, delivered_to_user_id } = req.body;
     const connection = await db.getConnection();
     try {
@@ -922,7 +924,7 @@ router.post('/orders/:id/complete', authMiddleware, async (req, res) => {
 });
 
 // Users with Üretim role
-router.get('/users', authMiddleware, async (req, res) => {
+router.get('/users', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT id, name FROM users WHERE role = 'Üretim' OR role = 'admin'`);
         res.json({ success: true, data: rows });
@@ -933,7 +935,7 @@ router.get('/users', authMiddleware, async (req, res) => {
 });
 
 // Users with Depo role
-router.get('/warehouse-users', authMiddleware, async (req, res) => {
+router.get('/warehouse-users', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         const [rows] = await db.query(`SELECT id, name FROM users WHERE role = 'Depo' OR role = 'admin'`);
         res.json({ success: true, data: rows });
@@ -946,7 +948,7 @@ router.get('/warehouse-users', authMiddleware, async (req, res) => {
 // ----------------- DEPO KABUL İŞLEMLERİ -----------------
 
 // Fetch orders waiting for warehouse acceptance
-router.get('/warehouse-acceptances', authMiddleware, async (req, res) => {
+router.get('/warehouse-acceptances', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT 
@@ -971,7 +973,7 @@ router.get('/warehouse-acceptances', authMiddleware, async (req, res) => {
 });
 
 // Mark order as accepted by warehouse manager
-router.post('/orders/:id/accept-delivery', authMiddleware, async (req, res) => {
+router.post('/orders/:id/accept-delivery', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     try {
         const [result] = await db.query(`
             UPDATE production_orders 
@@ -990,7 +992,7 @@ router.post('/orders/:id/accept-delivery', authMiddleware, async (req, res) => {
 });
 
 // Report defect / discrepancy and accept valid amount
-router.post('/orders/:id/report-defect', authMiddleware, async (req, res) => {
+router.post('/orders/:id/report-defect', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { received_quantity, reason } = req.body;
     const connection = await db.getConnection();
     try {
@@ -1043,7 +1045,7 @@ router.post('/orders/:id/report-defect', authMiddleware, async (req, res) => {
 });
 
 // Finalize stock entry by warehouse manager
-router.post('/orders/:id/warehouse-stock-entry', authMiddleware, async (req, res) => {
+router.post('/orders/:id/warehouse-stock-entry', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { shelfAllocations, batch_number, expiration_date } = req.body;
     const connection = await db.getConnection();
     try {
@@ -1153,7 +1155,7 @@ router.post('/orders/:id/warehouse-stock-entry', authMiddleware, async (req, res
 
 
 // Get max producible quantity based on stock
-router.get('/max-quantity/:productId', authMiddleware, async (req, res) => {
+router.get('/max-quantity/:productId', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         const { productId } = req.params;
         const [prodRows] = await db.query('SELECT Formula, ProductName, Category FROM products WHERE Id = ?', [productId]);
@@ -1307,7 +1309,7 @@ router.get('/max-quantity/:productId', authMiddleware, async (req, res) => {
 // ==========================================
 
 // GET: Ürün için üretim kapasitesi ve hammadde analizi
-router.get('/capacity-analysis/:productId', authMiddleware, async (req, res) => {
+router.get('/capacity-analysis/:productId', authMiddleware, checkPermission('view_production'), async (req, res) => {
     const { productId } = req.params;
     try {
         // 1. Ürün bilgilerini al
@@ -1468,10 +1470,11 @@ router.get('/capacity-analysis/:productId', authMiddleware, async (req, res) => 
 // ==========================================
 
 // Get all production requests
-router.get('/requests', authMiddleware, async (req, res) => {
+router.get('/requests', authMiddleware, checkRole(['Üretim'], 'view_production'), async (req, res) => {
     try {
         const query = `
-            SELECT pr.*, p.ProductName, p.Barcode 
+            SELECT pr.*, p.ProductName,
+                   (SELECT JSON_ARRAYAGG(barcode) FROM product_barcodes WHERE product_id = p.Id) as Barcode 
             FROM production_requests pr 
             JOIN products p ON pr.product_id = p.Id 
             ORDER BY pr.created_at DESC
@@ -1485,7 +1488,7 @@ router.get('/requests', authMiddleware, async (req, res) => {
 });
 
 // Create manual production request
-router.post('/requests', authMiddleware, async (req, res) => {
+router.post('/requests', authMiddleware, checkRole(['Üretim'], 'production_manage'), async (req, res) => {
     const { productId, quantity, reason, creator } = req.body;
     if (!productId || !quantity || !reason || !creator) {
         return res.status(400).json({ success: false, message: 'Eksik bilgi gönderildi.' });
@@ -1493,49 +1496,11 @@ router.post('/requests', authMiddleware, async (req, res) => {
 
     try {
         const [productData] = await db.query('SELECT Formula FROM products WHERE Id = ?', [productId]);
-        let bottleneckCapacity = null;
-
-        if (productData.length > 0 && productData[0].Formula) {
-            try {
-                let formulaParsed = typeof productData[0].Formula === 'string' ? JSON.parse(productData[0].Formula) : productData[0].Formula;
-                if (Array.isArray(formulaParsed) && formulaParsed.length > 0) {
-                    const machineIds = formulaParsed.map(step => step.machine_id).filter(id => id);
-                    if (machineIds.length > 0) {
-                        const [machines] = await db.query('SELECT max_capacity FROM production_machines WHERE id IN (?)', [machineIds]);
-                        for (const m of machines) {
-                            if (m.max_capacity && (bottleneckCapacity === null || m.max_capacity < bottleneckCapacity)) {
-                                bottleneckCapacity = m.max_capacity;
-                            }
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('Formula parse error in manual request:', e);
-            }
-        }
-
-        let quantitiesToRequest = [];
-        const reqQty = parseInt(quantity, 10);
-        if (bottleneckCapacity !== null && bottleneckCapacity > 0 && reqQty > bottleneckCapacity) {
-            let remaining = reqQty;
-            while (remaining > 0) {
-                if (remaining >= bottleneckCapacity) {
-                    quantitiesToRequest.push(bottleneckCapacity);
-                    remaining -= bottleneckCapacity;
-                } else {
-                    quantitiesToRequest.push(remaining);
-                    remaining = 0;
-                }
-            }
-        } else {
-            quantitiesToRequest.push(reqQty);
-        }
+        let quantitiesToRequest = [parseInt(quantity, 10)];
 
         for (let i = 0; i < quantitiesToRequest.length; i++) {
             const qtyToRequest = quantitiesToRequest[i];
-            const finalReason = quantitiesToRequest.length > 1
-                ? `${reason} - Bölüm ${i + 1}/${quantitiesToRequest.length} (Manuel Talep, Kapasiteye Bölündü)`
-                : reason;
+            const finalReason = reason;
 
             await db.query(
                 'INSERT INTO production_requests (product_id, requested_quantity, source, creator, reason, status, priority) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -1553,7 +1518,7 @@ router.post('/requests', authMiddleware, async (req, res) => {
 });
 
 // Update request status
-router.put('/requests/:id/status', authMiddleware, async (req, res) => {
+router.put('/requests/:id/status', authMiddleware, checkRole(['Üretim'], 'production_manage'), async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
@@ -1576,7 +1541,7 @@ router.put('/requests/:id/status', authMiddleware, async (req, res) => {
 });
 
 // Update product critical stock levels (for automated requests setup)
-router.put('/product-stock-rules/:productId', authMiddleware, async (req, res) => {
+router.put('/product-stock-rules/:productId', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { productId } = req.params;
     const { critical_stock_level, minimum_production_quantity } = req.body;
 
@@ -1619,7 +1584,7 @@ setInterval(checkCriticalStocks, 2 * 60 * 60 * 1000);
 setTimeout(checkCriticalStocks, 5000);
 
 // Endpoint for manual trigger if needed
-router.post('/trigger-stock-check', authMiddleware, async (req, res) => {
+router.post('/trigger-stock-check', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     await checkCriticalStocks();
     res.json({ success: true, message: 'Stok kontrolü tamamlandı.' });
 });

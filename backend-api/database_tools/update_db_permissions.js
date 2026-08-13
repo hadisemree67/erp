@@ -26,6 +26,8 @@ async function updatePermissions() {
             { key: 'production_manage', desc: 'Üretim Talebi Açma / Yönetme' }
         ];
 
+        let hasError = false;
+
         for (const perm of newPermissions) {
             try {
                 const [existing] = await db.query('SELECT id FROM permissions WHERE permission_key = ?', [perm.key]);
@@ -36,15 +38,22 @@ async function updatePermissions() {
                     console.log(`Zaten var: ${perm.key}`);
                 }
             } catch (e) {
+                hasError = true;
                 console.error(`Hata (${perm.key}):`, e.message);
             }
         }
 
-        console.log('İşlem başarıyla tamamlandı!');
-        process.exit(0);
+        if (hasError) {
+            process.exitCode = 1;
+            console.log('İşlem bazı hatalarla tamamlandı.');
+        } else {
+            console.log('İşlem başarıyla tamamlandı!');
+        }
     } catch (err) {
         console.error('Sistem Hatası:', err);
-        process.exit(1);
+        process.exitCode = 1;
+    } finally {
+        await db.end();
     }
 }
 

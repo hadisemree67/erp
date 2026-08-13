@@ -1,0 +1,132 @@
+.brandsSection {
+  margin-top: 32px;
+  display: flex;
+  gap: 20px;
+}
+
+.brandsBlock {
+  flex: 2;
+}
+
+.campaignsBlock {
+  flex: 1;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.viewAll {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.brandsContainer {
+  background-color: var(--white);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 40px;
+}
+
+.brandLogo {
+  height: 70px;
+  object-fit: contain;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.brandLogo:hover {
+  transform: scale(1.05);
+}
+
+.nextBtn {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--white);
+  color: var(--text-light);
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.nextBtn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.campaignBanner {
+  background-color: #e8f4f0;
+  border-radius: 10px;
+  padding: 20px;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.campaignTitle {
+  color: var(--text-dark);
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 2px;
+  z-index: 2;
+}
+
+.campaignSubtitle {
+  color: var(--primary);
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  z-index: 2;
+}
+
+.campaignCode {
+  background-color: var(--white);
+  color: var(--text-dark);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  display: inline-block;
+  align-self: flex-start;
+  z-index: 2;
+}
+
+.campaignCode span {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.campaignImage {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 80%;
+  object-fit: contain;
+  z-index: 1;
+  mix-blend-mode: multiply;
+}

@@ -22,7 +22,9 @@ async function createTable() {
         console.log('Mesailer (employee_overtimes) tablosu başarıyla oluşturuldu.');
     } catch (e) {
         console.error(e);
+        process.exitCode = 1;
+    } finally {
+        await db.end();
     }
-    process.exit(0);
 }
 createTable();

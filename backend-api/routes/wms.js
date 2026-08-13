@@ -9,6 +9,7 @@ const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { checkRole, checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 const { calculateShelf3D } = require('../utils/wmsUtils');
 
@@ -35,7 +36,7 @@ router.get('/warehouses/:warehouseId/locations', authMiddleware, async (req, res
 });
 
 // Depo krokisini kaydet
-router.post('/warehouses/:warehouseId/layout', authMiddleware, async (req, res) => {
+router.post('/warehouses/:warehouseId/layout', authMiddleware, checkRole(['Depo']), async (req, res) => {
     try {
         const { warehouseId } = req.params;
         const layoutData = req.body; // { grid, rows, cols }
@@ -102,7 +103,7 @@ router.get('/warehouses/:warehouseId/shelves/:shelfCode/stock', authMiddleware, 
         // 2. Get stock balances with product details
         const [stockRows] = await db.query(`
             SELECT sb.id, sb.product_id, sb.quantity, sb.batch_number, sb.expiration_date,
-                   p.ProductName, p.Barcode, p.Volume, p.package_capacity, p.unit_type, p.package_name,
+                   p.ProductName, (SELECT GROUP_CONCAT(barcode SEPARATOR ', ') FROM product_barcodes WHERE product_id = p.Id) as Barcode, p.Volume, p.package_capacity, p.unit_type, p.package_name,
                    p.Width, p.Height, p.Depth, p.is_stackable, p.max_stack_limit
             FROM wms_stock_balances sb
             JOIN products p ON sb.product_id = p.Id
@@ -134,53 +135,57 @@ router.get('/warehouses/:warehouseId/shelves/:shelfCode/stock', authMiddleware, 
 });
 
 // Belirli bir rafı boşalt
-router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', authMiddleware, async (req, res) => {
+router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', authMiddleware, checkRole(['Depo']), async (req, res) => {
+    const clearConn = await db.getConnection();
     try {
         const { warehouseId, shelfCode } = req.params;
-        const userId = req.body.userId || 1; // Fallback or pass from frontend
+        const userId = req.body.userId || 1;
 
-        await db.query('BEGIN');
+        await clearConn.query('START TRANSACTION');
 
         // 1. Get all stock in this shelf
-        const [stockRows] = await db.query(`
+        const [stockRows] = await clearConn.query(`
             SELECT product_id, quantity, batch_number, expiration_date 
             FROM wms_stock_balances 
             WHERE warehouse_id = ? AND shelf_code = ? AND quantity > 0
         `, [warehouseId, shelfCode]);
 
         if (stockRows.length === 0) {
-            await db.query('ROLLBACK');
+            await clearConn.query('ROLLBACK');
+            clearConn.release();
             return res.json({ success: true, message: 'Raf zaten boş.' });
         }
 
         // 2. For each product, insert OUT movement, update global stock
         for (let row of stockRows) {
             // Movement
-            await db.query(
+            await clearConn.query(
                 'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 [row.product_id, userId, 'OUT', row.quantity, warehouseId, shelfCode, row.batch_number, row.expiration_date, 'Raf Sıfırlama (Boşaltma)']
             );
 
             // Global stock
-            await db.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [row.quantity, row.product_id]);
+            await clearConn.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [row.quantity, row.product_id]);
         }
 
         // 3. Delete balances
-        await db.query('DELETE FROM wms_stock_balances WHERE warehouse_id = ? AND shelf_code = ?', [warehouseId, shelfCode]);
+        await clearConn.query('DELETE FROM wms_stock_balances WHERE warehouse_id = ? AND shelf_code = ?', [warehouseId, shelfCode]);
 
         await logActivity(req.user?.id || userId, 'DELETE', 'wms_stock_balances', null, `Raf tamamen boşaltıldı: Depo #${warehouseId}, Raf: ${shelfCode}`);
 
-        await db.query('COMMIT');
+        await clearConn.query('COMMIT');
+        clearConn.release();
         res.json({ success: true, message: 'Raf başarıyla boşaltıldı.' });
     } catch (error) {
-        await db.query('ROLLBACK');
+        await clearConn.query('ROLLBACK').catch(() => {});
+        clearConn.release();
         console.error('Raf boşaltma hatası:', error);
         res.status(500).json({ success: false, message: 'Raf boşaltılırken hata oluştu.' });
     }
 });
 
 // Bir stok girişi kaydet (Mal Kabul)
-router.post('/stock-entry', authMiddleware, async (req, res) => {
+router.post('/stock-entry', authMiddleware, checkPermission('stock_entry'), async (req, res) => {
     const { productId, warehouseId, shelfAllocations, userId, description, batchNumber, expirationDate, supplierId, unitPrice } = req.body;
 
     let formattedExpDate = expirationDate || null;
@@ -195,6 +200,14 @@ router.post('/stock-entry', authMiddleware, async (req, res) => {
     const conn = await db.getConnection();
     try {
         await conn.query('START TRANSACTION');
+
+        // GÜVENLİK: Depo gerçekten var mı kontrolü
+        const [warehouseCheck] = await conn.query('SELECT id FROM warehouses WHERE id = ?', [warehouseId]);
+        if (warehouseCheck.length === 0) {
+            await conn.query('ROLLBACK');
+            conn.release();
+            return res.status(404).json({ success: false, message: 'Belirtilen depo bulunamadı.' });
+        }
 
         // Fetch product volume and shelf life
         const [productData] = await conn.query('SELECT Volume, package_capacity, shelf_life_months FROM products WHERE Id = ?', [productId]);
@@ -213,6 +226,14 @@ router.post('/stock-entry', authMiddleware, async (req, res) => {
                 await conn.query('ROLLBACK');
                 conn.release();
                 return res.status(400).json({ success: false, message: 'Raf ve geçerli bir miktar girilmelidir.' });
+            }
+
+            // GÜVENLİK: Raf gerçekten var mı kontrolü
+            const [shelfCheck] = await conn.query('SELECT id FROM warehouse_shelves WHERE warehouse_id = ? AND shelf_code = ?', [warehouseId, allocation.shelfCode]);
+            if (shelfCheck.length === 0) {
+                await conn.query('ROLLBACK');
+                conn.release();
+                return res.status(404).json({ success: false, message: `Hata: ${allocation.shelfCode} kodlu raf bulunamadı!` });
             }
 
             // Volumetric and Dimensional check
@@ -352,7 +373,7 @@ router.post('/stock-entry', authMiddleware, async (req, res) => {
 });
 
 // Detaylı stok bakiyelerini getir (Stok Listesi / Envanter)
-router.get('/stock-list', authMiddleware, async (req, res) => {
+router.get('/stock-list', authMiddleware, checkPermission('inventory_view'), async (req, res) => {
     try {
         const query = `
             SELECT 
@@ -362,9 +383,12 @@ router.get('/stock-list', authMiddleware, async (req, res) => {
                 b.expiration_date,
                 p.Id as product_id,
                 p.ProductName as product_name,
-                p.Barcode as barcode,
+                (SELECT GROUP_CONCAT(pb.barcode SEPARATOR ',') FROM product_barcodes pb WHERE pb.product_id = p.Id) as barcode,
                 p.Brand as brand,
                 p.Category as category,
+                p.web_categories as web_categories,
+                p.web_subcategories as web_subcategories,
+                p.web_subtitles as web_subtitles,
                 p.SalePrice as sale_price,
                 p.PurchasePrice as PurchasePrice,
                 b.shelf_code,
@@ -456,7 +480,7 @@ router.get('/stock-list', authMiddleware, async (req, res) => {
 });
 
 // Bir stok bakiyesi satırını güncelle (Stok Düzenle)
-router.put('/stock/:id', authMiddleware, async (req, res) => {
+router.put('/stock/:id', authMiddleware, checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
     const { quantity, batch_number, expiration_date, supplier_id, unit_price } = req.body;
 
@@ -485,6 +509,15 @@ router.put('/stock/:id', authMiddleware, async (req, res) => {
         let formattedExpDate = req.body.expiration_date !== undefined ? (req.body.expiration_date || null) : oldData.expiration_date;
         if (formattedExpDate && typeof formattedExpDate === 'string' && formattedExpDate.includes('T')) {
             formattedExpDate = formattedExpDate.split('T')[0];
+        }
+
+        // GÜVENLİK: Yeni depo ve raf mevcut mu kontrolü
+        if (warehouse_id_val !== oldData.warehouse_id || shelf_code_val !== oldData.shelf_code) {
+            const [shelfCheck] = await db.query('SELECT id FROM warehouse_shelves WHERE warehouse_id = ? AND shelf_code = ?', [warehouse_id_val, shelf_code_val]);
+            if (shelfCheck.length === 0) {
+                await db.query('ROLLBACK');
+                return res.status(404).json({ success: false, message: `Hata: Hedef depo veya raf (${shelf_code_val}) bulunamadı!` });
+            }
         }
 
         // Update balance
@@ -563,12 +596,12 @@ router.put('/stock/:id', authMiddleware, async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Stok düzenleme hatası:', error);
-        res.status(500).json({ success: false, message: 'HATA: ' + error.message });
+        res.status(500).json({ success: false, message: 'Stok girişi sırasında sunucu hatası oluştu.' });
     }
 });
 
 // Bir stok bakiyesi satırını sil
-router.delete('/stock/:id', authMiddleware, async (req, res) => {
+router.delete('/stock/:id', authMiddleware, checkRole(['Depo']), async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -607,7 +640,7 @@ router.delete('/stock/:id', authMiddleware, async (req, res) => {
 });
 
 // Tekli transfer uç noktası
-router.post('/transfer', authMiddleware, async (req, res) => {
+router.post('/transfer', authMiddleware, checkRole(['Depo']), async (req, res) => {
     const { balanceId, quantity, targetWarehouseId, targetShelfCode, userId, description } = req.body;
 
     if (!balanceId || !quantity || !targetWarehouseId || !targetShelfCode) {
@@ -638,6 +671,13 @@ router.post('/transfer', authMiddleware, async (req, res) => {
         if (balance.quantity < transferQty) {
             await db.query('ROLLBACK');
             return res.status(400).json({ success: false, message: 'Transfer miktarı mevcut stoktan büyük olamaz.' });
+        }
+
+        // GÜVENLİK: Hedef raf mevcut mu kontrolü
+        const [targetShelfCheck] = await db.query('SELECT id FROM warehouse_shelves WHERE warehouse_id = ? AND shelf_code = ?', [targetWarehouseId, targetShelfCode]);
+        if (targetShelfCheck.length === 0) {
+            await db.query('ROLLBACK');
+            return res.status(404).json({ success: false, message: 'Hedef depo veya raf bulunamadı.' });
         }
 
         // Deduct from source
@@ -684,7 +724,7 @@ router.post('/transfer', authMiddleware, async (req, res) => {
 });
 
 // Stok bakiyeleri için toplu işlem uç noktası
-router.post('/bulk-action', authMiddleware, async (req, res) => {
+router.post('/bulk-action', authMiddleware, checkRole(['Depo']), async (req, res) => {
     const { balanceIds, actionType, quantity, targetWarehouseId, targetShelfCode, userId, description } = req.body;
 
     if (!Array.isArray(balanceIds) || balanceIds.length === 0) {
@@ -774,7 +814,7 @@ router.post('/bulk-action', authMiddleware, async (req, res) => {
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Toplu işlem hatası:', error);
-        res.status(500).json({ success: false, message: 'İşlem sırasında hata oluştu: ' + error.message });
+        res.status(500).json({ success: false, message: 'İşlem sırasında sunucu hatası oluştu.' });
     }
 });
 
@@ -997,8 +1037,8 @@ router.get('/shelf-by-barcode', authMiddleware, async (req, res) => {
 });
 
 // FEFO tabanlı hızlı stok düşüşü (Hızlı Çıkış)
-router.post('/deduct-fefo', authMiddleware, async (req, res) => {
-    const { barcode, quantity, warehouseId, shelfCode } = req.body;
+router.post('/deduct-fefo', authMiddleware, checkRole(['Depo']), async (req, res) => {
+    const { barcode, quantity, warehouseId, shelfCode, description } = req.body;
     const userId = req.user?.id || 1;
     const deductQty = parseInt(quantity, 10);
 
@@ -1010,7 +1050,13 @@ router.post('/deduct-fefo', authMiddleware, async (req, res) => {
         await db.query('BEGIN');
 
         // 1. Ürünü bul
-        const [products] = await db.query('SELECT * FROM products WHERE (Barcode = ? OR JSON_CONTAINS(Barcode, ?))', [barcode, JSON.stringify(barcode)]);
+        const [products] = await db.query(`
+            SELECT p.* FROM products p 
+            JOIN product_barcodes pb ON p.Id = pb.product_id
+            WHERE pb.barcode = ?
+            LIMIT 1
+        `, [barcode]);
+        
         if (products.length === 0) {
             await db.query('ROLLBACK');
             return res.status(404).json({ success: false, message: 'Bu barkoda ait ürün bulunamadı.' });
@@ -1064,7 +1110,7 @@ router.post('/deduct-fefo', authMiddleware, async (req, res) => {
                     balance.shelf_code,
                     balance.batch_number,
                     balance.expiration_date,
-                    'Hızlı Çıkış (FEFO) ile düşüldü.'
+                    description ? `Acil Çıkış: ${description.trim()}` : 'Hızlı Çıkış (FEFO) ile düşüldü.'
                 ]
             );
         }
@@ -1077,13 +1123,17 @@ router.post('/deduct-fefo', authMiddleware, async (req, res) => {
         // Kritik stok kontrolü (async, response'u bekletmez)
         checkAndNotifyLowStock(product.Id).catch(err => console.error("Stok uyarısı hatası (FEFO):", err));
 
-        await logActivity(userId, 'UPDATE', 'wms_stock_balances', null, `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName}`);
+        const logMsg = description && description.trim()
+            ? `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName} - Açıklama: ${description.trim()}`
+            : `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName}`;
+            
+        await logActivity(userId, 'UPDATE', 'wms_stock_balances', null, logMsg);
 
         res.json({ success: true, message: `${deductQty} adet stok başarıyla FEFO sırasına göre düşüldü.` });
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('FEFO stok düşümü hatası:', error);
-        res.status(500).json({ success: false, message: 'Stok düşülürken hata oluştu.' });
+        res.status(500).json({ success: false, message: 'Stok düşülürken hata oluştu: ' + error.message });
     }
 });
 

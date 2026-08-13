@@ -10,22 +10,29 @@ const { logActivity } = require('../utils/logger');
 const multer = require('multer');
 const path = require('path');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         cb(null, 'uploads/');
     },
     filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'employee-' + uniqueSuffix + path.extname(file.originalname));
+        // GÜVENLİK: Kriptografik UUID kullanımı ve uzantı sanitizasyonu
+        const crypto = require('crypto');
+        const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '');
+        cb(null, 'employee-' + crypto.randomUUID() + ext);
     }
 });
 const fileFilter = (req, file, cb) => {
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf', '.doc', '.docx', '.txt'];
+    const ext = path.extname(file.originalname).toLowerCase();
+
+    // GÜVENLİK: Hem MIME türü hem de dosya uzantısı kontrol edilir.
+    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
         cb(null, true);
     } else {
-        cb(new Error('Desteklenmeyen dosya formatı.'), false);
+        cb(new Error('Desteklenmeyen dosya formatı. Güvenlik nedeniyle sadece resim ve belge türlerine izin verilir.'), false);
     }
 };
 const upload = multer({ 
@@ -144,8 +151,40 @@ async function ensureEmployeeTables() {
 }
 ensureEmployeeTables();
 
+// GET: Belirli personelin dosyalarını getir
+router.get('/:id/documents', authMiddleware, checkPermission('view_employees'), async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [rows] = await db.query('SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY uploaded_at DESC', [id]);
+        res.json({ success: true, documents: rows });
+    } catch (error) {
+        console.error('Personel belgeleri alınırken hata:', error);
+        res.status(500).json({ success: false, message: 'Belgeler alınamadı.' });
+    }
+});
+
+// DELETE: Personel belgesini sil
+router.delete('/documents/:docId', authMiddleware, checkPermission('employee_edit'), async (req, res) => {
+    const { docId } = req.params;
+    try {
+        const [rows] = await db.query('SELECT * FROM employee_documents WHERE id = ?', [docId]);
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Belge bulunamadı.' });
+        }
+        const doc = rows[0];
+        await db.query('DELETE FROM employee_documents WHERE id = ?', [docId]);
+        
+        await logActivity(req.user?.id, 'DELETE', 'employee_documents', docId, `Personelin "${doc.file_name}" adlı belgesini sildi.`, null);
+        
+        res.json({ success: true, message: 'Belge başarıyla silindi.' });
+    } catch (error) {
+        console.error('Belge silinirken hata:', error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
+    }
+});
+
 // GET: Tüm personelleri getir
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, checkPermission('view_employees'), async (req, res) => {
     try {
         const { search } = req.query;
         let query = 'SELECT * FROM employees';
@@ -176,8 +215,17 @@ router.get('/', authMiddleware, async (req, res) => {
             console.log('İzin sorgusu uyarı:', e.message);
         }
 
+        let employeesToUpdateToAktif = [];
+
         const enrichedRows = rows.map(emp => {
             const activeLeave = leaveMap[emp.id];
+            
+            // Eğer veritabanında 'İzinli' gözüküyorsa ama şu an aktif bir izni yoksa (izin tarihi geçmişse)
+            if (!activeLeave && (emp.work_status === 'İzinli' || emp.work_status === 'İzinli / Raporlu')) {
+                emp.work_status = 'Aktif';
+                employeesToUpdateToAktif.push(emp.id);
+            }
+            
             const isOnLeave = Boolean(activeLeave || emp.work_status === 'İzinli' || emp.work_status === 'İzinli / Raporlu');
             return {
                 ...emp,
@@ -187,20 +235,29 @@ router.get('/', authMiddleware, async (req, res) => {
             };
         });
 
+        // Arka planda süresi bitmiş izinlilerin durumunu Aktif'e çekelim
+        if (employeesToUpdateToAktif.length > 0) {
+            db.query("UPDATE employees SET work_status = 'Aktif' WHERE id IN (?)", [employeesToUpdateToAktif]).catch(err => {
+                console.error("İzni biten personelleri aktif yaparken hata:", err);
+            });
+        }
+
         res.json(enrichedRows);
     } catch (error) {
         console.error('Personel listesi çekilirken hata:', error);
-        res.status(500).json({ success: false, message: 'Personeller getirilemedi: ' + (error.sqlMessage || error.message || error) });
+        // GÜVENLİK: Dahili hata detayları istemciye gönderilmiyor
+        res.status(500).json({ success: false, message: 'Personeller getirilemedi.' });
     }
 });
 
 // POST: Yeni personel ekle
-router.post('/', authMiddleware, uploadMiddleware, async (req, res) => {
+router.post('/', authMiddleware, checkPermission('employee_add'), uploadMiddleware, async (req, res) => {
     const { full_name, department, position, phone, email, start_date, salary, tckn, address, blood_type, emergency_contact, work_status } = req.body;
     const photo_path = req.files && req.files.photo ? `/uploads/${req.files.photo[0].filename}` : null;
 
-    if (!full_name || !safeStr(full_name)) {
-        return res.status(400).json({ success: false, message: 'Ad Soyad zorunludur.' });
+    const requiredFields = [full_name, department, position, phone, email, start_date, tckn, address, blood_type, emergency_contact];
+    if (requiredFields.some(field => !field || String(field).trim() === '') || salary === undefined || salary === '' || salary === null) {
+        return res.status(400).json({ success: false, message: 'Fotoğraf ve belge hariç tüm alanların doldurulması zorunludur.' });
     }
 
     try {
@@ -226,12 +283,12 @@ router.post('/', authMiddleware, uploadMiddleware, async (req, res) => {
         res.status(201).json({ success: true, message: 'Personel başarıyla eklendi.' });
     } catch (error) {
         console.error('Personel eklenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası: ' + (error.sqlMessage || error.message || error) });
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
     }
 });
 
 // PUT: Seçili personelleri toplu düzenle
-router.put('/bulk-edit', authMiddleware, async (req, res) => {
+router.put('/bulk-edit', authMiddleware, checkPermission('employee_edit'), async (req, res) => {
     const { ids, updates } = req.body;
 
     let finalUpdates = updates;
@@ -307,7 +364,7 @@ router.put('/bulk-edit', authMiddleware, async (req, res) => {
 });
 
 // DELETE: Seçili personelleri toplu sil
-router.delete('/bulk', authMiddleware, async (req, res) => {
+router.delete('/bulk', authMiddleware, checkPermission('employee_delete'), async (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'Silinecek personel seçilmedi.' });
@@ -339,12 +396,13 @@ router.delete('/bulk', authMiddleware, async (req, res) => {
 });
 
 // PUT: Personel güncelle
-router.put('/:id', authMiddleware, uploadMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, checkPermission('employee_edit'), uploadMiddleware, async (req, res) => {
     const { id } = req.params;
     const { full_name, department, position, phone, email, start_date, salary, tckn, address, blood_type, emergency_contact, work_status } = req.body;
 
-    if (!full_name || !safeStr(full_name)) {
-        return res.status(400).json({ success: false, message: 'Ad Soyad zorunludur.' });
+    const requiredFields = [full_name, department, position, phone, email, start_date, tckn, address, blood_type, emergency_contact];
+    if (requiredFields.some(field => !field || String(field).trim() === '') || salary === undefined || salary === '' || salary === null) {
+        return res.status(400).json({ success: false, message: 'Fotoğraf ve belge hariç tüm alanların doldurulması zorunludur.' });
     }
 
     try {
@@ -382,12 +440,12 @@ router.put('/:id', authMiddleware, uploadMiddleware, async (req, res) => {
         res.json({ success: true, message: 'Personel güncellendi.' });
     } catch (error) {
         console.error('Personel güncellenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası: ' + (error.sqlMessage || error.message || error) });
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
     }
 });
 
 // POST: Çıkış Talebi Başlat (Offboard Request)
-router.post('/:id/offboard-request', authMiddleware, async (req, res) => {
+router.post('/:id/offboard-request', authMiddleware, checkPermission('view_offboarding'), async (req, res) => {
     const { id } = req.params;
     const { sgk_code, end_date, exit_reason, severance_pay } = req.body;
 
@@ -429,6 +487,16 @@ router.put('/:id/offboard-approve', authMiddleware, async (req, res) => {
     const { id } = req.params;
     const { department, status } = req.body; // department: 'it', 'idari', 'finans', 'hukuk'
 
+    // GÜVENLİK: Body'den gelen department bilgisine göre dinamik yetki kontrolü
+    // DB map: 'it'->'it', 'idari'->'idari', 'finans'->'finance', 'hukuk'->'legal'
+    const deptMap = { it: 'it', idari: 'idari', finans: 'finance', hukuk: 'legal' };
+    const requiredPerm = `offboard_approve_${deptMap[department] || department}`;
+    const userPerms = req.user.permissions || [];
+    if (req.user.role !== 'admin' && !userPerms.includes(requiredPerm)) {
+        return res.status(403).json({ success: false, message: `Bu işlem için (${department}) yetkiniz bulunmamaktadır.` });
+    }
+
+
     try {
         const [rows] = await db.query('SELECT offboarding_status, offboarding_details FROM employees WHERE id = ?', [id]);
         if (rows.length === 0 || rows[0].offboarding_status !== 'PENDING') {
@@ -452,7 +520,7 @@ router.put('/:id/offboard-approve', authMiddleware, async (req, res) => {
 });
 
 // PUT: Personel çıkışını kesinleştir (Offboard Finalize)
-router.put('/:id/offboard', authMiddleware, async (req, res) => {
+router.put('/:id/offboard', authMiddleware, checkPermission('employee_edit'), async (req, res) => {
     const { id } = req.params;
 
     try {
@@ -485,7 +553,7 @@ router.put('/:id/offboard', authMiddleware, async (req, res) => {
 
 
 // DELETE: Personel sil
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('employee_delete'), async (req, res) => {
     const { id } = req.params;
     try {
         const [oldRows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
@@ -536,7 +604,7 @@ function calculateTotalLeaveEntitlement(startDateStr) {
 }
 
 // GET: İzin bakiyesini getir (hem leave-balance hem leave-summary uyumluluğu)
-router.get(['/:id/leave-balance', '/:id/leave-summary'], authMiddleware, async (req, res) => {
+router.get(['/:id/leave-balance', '/:id/leave-summary'], authMiddleware, checkPermission('view_leaves'), async (req, res) => {
     const { id } = req.params;
     try {
         const [empRows] = await db.query('SELECT start_date FROM employees WHERE id = ?', [id]);
@@ -560,19 +628,19 @@ router.get(['/:id/leave-balance', '/:id/leave-summary'], authMiddleware, async (
 });
 
 // GET: İzin geçmişini getir
-router.get('/:id/leaves', authMiddleware, async (req, res) => {
+router.get('/:id/leaves', authMiddleware, checkPermission('view_leaves'), async (req, res) => {
     const { id } = req.params;
     try {
         const [rows] = await db.query('SELECT * FROM employee_leaves WHERE employee_id = ? ORDER BY start_date DESC, id DESC', [id]);
         res.json({ success: true, leaves: rows });
     } catch (error) {
         console.error('İzin geçmişi alınırken hata:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası: ' + (error.sqlMessage || error.message || error) });
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
     }
 });
 
 // POST: Personel için yeni izin ekle
-router.post('/:id/leaves', authMiddleware, async (req, res) => {
+router.post('/:id/leaves', authMiddleware, checkPermission('manage_leaves'), async (req, res) => {
     const { id } = req.params;
     const { leave_type, payment_status, start_date, end_date, total_days, description } = req.body;
 
@@ -596,7 +664,7 @@ router.post('/:id/leaves', authMiddleware, async (req, res) => {
         res.json({ success: true, message: 'İzin başarıyla kaydedildi.' });
     } catch (error) {
         console.error('İzin eklenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası: ' + (error.sqlMessage || error.message || error) });
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
     }
 });
 // ==========================================
@@ -604,7 +672,7 @@ router.post('/:id/leaves', authMiddleware, async (req, res) => {
 // ==========================================
 
 // Bir veya birden fazla personel için mesai ekle
-router.post('/overtimes', authMiddleware, async (req, res) => {
+router.post('/overtimes', authMiddleware, checkPermission('employee_edit'), async (req, res) => {
     let conn;
     try {
         const { employee_ids, overtime_date, hours, month, year } = req.body;
@@ -655,7 +723,7 @@ router.post('/overtimes', authMiddleware, async (req, res) => {
 });
 
 // Belirli bir ay ve yıl için maaşları ve mesaileri getir
-router.get('/salaries', authMiddleware, async (req, res) => {
+router.get('/salaries', authMiddleware, checkPermission('view_employees'), async (req, res) => {
     try {
         const month = parseInt(req.query.month);
         const year = parseInt(req.query.year);
@@ -672,7 +740,8 @@ router.get('/salaries', authMiddleware, async (req, res) => {
                 e.position, 
                 e.salary as base_salary,
                 COALESCE(SUM(eo.hours), 0) as total_overtime_hours,
-                COALESCE(SUM(eo.total_amount), 0) as total_overtime_pay
+                COALESCE(SUM(eo.total_amount), 0) as total_overtime_pay,
+                (SELECT COALESCE(SUM(total_days), 0) FROM employee_leaves el WHERE el.employee_id = e.id AND el.leave_type = 'Hastalık Raporu' AND MONTH(el.start_date) = ? AND YEAR(el.start_date) = ?) as report_leave_days
             FROM employees e
             LEFT JOIN employee_overtimes eo ON e.id = eo.employee_id AND eo.month = ? AND eo.year = ?
             WHERE e.is_active = 1 OR e.work_status = 'Çalışıyor'
@@ -680,12 +749,23 @@ router.get('/salaries', authMiddleware, async (req, res) => {
             ORDER BY e.full_name ASC
         `;
 
-        const [rows] = await db.query(query, [month, year]);
+        const [rows] = await db.query(query, [month, year, month, year]);
 
-        const data = rows.map(r => ({
-            ...r,
-            total_salary: parseFloat(r.base_salary || 0) + parseFloat(r.total_overtime_pay || 0)
-        }));
+        const data = rows.map(r => {
+            const baseSalary = parseFloat(r.base_salary || 0);
+            const overtimePay = parseFloat(r.total_overtime_pay || 0);
+            const reportDays = parseInt(r.report_leave_days || 0);
+            
+            // 1 günlük maaş (Aylık Maaş / 30 gün)
+            const dailyWage = baseSalary / 30;
+            const reportDeduction = reportDays * dailyWage;
+
+            return {
+                ...r,
+                report_deduction: reportDeduction,
+                total_salary: baseSalary + overtimePay - reportDeduction
+            };
+        });
 
         res.json({ success: true, data });
     } catch (error) {

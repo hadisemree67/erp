@@ -9,9 +9,10 @@ const express = require('express');
 const router = express.Router();
 const { getPendingEntries, approveEntry, rejectEntry } = require('../services/whatsappBot');
 const authMiddleware = require('../middleware/auth');
+const { checkPermission } = require('../middleware/rbac');
 
 // Tüm bekleyen işlemleri getir
-router.get('/', authMiddleware, async (req, res, next) => {
+router.get('/', authMiddleware, checkPermission('crm_tickets'), async (req, res, next) => {
     try {
         const entries = await getPendingEntries();
         res.json({ success: true, data: entries });
@@ -21,7 +22,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
 });
 
 // İşlemi Onayla
-router.post('/:id/approve', authMiddleware, async (req, res, next) => {
+router.post('/:id/approve', authMiddleware, checkPermission('crm_tickets'), async (req, res, next) => {
     try {
         const { id } = req.params;
         const { approverName } = req.body;
@@ -37,7 +38,7 @@ router.post('/:id/approve', authMiddleware, async (req, res, next) => {
 });
 
 // İşlemi Reddet
-router.post('/:id/reject', authMiddleware, async (req, res, next) => {
+router.post('/:id/reject', authMiddleware, checkPermission('crm_tickets'), async (req, res, next) => {
     try {
         const { id } = req.params;
         const processorId = req.user?.id;
