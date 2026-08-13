@@ -57,6 +57,22 @@ function createWindow() {
     }
   });
 
+  // GÜVENLİK: Yeni pencerelerde (target="_blank") XSS ve zararlı URL açılmasını engelle
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('javascript:') || url.startsWith('data:') || url.startsWith('file:')) {
+      console.log(`Güvenlik nedeniyle engellenen yeni pencere (Tehlikeli URL formatı): ${url}`);
+      return { action: 'deny' };
+    }
+    // Sadece localhost kaynaklı önizlemelere veya blob: adreslerine izin ver
+    if (url.startsWith('blob:http://localhost') || url.startsWith('http://localhost')) {
+        // Not: Blob adreslerinin içinde HTML varsa bile renderer içerisinde çalışmasını 
+        // frontend'de engellediğimiz için blob izni sadece resim/pdf önizlemesi için kullanılıyor.
+        return { action: 'allow' };
+    }
+    console.log(`Güvenlik nedeniyle engellenen yeni pencere: ${url}`);
+    return { action: 'deny' };
+  });
+
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:3002');
   } else {

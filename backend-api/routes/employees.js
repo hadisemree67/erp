@@ -40,11 +40,56 @@ const upload = multer({
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: fileFilter
 });
+const checkMagicBytes = async (filePath, expectedMime) => {
+    try {
+        const fs = require('fs');
+        const fd = await fs.promises.open(filePath, 'r');
+        const buffer = Buffer.alloc(4);
+        await fd.read(buffer, 0, 4, 0);
+        await fd.close();
+        
+        const hex = buffer.toString('hex').toUpperCase();
+        
+        if (expectedMime === 'image/jpeg' && !hex.startsWith('FFD8FF')) return false;
+        if (expectedMime === 'image/png' && !hex.startsWith('89504E47')) return false;
+        if (expectedMime === 'application/pdf' && !hex.startsWith('25504446')) return false;
+        if (expectedMime === 'image/gif' && !hex.startsWith('47494638')) return false;
+        
+        return true;
+    } catch(e) {
+        return false;
+    }
+};
+
 const uploadMiddleware = (req, res, next) => {
-    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documents', maxCount: 10 }])(req, res, (err) => {
+    upload.fields([{ name: 'photo', maxCount: 1 }, { name: 'documents', maxCount: 10 }])(req, res, async (err) => {
         if (err) {
             return res.status(400).json({ success: false, message: err.message });
         }
+
+        // POST-UPLOAD GÜVENLİK KONTROLÜ (Magic Bytes)
+        const checkFiles = async (files) => {
+            if (!files) return;
+            for (const file of files) {
+                if (['image/jpeg', 'image/png', 'application/pdf', 'image/gif'].includes(file.mimetype)) {
+                    const isValid = await checkMagicBytes(file.path, file.mimetype);
+                    if (!isValid) {
+                        require('fs').unlinkSync(file.path); // Kötü niyetli dosyayı sil
+                        throw new Error('Dosya içeriği ile uzantısı uyuşmuyor (Sahte dosya tespiti). Lütfen gerçek bir resim/belge yükleyin.');
+                    }
+                }
+            }
+        };
+
+        try {
+            if (req.files) {
+                await checkFiles(req.files.photo);
+                await checkFiles(req.files.documents);
+            }
+        } catch (error) {
+            return res.status(400).json({ success: false, message: error.message });
+        }
+
         next();
     });
 };

@@ -189,7 +189,13 @@ app.use((err, req, res, next) => {
     }
     next(err);
 });
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+    setHeaders: (res, path, stat) => {
+        if (!path.match(/\.(jpg|jpeg|png|webp|gif|pdf)$/i)) {
+            res.setHeader('Content-Disposition', 'attachment');
+        }
+    }
+}));
 
 
 

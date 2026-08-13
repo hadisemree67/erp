@@ -168,6 +168,16 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
 
     // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
+    const handlePreviewLocalFile = (file) => {
+        const isImage = file.type.startsWith('image/');
+        const isPdf = file.type === 'application/pdf';
+        if (isImage || isPdf) {
+            window.open(URL.createObjectURL(file), '_blank');
+        } else {
+            alert('Güvenlik nedeniyle bu dosya türünün (HTML, JS, EXE vb.) yerel önizlemesi desteklenmiyor.');
+        }
+    };
+
     return (
         <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '32px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -288,7 +298,7 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
                                         <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0f172a', padding: '8px 12px', backgroundColor: '#fffbeb', borderRadius: '6px', border: '1px solid #fde68a' }}>
                                             📄 <span style={{ fontWeight: '500' }}>{file.name}</span>
                                             <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px' }}>
-                                                <a href={URL.createObjectURL(file)} target="_blank" rel="noopener noreferrer" style={{ color: '#d97706', textDecoration: 'none', fontSize: '12px', fontWeight: '600' }}>Aç</a>
+                                                <button type="button" onClick={() => handlePreviewLocalFile(file)} style={{ background: 'none', border: 'none', color: '#d97706', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: 0 }}>Aç</button>
                                                 <button type="button" onClick={() => handleRemovePendingDocument(index)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: 0 }}>Sil</button>
                                             </div>
                                         </div>
