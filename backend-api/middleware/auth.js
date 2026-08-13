@@ -33,7 +33,12 @@ const authMiddleware = async (req, res, next) => {
         // Token'ın geçerliliği gizli anahtar (JWT_SECRET) kullanılarak doğrulanıyor
         const secretKey = process.env.JWT_SECRET;
         if (!secretKey) throw new Error("JWT_SECRET is not defined!");
-        const decoded = jwt.verify(token, secretKey);
+        const decoded = jwt.verify(token, secretKey, { algorithms: ['HS256'] });
+
+        // CROSS-ROLE ISOLATION: Müşteri token'larının personel paneline erişimini engelle.
+        if (!decoded.role || decoded.role === 'customer') {
+            return res.status(403).json({ success: false, message: 'Bu alana erişim yetkiniz yok (Yetki Uyuşmazlığı).' });
+        }
 
         const now = Date.now();
         const cached = authCache.get(decoded.id);

@@ -2,6 +2,38 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const db = require('../db');
+const jwt = require('jsonwebtoken');
+
+// Müşteriler için özel yetkilendirme ve blacklist kontrol middleware'i
+const customerAuthMiddleware = async (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ message: 'Yetkisiz erişim. Lütfen giriş yapın.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const [blacklistRows] = await db.query('SELECT token FROM blacklisted_tokens WHERE token = ?', [token]);
+        if (blacklistRows.length > 0) {
+            return res.status(401).json({ message: 'Bu oturum kapatılmış (Geçersiz Token). Lütfen tekrar giriş yapın.' });
+        }
+
+        const secretKey = process.env.JWT_SECRET;
+        if (!secretKey) throw new Error("JWT_SECRET is not defined!");
+        
+        const decoded = jwt.verify(token, secretKey, { algorithms: ['HS256'] });
+
+        // CROSS-ROLE ISOLATION: Personel token'larının müşteri paneline erişimini engelle.
+        if (decoded.role !== 'customer') {
+            return res.status(403).json({ message: 'Bu alana erişim yetkiniz yok (Yetki Uyuşmazlığı).' });
+        }
+        req.user = decoded; // id, email, phone, role vs.
+        next();
+    } catch (error) {
+        return res.status(401).json({ message: 'Geçersiz veya süresi dolmuş oturum.' });
+    }
+};
 
 router.get('/fixdb', async (req, res) => {
     try {
@@ -166,7 +198,7 @@ router.post('/login', async (req, res) => {
         const token = jwt.sign(
             { id: user.Id, email: user.Email, phone: user.Phone, role: 'customer' },
             jwtSecret,
-            { expiresIn: '30d' } // Customers typically stay logged in longer
+            { expiresIn: '7d' } // Müşteriler için token süresi 7 güne düşürüldü (Güvenlik)
         );
 
         res.json({
@@ -186,16 +218,30 @@ router.post('/login', async (req, res) => {
         res.status(500).json({ message: 'Sunucu hatası, lütfen tekrar deneyin.' });
     }
 });
+
+// POST /api/customers/auth/logout
+// Müşteri çıkış yaptığında token'ı sunucu tarafında geçersiz kıl (Blacklisting)
+router.post('/logout', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.json({ success: true });
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+        await db.query('INSERT IGNORE INTO blacklisted_tokens (token) VALUES (?)', [token]);
+        res.json({ success: true, message: 'Çıkış yapıldı ve oturum sunucu tarafında sonlandırıldı.' });
+    } catch (error) {
+        console.error('Logout hatası:', error);
+        res.status(500).json({ success: false, message: 'Çıkış yapılırken bir hata oluştu.' });
+    }
+});
+
 // GET /api/customers/auth/profile
 // Get current customer's profile info and addresses
-router.get('/profile', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ message: 'Yetkisiz erişim' });
-    
-    const token = authHeader.split(' ')[1];
-    const jwt = require('jsonwebtoken');
+router.get('/profile', customerAuthMiddleware, async (req, res) => {
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = req.user;
         const [users] = await db.query('SELECT * FROM customers WHERE Id = ?', [decoded.id]);
         
         if (users.length === 0) return res.status(404).json({ message: 'Kullanıcı bulunamadı' });
@@ -241,14 +287,9 @@ router.get('/profile', async (req, res) => {
 
 // PUT /api/customers/auth/profile
 // Update customer profile info
-router.put('/profile', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ message: 'Yetkisiz erişim' });
-    
-    const token = authHeader.split(' ')[1];
-    const jwt = require('jsonwebtoken');
+router.put('/profile', customerAuthMiddleware, async (req, res) => {
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = req.user;
         const { firstName, lastName, email, phone, gender, birthDate } = req.body;
         
         const customerName = `${firstName} ${lastName}`;
@@ -266,14 +307,9 @@ router.put('/profile', async (req, res) => {
 
 // PUT /api/customers/auth/addresses
 // Update customer addresses (stored as JSON in Address column)
-router.put('/addresses', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ message: 'Yetkisiz erişim' });
-    
-    const token = authHeader.split(' ')[1];
-    const jwt = require('jsonwebtoken');
+router.put('/addresses', customerAuthMiddleware, async (req, res) => {
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = req.user;
         const { addresses } = req.body;
         
         const webAddressesStr = JSON.stringify(addresses);
