@@ -26,7 +26,7 @@ const brandStorage = multer.diskStorage({
 });
 const brandUpload = multer({ storage: brandStorage });
 
-require('./add_is_active');
+
 
 const { checkUpcomingMaintenances } = require('./utils/machineNotifier');
 const { initializeWhatsAppBot } = require('./services/whatsappBot');
