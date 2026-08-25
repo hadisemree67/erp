@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: api
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil ERP/Müşteri uygulamasının alt bileşenidir. React Native üzerinde çalışır.
+ * ============================================================================
+ */
+/**
  * @file api.js
  * @description Axios HTTP istemcisi (client) yapılandırması.
  * Uygulamanın backend (sunucu) ile olan tüm haberleşmesi bu dosya üzerinden yönetilir.
@@ -66,3 +73,5 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+

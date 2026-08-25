@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ActivityLog.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Sistem Aktivite Günlüğü (Dashboard Logları)
- * 
+ * BİLEŞEN ADI: ActivityLog
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemde yapılan son işlemleri, kullanıcı hareketlerini, stok değişim loglarını ve denetim kayıtlarını tablo halinde gösterir. Kullanıcıların tarih, işlem tipi veya kullanıcı adına göre filtreleme yapmasına olanak tanır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Lucide-React İkonları, Asenkron API İsteği (apiFetch)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Arkayüzdeki `/api/activities` uç noktasına bağlanarak sistemin işlem denetim geçmişini görselleştirir.
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
  * ============================================================================
  */
 
@@ -49,7 +41,7 @@ const ActivityLog = ({ currentUser }) => {
 
     const handleUndo = async (logId) => {
         if (!window.confirm('Bu işlemi geri almak istediğinize emin misiniz?')) return;
-        
+
         try {
             const res = await apiFetch(`http://localhost:3000/api/activities/${logId}/undo`, {
                 method: 'POST',
@@ -69,7 +61,7 @@ const ActivityLog = ({ currentUser }) => {
     };
 
     const getActionColor = (actionType) => {
-        switch(actionType) {
+        switch (actionType) {
             case 'INSERT': return { bg: '#d1fae5', text: '#059669', label: 'Ekleme' };
             case 'UPDATE': return { bg: '#dbeafe', text: '#2563eb', label: 'Düzenleme' };
             case 'DELETE': return { bg: '#fee2e2', text: '#dc2626', label: 'Silme' };
@@ -84,7 +76,7 @@ const ActivityLog = ({ currentUser }) => {
         <div>
             <h1 style={{ color: '#0f172a', fontSize: '24px', fontWeight: 'bold', margin: 0 }}>Son Hareketler (Loglar)</h1>
             <p style={{ color: '#64748b', marginTop: '8px', marginBottom: '24px' }}>Sistemdeki en son gerçekleştirilen işlemlerin listesi ve denetim izi.</p>
-            
+
             <div style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
@@ -116,7 +108,7 @@ const ActivityLog = ({ currentUser }) => {
                                             </span>
                                         </td>
                                         <td style={{ padding: '16px', color: '#475569' }}>{log.description}</td>
-                                        
+
                                         {currentUser?.role === 'admin' && (
                                             <td style={{ padding: '16px', textAlign: 'right' }}>
                                                 <div className="action-container" style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -154,3 +146,4 @@ const ActivityLog = ({ currentUser }) => {
 };
 
 export default ActivityLog;
+

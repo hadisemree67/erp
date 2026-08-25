@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: warehouses
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, fiziksel depoların oluşturulması, depo içindeki raf, koridor ve hücre yapılandırmalarının 
@@ -171,7 +178,8 @@ router.post('/', authMiddleware, checkPermission('wms_location'),  checkRole(['D
 
 // PUT: Depo güncelle
 router.put('/:id', authMiddleware, checkPermission('wms_location'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Depo ID.' });
     const { name, location, address, shelves, max_capacity, warehouse_type } = req.body;
 
     if (!name) {
@@ -235,7 +243,8 @@ router.put('/:id', authMiddleware, checkPermission('wms_location'),  checkRole([
 
 // DELETE: Depo sil
 router.delete('/:id', authMiddleware, checkRole(['admin']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Depo ID.' });
     
     let connection;
     try {
@@ -273,3 +282,4 @@ router.delete('/:id', authMiddleware, checkRole(['admin']), async (req, res) => 
 });
 
 module.exports = router;
+

@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ProductionList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Üretim Modülü / Üretim Emirleri Listesi
- * 
+ * BİLEŞEN ADI: ProductionList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Planlanan, devam eden ve tamamlanan tüm üretim siparişlerini listeler. Sipariş durumu, ürün adı veya tarih aralığına göre filtreleme sunar ve yeni üretim emri oluşturma akışını başlatır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Tablo ve Filtre Yönetimi, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Üretim modülünün ana panosudur; `/api/production/orders` API uç noktası üzerinden imalat emirlerini çeker.
+ *   Üretim emirleri, makine takibi ve imalat operasyonlarını yöneten arayüz.
  * ============================================================================
  */
 
@@ -165,3 +157,4 @@ const ProductionList = ({ currentUser, onNavigate }) => {
 };
 
 export default ProductionList;
+

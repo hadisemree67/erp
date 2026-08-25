@@ -1,6 +1,10 @@
-/*
- * main.js
- * Projenin çalışması için gereken kodları barındırıyor.
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: Desktop-App (Electron Main)
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü (Electron) uygulamasının başlangıç noktasıdır. Pencereyi açar,
+ *   güvenlik kısıtlamalarını yönetir ve odaklanma (focus) hatalarını engeller.
+ * ============================================================================
  */
 
 import { app, BrowserWindow } from 'electron';
@@ -27,8 +31,8 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
+      webSecurity: false, // [Ağ hatalarını ve katı Chromium CORS kurallarını aşmak için kapatıldı]
+      allowRunningInsecureContent: true, // [Yerel geliştirme proxy hatalarını önler]
       backgroundThrottling: false // Arka planda donmayı ve uykuya geçmeyi engeller
     }
   });

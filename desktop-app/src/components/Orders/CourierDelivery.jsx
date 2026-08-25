@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: CourierDelivery
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Müşteri siparişleri, paketleme, kargo ve iade işlemlerini kapsayan ekran.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (CourierDelivery.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
@@ -165,3 +172,5 @@ const CourierDelivery = () => {
 };
 
 export default CourierDelivery;
+
+

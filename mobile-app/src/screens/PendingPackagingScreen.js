@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: PendingPackagingScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file PendingPackagingScreen.js
  * @description Paketleme işlemi için taşıma arabası (cart) seçimi ve 
  * arabadaki bölümlere atanan siparişlerin paketlemeye başlanması ekranı.
@@ -428,3 +435,5 @@ const styles = StyleSheet.create({
     emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 40 },
     emptyText: { fontSize: 16, color: '#64748b', fontWeight: '500' }
 });
+
+

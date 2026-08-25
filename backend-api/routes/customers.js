@@ -1,7 +1,10 @@
-/*
- * ÖZET:
- * Bu modül, sistemdeki müşterilerin (B2B/B2C cari firmalar veya şahıslar) listelenmesi, 
- * eklenmesi, güncellenmesi ve silinmesi işlemlerini yürüten API uç noktalarıdır.
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemdeki müşterilerin (B2B/B2C cari firmalar veya şahıslar) listelenmesi, 
+ *   eklenmesi, güncellenmesi ve silinmesi işlemlerini yürüten API uç noktalarıdır.
+ *   Geçmiş siparişi olan müşterilerin silinmesi veri bütünlüğü için engellenmiştir.
+ * ============================================================================
  */
 
 const express = require('express');
@@ -11,7 +14,10 @@ const { logActivity } = require('../utils/logger');
 const authMiddleware = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rbac');
 
-// Tüm müşterileri listele
+// ===========================
+// [GET] Tüm Müşterileri Listeleme
+// Sistemdeki tüm müşterileri sayfalamalı (pagination) ve isim/telefon üzerinden aranabilir şekilde getirir.
+// ===========================
 router.get('/', authMiddleware, checkPermission('view_crm'), async (req, res, next) => {
     try {
         const { search, page, limit } = req.query;
@@ -54,7 +60,10 @@ router.get('/', authMiddleware, checkPermission('view_crm'), async (req, res, ne
     }
 });
 
-// Yeni müşteri ekle
+// ===========================
+// [POST] Yeni Müşteri Ekleme
+// Sisteme yeni bir müşteri (cari) kaydeder. Güvenlik ve veri temizliği kontrollerini yapar.
+// ===========================
 router.post('/', authMiddleware, checkPermission('crm_customer_add'), async (req, res, next) => {
     const { CustomerName, Phone, Email, Address, City, Gender, BirthDate } = req.body;
 
@@ -98,9 +107,13 @@ router.post('/', authMiddleware, checkPermission('crm_customer_add'), async (req
     }
 });
 
-// Müşteri bilgisini güncelle
+// ===========================
+// [PUT] Müşteri Bilgilerini Güncelleme
+// Mevcut bir müşterinin iletişim, adres ve demografik bilgilerini düzenler. Log kaydı oluşturur.
+// ===========================
 router.put('/:id', authMiddleware, checkPermission('crm_customer_add'), async (req, res, next) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Müşteri ID.' });
     const { CustomerName, Phone, Email, Address, City, Gender, BirthDate } = req.body;
 
     if (!CustomerName || !CustomerName.trim()) {
@@ -142,9 +155,13 @@ router.put('/:id', authMiddleware, checkPermission('crm_customer_add'), async (r
     }
 });
 
-// Müşteri sil
+// ===========================
+// [DELETE] Müşteri Silme
+// Müşteriyi veritabanından kalıcı olarak siler. Eğer müşteriye ait geçmiş satış/sipariş kaydı varsa (finansal tutarlılık için) silmeyi engeller.
+// ===========================
 router.delete('/:id', authMiddleware, checkPermission('crm_customer_add'), async (req, res, next) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Müşteri ID.' });
 
     try {
         const [existing] = await db.query('SELECT * FROM customers WHERE Id = ?', [id]);

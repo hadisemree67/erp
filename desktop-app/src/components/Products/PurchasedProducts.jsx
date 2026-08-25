@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: PurchasedProducts
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemdeki ürünlerin, varyantların ve stok kartlarının yönetildiği modül.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (PurchasedProducts.jsx), Ürün katalogu, fason/satın alma detayları, barkod işlemleri ve toplu ürün güncelleme araçlarını içerir.
@@ -164,7 +171,7 @@ const PurchasedProducts = ({ currentUser }) => {
                                     let displayBarcode = product.Barcode;
                                     let barcodeList = [];
                                     if (displayBarcode?.startsWith('[')) {
-                                        try { barcodeList = JSON.parse(displayBarcode); } catch(e){}
+                                        try { barcodeList = JSON.parse(displayBarcode); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                                     } else if (displayBarcode) {
                                         barcodeList = displayBarcode.split(',').map(b => b.trim());
                                     }
@@ -346,3 +353,5 @@ const PurchasedProducts = ({ currentUser }) => {
 };
 
 export default PurchasedProducts;
+
+

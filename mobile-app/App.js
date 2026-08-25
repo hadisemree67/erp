@@ -1,3 +1,11 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: Mobil Uygulama Ana Yönlendirici (App.js)
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   React Native mobil uygulamasının giriş ve ana kapsayıcı modülüdür. 
+ *   React Navigation ile ekranlar arası geçişi ve global durumları (Context) sarmalar.
+ * ============================================================================
+ */
 import React, { useContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';

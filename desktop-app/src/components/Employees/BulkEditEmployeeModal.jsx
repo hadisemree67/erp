@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: BulkEditEmployeeModal.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - İnsan Kaynakları / Toplu Çalışan Düzenleme Modalı
- * 
+ * BİLEŞEN ADI: BulkEditEmployeeModal
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Birden fazla çalışanın maaşlarına yüzdelik veya sabit zam uygulama, departman değiştirme veya pozisyon toplu atama işlemlerini gerçekleştiren açılır penceredir (modal).
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React Form Yönetimi, Lucide-React İkonları, Asenkron API İstekleri
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - EmployeeList.jsx üzerinden seçilen çalışan ID'leri ile tetiklenir ve `/api/employees/bulk-update` rotasıyla haberleşir.
+ *   Personel, İK, maaş, izin ve işten ayrılış işlemlerini barındıran bileşen.
  * ============================================================================
  */
 
@@ -246,3 +238,4 @@ const BulkEditEmployeeModal = ({ selectedIds, onClose, onSuccess, currentUser })
 };
 
 export default BulkEditEmployeeModal;
+

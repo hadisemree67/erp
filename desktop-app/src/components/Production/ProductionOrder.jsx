@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ProductionOrder.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Üretim Modülü / Yeni Üretim Emri Oluşturma Formu
- * 
+ * BİLEŞEN ADI: ProductionOrder
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Üretilecek ürünü (mamul), üretim miktarını, hedef teslim tarihini ve kullanılacak makine/hattı seçerek yeni bir üretim emri (Production Order) planlamak için kullanılan form arayüzüdür.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React Form Doğrulama, Reçete (BOM) Hesaplama, Dinamik Seçim Listeleri
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Arkayüzdeki `/api/production/orders` rotasına POST isteği göndererek imalat sürecini başlatır.
+ *   Üretim emirleri, makine takibi ve imalat operasyonlarını yöneten arayüz.
  * ============================================================================
  */
 
@@ -350,3 +342,4 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
 };
 
 export default ProductionOrder;
+

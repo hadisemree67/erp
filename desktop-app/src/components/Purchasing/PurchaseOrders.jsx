@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: PurchaseOrders.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Satınalma Modülü / Satınalma Siparişleri Listesi
- * 
+ * BİLEŞEN ADI: PurchaseOrders
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Tedarikçi firmalara verilen mal ve hizmet siparişlerinin (Purchase Orders) listelendiği, sipariş durumlarının (beklemede, onaylandı, yolda, teslim alındı) takip edildiği ve yeni sipariş oluşturulduğu yönetim ekrandır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Sipariş Durum Takip Mantığı, Tablo Listeleme, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/purchasing/orders` uç noktası üzerinden tedarikçi sipariş süreçlerini veritabanı ile senkronize eder.
+ *   Satın alma talepleri ve hammadde tedarik süreçlerini yöneten modül.
  * ============================================================================
  */
 
@@ -227,3 +219,4 @@ const PurchaseOrders = () => {
 };
 
 export default PurchaseOrders;
+

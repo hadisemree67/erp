@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: WebCategorySelector
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemdeki ürünlerin, varyantların ve stok kartlarının yönetildiği modül.
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
@@ -289,3 +296,5 @@ export default function WebCategorySelector({ value, onChange }) {
         </div>
     );
 }
+
+

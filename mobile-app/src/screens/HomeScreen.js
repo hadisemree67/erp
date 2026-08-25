@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: HomeScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file HomeScreen.js
  * @description Uygulamanın ana ekranı. Kullanıcıya özet istatistikleri ve yetkilerine göre yapabileceği 
  * temel işlemleri (sipariş toplama, paketleme, sevkiyat) sunan yönlendirme sayfasıdır.
@@ -451,3 +458,5 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     }
 });
+
+

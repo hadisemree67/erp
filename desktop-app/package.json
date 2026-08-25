@@ -13,12 +13,14 @@
     "desktop": "concurrently \"vite\" \"wait-on http://localhost:3002 && cross-env NODE_ENV=development electron .\""
   },
   "dependencies": {
+    "dompurify": "^3.4.14",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-barcode": "^1.6.1",
     "react-dom": "^19.2.7",
-    "react-to-print": "^3.3.0",
-    "xlsx": "^0.18.5"
+    "react-to-print": "^3.3.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",

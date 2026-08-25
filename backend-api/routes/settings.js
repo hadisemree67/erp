@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: settings
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, sistemin genel ayarlarını ve konfigürasyonlarını (system_settings tablosu) okuyan 
@@ -63,3 +70,4 @@ router.post('/', authMiddleware, checkPermission('staff_manage'), requireAdmin, 
 });
 
 module.exports = router;
+

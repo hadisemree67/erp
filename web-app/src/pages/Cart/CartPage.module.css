@@ -1,0 +1,438 @@
+.cartPageContainer {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: 'Inter', sans-serif;
+    color: #333;
+}
+
+.pageTitle {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: #1f2937;
+}
+
+.itemCount {
+    font-size: 20px;
+    font-weight: 400;
+    color: #6b7280;
+}
+
+.cartContentWrapper {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+}
+
+.cartLeftColumn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.cartItemsList {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    border: 1px solid #f3f4f6;
+    overflow: hidden;
+}
+
+.cartItem {
+    display: flex;
+    padding: 24px;
+    border-bottom: 1px solid #f3f4f6;
+    gap: 20px;
+}
+
+.cartItem:last-child {
+    border-bottom: none;
+}
+
+.itemImageWrapper {
+    width: 100px;
+    height: 120px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.itemImage {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.itemDetails {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.itemTitle {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0 0 8px 0;
+}
+
+.itemVolume {
+    font-size: 14px;
+    color: #6b7280;
+    margin: 0 0 16px 0;
+}
+
+.itemPriceRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.itemPrice {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0d9488; /* Koyu yeşil turkuaz */
+}
+
+.itemActions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.quantityControls {
+    display: flex;
+    align-items: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.qtyBtn {
+    background: transparent;
+    border: none;
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    color: #4b5563;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.qtyBtn:hover {
+    background: #f3f4f6;
+}
+
+.qtyValue {
+    width: 40px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.deleteBtn {
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #6b7280;
+    font-size: 14px;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.deleteBtn:hover {
+    color: #ef4444;
+}
+
+/* Trust Banners Left */
+.trustBannersLeft {
+    display: flex;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 20px;
+    justify-content: space-between;
+}
+
+.trustItem {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #334155;
+    line-height: 1.4;
+}
+
+.trustIcon {
+    color: #0d9488;
+    width: 24px;
+    height: 24px;
+}
+
+/* Right Column (Sipariş Özeti) */
+.cartRightColumn {
+    width: 360px;
+    flex-shrink: 0;
+}
+
+.orderSummaryBox {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    border: 1px solid #f3f4f6;
+}
+
+.summaryTitle {
+    font-size: 20px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0 0 24px 0;
+}
+
+.summaryRow {
+    display: flex;
+    justify-content: space-between;
+    font-size: 15px;
+    color: #4b5563;
+    margin-bottom: 16px;
+}
+
+.discountRow {
+    color: #0d9488;
+}
+
+.totalRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.totalRow > span:first-child {
+    font-size: 18px;
+    font-weight: 700;
+    color: #111827;
+}
+
+.totalPriceWrapper {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+}
+
+.totalPrice {
+    font-size: 24px;
+    font-weight: 700;
+    color: #0d9488;
+}
+
+.kdvNote {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 4px;
+}
+
+.checkoutBtn {
+    width: 100%;
+    background: #0d9488;
+    color: #fff;
+    border: none;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 24px;
+    transition: background 0.2s;
+}
+
+.checkoutBtn:hover {
+    background: #0f766e;
+}
+
+.backToShopBtn {
+    width: 100%;
+    background: transparent;
+    color: #0d9488;
+    border: 1px solid #ccfbf1;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.backToShopBtn:hover {
+    background: #f0fdfa;
+    border-color: #99f6e4;
+}
+
+/* Coupon */
+.couponContainer {
+    display: flex;
+    margin-top: 24px;
+    gap: 8px;
+}
+
+.couponInput {
+    flex: 1;
+    padding: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+}
+
+.couponInput:focus {
+    border-color: #0d9488;
+}
+
+.couponApplyBtn {
+    padding: 0 16px;
+    background: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.couponApplyBtn:hover {
+    background: #e5e7eb;
+}
+
+/* Footer Trust Banners */
+.footerTrustBanners {
+    display: flex;
+    justify-content: space-between;
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 32px 48px;
+    margin-top: 40px;
+}
+
+.footerTrustItem {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.footerTrustItem h4 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    color: #111827;
+}
+
+.footerTrustItem p {
+    margin: 0;
+    font-size: 14px;
+    color: #64748b;
+}
+
+/* Empty Cart */
+.emptyCartContainer {
+    text-align: center;
+    padding: 80px 20px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.emptyCartIcon {
+    font-size: 64px;
+    margin-bottom: 24px;
+    opacity: 0.5;
+}
+
+.emptyCartTitle {
+    font-size: 24px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 12px;
+}
+
+.emptyCartDesc {
+    font-size: 16px;
+    color: #6b7280;
+    margin-bottom: 32px;
+}
+
+.continueShoppingBtn {
+    background: #0d9488;
+    color: #fff;
+    border: none;
+    padding: 16px 32px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.continueShoppingBtn:hover {
+    background: #0f766e;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .cartContentWrapper {
+        flex-direction: column;
+    }
+    .cartRightColumn {
+        width: 100%;
+    }
+    .trustBannersLeft {
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+    .footerTrustBanners {
+        flex-direction: column;
+        gap: 24px;
+        padding: 24px;
+    }
+}
+
+@media (max-width: 640px) {
+    .itemPriceRow {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+}
+
+.invalidBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #e11d48;
+    background-color: #ffe4e6;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+.invalidItem {
+    border: 1px solid #e11d48;
+    background-color: #fffafb;
+}

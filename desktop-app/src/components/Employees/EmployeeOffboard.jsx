@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: EmployeeOffboard.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - İnsan Kaynakları / İşten Çıkarma (Offboarding) Yönetimi
- * 
+ * BİLEŞEN ADI: EmployeeOffboard
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Bir çalışanın işten ayrılma sürecini yönetir. Kıdem tazminatı hesaplama, ihbar süresi takibi, zimmetli demirbaşların iadesi ve iş akdi sonlandırma onay işlemlerini gerçekleştiren arayüzdür.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Tarih ve Tazminat Hesaplama Algoritmaları, Lucide-React
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Arkayüzdeki `/api/employees/:id/offboard` rotaları ile çalışarak personelin ilişik kesme sürecini veritabanına işler.
+ *   Personel, İK, maaş, izin ve işten ayrılış işlemlerini barındıran bileşen.
  * ============================================================================
  */
 
@@ -323,3 +315,4 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
 };
 
 export default EmployeeOffboard;
+

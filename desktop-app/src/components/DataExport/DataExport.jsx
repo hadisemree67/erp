@@ -1,6 +1,14 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: DataExport
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemdeki verileri Excel/PDF formatında dışa aktarma modülü.
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 const TURKISH_CITIES = [
     "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Amasya", "Ankara", "Antalya", "Artvin", "Aydın", "Balıkesir", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane", "Hakkari", "Hatay", "Isparta", "Mersin", "İstanbul", "İzmir", "Kars", "Kastamonu", "Kayseri", "Kırklareli", "Kırşehir", "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Kahramanmaraş", "Mardin", "Muğla", "Muş", "Nevşehir", "Niğde", "Ordu", "Rize", "Sakarya", "Samsun", "Siirt", "Sinop", "Sivas", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Şanlıurfa", "Uşak", "Van", "Yozgat", "Zonguldak", "Aksaray", "Bayburt", "Karaman", "Kırıkkale", "Batman", "Şırnak", "Bartın", "Ardahan", "Iğdır", "Yalova", "Karabük", "Kilis", "Osmaniye", "Düzce"
@@ -94,12 +102,24 @@ const DataExport = ({ currentUser }) => {
                     return;
                 }
 
-                const worksheet = XLSX.utils.json_to_sheet(result.data);
-                const workbook = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(workbook, worksheet, "Rapor");
+                const workbook = new ExcelJS.Workbook();
+                const worksheet = workbook.addWorksheet("Rapor");
                 
+                // Sütun başlıklarını ayarla
+                const keys = Object.keys(result.data[0]);
+                worksheet.columns = keys.map(key => ({
+                    header: key,
+                    key: key,
+                    width: 20
+                }));
+                
+                // Verileri ekle
+                worksheet.addRows(result.data);
+                
+                // Dosyayı oluştur ve indir
+                const buffer = await workbook.xlsx.writeBuffer();
                 const fileName = `Rapor_${selectedModule}_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '_')}.xlsx`;
-                XLSX.writeFile(workbook, fileName);
+                saveAs(new Blob([buffer]), fileName);
             } else {
                 alert('Hata: ' + result.message);
             }
@@ -380,3 +400,5 @@ const DataExport = ({ currentUser }) => {
 };
 
 export default DataExport;
+
+

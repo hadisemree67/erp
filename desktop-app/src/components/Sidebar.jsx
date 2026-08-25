@@ -1,24 +1,25 @@
-/**
- * ============================================================================
- * DOSYA ADI: Sidebar.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Ana Menü ve Navigasyon (Sidebar)
- * 
- * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Uygulamanın sol tarafında yer alan ana gezinme menüsüdür. Kullanıcının yetkilerine (permissions) göre ilgili modülleri (Ürünler, WMS, Üretim, İK, Satınalma vb.) gösterir veya gizler; sayfa değişimlerini tetikler.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Lucide-React İkonları, CSS Modülasyonu, Yetki Denetim Mantığı
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - App.jsx ile koordine çalışarak kullanıcının sistem içinde menüler arası gezinmesini sağlar.
- * ============================================================================
- */
 
 /*
  * ÖZET:
  * Bu dosya (Sidebar.jsx), Uygulamanın arayüz bileşenlerini barındırır.
  */
 
+/**
+ * ============================================================================
+ * MİMARİ VE YÖNLENDİRME (ARCHITECTURE & ROUTING LOGIC)
+ * DOSYA ADI: Sidebar.jsx (Masaüstü Uygulaması - Sol Menü ve Durum Yönetimi)
+ * 
+ * AÇIKLAMA:
+ * Bu bileşen, masaüstü ERP/WMS uygulamasının "Ana Kontrol Paneli" niteliğindedir.
+ * Kullanıcı yetkilerine (Role Based Access Control) göre sol menüdeki modülleri 
+ * (WMS, Ürünler, Siparişler vb.) dinamik olarak listeler ve sekmeler (tabs) 
+ * arası geçişi state (setActiveTab) aracılığıyla sağlar.
+ * 
+ * MİMARİ BİLEŞENLER:
+ * 1. RBAC Entegrasyonu: `user.permissions` nesnesine bakarak erişilmeyen menüleri gizler.
+ * 2. Modüler Navigasyon: setActiveTab ile React Router kullanmadan bileşen değiştirir (SPA).
+ * ============================================================================
+ */
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../utils/api';
 import './Sidebar.css';
@@ -44,7 +45,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
         if (data.success) {
           setPendingCount(data.data.filter(r => r.status === 'Bekleyen').length);
         }
-      } catch (err) {}
+      } catch (err) { console.warn("Sessiz Hata Yakalandı:", err.message); }
     };
     fetchPendingCount();
     const interval = setInterval(fetchPendingCount, 30000);
@@ -154,7 +155,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
         {/* 1. Ürün Yönetimi */}
         {canSeeProducts && (
           <div className="nav-item">
-            <div className={`nav-link ${(openDropdown === 'urunler' || currentView === 'urun-ekle' || currentView === 'urun-listesi' || currentView === 'fason-urunler' || currentView === 'ticari-urunler') ? 'active' : ''}`} onClick={() => toggleDropdown('urunler')}>
+            <div className={`nav-link ${(openDropdown === 'urunler' || currentView === 'urun-ekle' || currentView === 'urun-listesi' || currentView === 'fason-urunler' || currentView === 'ticari-urunler' || currentView === 'kategoriler') ? 'active' : ''}`} onClick={() => toggleDropdown('urunler')}>
               <span className="nav-icon"></span>
               <span className="nav-text">Ürün Yönetimi</span>
               <span className={`nav-arrow ${openDropdown === 'urunler' ? 'open' : ''}`}>▼</span>
@@ -163,8 +164,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
               <div className="dropdown-menu">
                 {hasPerm('product_add') && <a href="#yeni-urun" className={`dropdown-item ${currentView === 'urun-ekle' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('urun-ekle'); }}>Yeni Ürün Tanımla</a>}
                 <a href="#urun-listesi" className={`dropdown-item ${currentView === 'urun-listesi' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('urun-listesi'); }}>Ürünleri Görüntüle</a>
-                <a href="#fason-urunler" className={`dropdown-item ${currentView === 'fason-urunler' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('fason-urunler'); }}>Fason Ürünler (Dış)</a>
-                <a href="#ticari-urunler" className={`dropdown-item ${currentView === 'ticari-urunler' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('ticari-urunler'); }}>Ticari Ürünler (Satın Al)</a>
+                <a href="#kategoriler" className={`dropdown-item ${currentView === 'kategoriler' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('kategoriler'); }}>Kategoriler (Web)</a>
               </div>
             )}
           </div>
@@ -224,7 +224,6 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
                 <a href="#tasima-arabalari" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('tasima-arabalari'); }}>Taşıma Arabaları</a>
                 <a href="#depo-transfer" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-transfer'); }}>Depo Transferleri</a>
                 <a href="#depo-krokisi" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-krokisi'); }}>Depo Krokisi</a>
-                <a href="#whatsapp-onaylari" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('whatsapp-onaylari'); }}>WhatsApp Onayları</a>
               </div>
             )}
           </div>
@@ -255,10 +254,17 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
         {/* 6. Sipariş Yönetimi */}
         {canSeeOrders && (
           <div className="nav-item">
-            <div className={`nav-link ${currentView === 'aktif-siparis' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('aktif-siparis'); }}>
+            <div className={`nav-link ${(openDropdown === 'siparisler' || currentView === 'aktif-siparis' || currentView === 'iade-talepleri') ? 'active' : ''}`} onClick={() => toggleDropdown('siparisler')}>
               <span className="nav-icon"></span>
               <span className="nav-text">Sipariş Yönetimi</span>
+              <span className={`nav-arrow ${openDropdown === 'siparisler' ? 'open' : ''}`}>▼</span>
             </div>
+            {openDropdown === 'siparisler' && (
+              <div className="dropdown-menu">
+                <a href="#aktif-siparis" className={`dropdown-item ${currentView === 'aktif-siparis' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('aktif-siparis'); }}>Sipariş Listesi</a>
+                <a href="#iade-talepleri" className={`dropdown-item ${currentView === 'iade-talepleri' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('iade-talepleri'); }}>İade ve Talepler</a>
+              </div>
+            )}
           </div>
         )}
 

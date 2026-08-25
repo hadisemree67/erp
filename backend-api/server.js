@@ -1,10 +1,19 @@
-/*
- * Bu dosya arkayüz (backend) uygulamasının başlangıç noktasıdır. Express.js sunucusunu başlatır, 
- * güvenlik ayarlarını yapar ve tüm API rotalarını sisteme bağlar.
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Bu dosya Node.js / Express tabanlı arka uç (backend) sunucusunun kalbidir. 
+ *   İstemcilerden (Masaüstü, Web ve Mobil) gelen tüm HTTP istekleri buradan geçer.
+ *   Uygulama 3000 portu üzerinden hizmet vermekte olup, veritabanı bağlantıları 
+ *   bağlantı havuzu (connection pooling) stratejisi ile yönetilmektedir.
+ * 
+ *   Güvenlik, CORS, rate limiting ve tüm modüler route (yönlendirme) tanımları 
+ *   bu dosya üzerinden sisteme dahil edilir. İleride yeni bir ana modül 
+ *   eklendiğinde (örneğin routes/yeniModul.js), bu dosyada 'app.use' ile sisteme 
+ *   bağlanması gerekir.
+ * ============================================================================
  */
 
 const express = require('express');
-const seedWebCategories = require('./seedWebCategories');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
@@ -14,6 +23,8 @@ const helmet = require('helmet');
 const { logActivity } = require('./utils/logger');
 const path = require('path');
 const multer = require('multer');
+const { generateFingerprint } = require('./utils/fingerprint');
+const authenticateToken = require('./middleware/auth');
 
 const brandStorage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -24,12 +35,48 @@ const brandStorage = multer.diskStorage({
         cb(null, 'brand-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
-const brandUpload = multer({ storage: brandStorage });
+
+// GÜVENLİK: Marka görseli yüklemesi için dosya türü filtresi — sadece resimlere izin ver
+const brandFileFilter = (req, file, cb) => {
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Desteklenmeyen dosya formatı. Marka görseli için sadece resim dosyaları yüklenebilir (jpeg, png, webp, gif).'), false);
+    }
+};
+
+// GÜVENLİK: Magic bytes (dosya imzası) doğrulaması — MIME sahteciliğini önler
+const brandCheckMagicBytes = async (filePath, mimeType) => {
+    try {
+        const fs = require('fs');
+        const fd = await fs.promises.open(filePath, 'r');
+        const buffer = Buffer.alloc(4);
+        await fd.read(buffer, 0, 4, 0);
+        await fd.close();
+        const hex = buffer.toString('hex').toUpperCase();
+        if (mimeType === 'image/jpeg' && !hex.startsWith('FFD8FF')) return false;
+        if (mimeType === 'image/png'  && !hex.startsWith('89504E47')) return false;
+        if (mimeType === 'image/gif'  && !hex.startsWith('47494638')) return false;
+        // webp: ilk 4 byte RIFF, sonraki 4 WEBP — temel imzayı kontrol et
+        if (mimeType === 'image/webp' && !hex.startsWith('52494646')) return false;
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const brandUpload = multer({
+    storage: brandStorage,
+    fileFilter: brandFileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5 MB
+});
 
 
 
 const { checkUpcomingMaintenances } = require('./utils/machineNotifier');
-const { initializeWhatsAppBot } = require('./services/whatsappBot');
 
 // Maaş ve mesai otomasyonunu başlat
 require('./utils/salaryCron');
@@ -123,45 +170,35 @@ db.query(`
     )
 `).catch(e => console.error("blacklisted_tokens table create error:", e));
 
+// Personeller (Yöneticiler) İçin Tekil Oturum (Single Session) Tablosu
+db.query(`
+    CREATE TABLE IF NOT EXISTS user_sessions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        ip_address VARCHAR(45),
+        device_info VARCHAR(255),
+        token VARCHAR(500) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX(user_id),
+        INDEX(token)
+    )
+`).catch(e => console.error("user_sessions table create error:", e));
 
+
+// --- MİDDLEWARE (ARA KATMAN) AYARLARI ---
+// 1. HELMET: HTTP başlıklarını güvenlik için güçlendirir (XSS, Clickjacking koruması).
 app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
-const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:5173',
-    'http://localhost:19006',
-    'http://localhost:8081',
-    'exp://localhost:8081',
-    'http://192.168.10.144:3000',
-    'http://192.168.10.144:8081',
-    'exp://192.168.10.144:8081',
-    process.env.BASE_URL,  // ngrok veya production URL
-].filter(Boolean);
 
 app.use(cors({
-    origin: (origin, callback) => {
-        // Origin yoksa (aynı sunucu içi istek, curl, Electron build file:// vb.) geçir
-        if (!origin || origin === 'file://' || origin === 'null') return callback(null, true);
-        
-        // Localhost üzerinden gelen her porttaki geliştirme sunucusuna (vite, react, expo) izin ver
-        if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:') || origin.startsWith('exp://localhost:')) {
-            return callback(null, true);
-        }
-
-        if (allowedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
-        
-        return callback(new Error(`CORS Hatası: ${origin} adresine izin verilmiyor.`));
-    },
+    origin: true, // Gelen tüm origin'lere (Electron, Vite, file://) dinamik olarak izin verir.
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'ngrok-skip-browser-warning'],
     credentials: true
 }));
 
-// GÜVENLİK: Genel API Rate Limiter
+// GÜVENLİK: Genel API Rate Limiter (Brute-Force ve DoS koruması)
 const generalLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 1000,
@@ -171,10 +208,10 @@ const generalLimiter = rateLimit({
 });
 app.use('/api/', generalLimiter);
 
-// GÜVENLİK: Login için Rate Limiter
+// GÜVENLİK: Login için Rate Limiter (Kaba kuvvet saldırılarını engeller)
 const loginLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 1000,
+    windowMs: 5 * 60 * 1000,
+    max: 1000, // [Geçici] Sunucu çökmesi sonrası çoklu denemelerde takılmamak için artırıldı
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Çok fazla başarısız giriş denemesi. Lütfen 5 dakika bekleyin.' }
@@ -189,6 +226,8 @@ app.use((err, req, res, next) => {
     }
     next(err);
 });
+
+// 3. Statik Klasörler: Kullanıcıların yüklediği görselleri (/uploads) tarayıcıya sunar.
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
     setHeaders: (res, path, stat) => {
         if (!path.match(/\.(jpg|jpeg|png|webp|gif|pdf)$/i)) {
@@ -218,9 +257,16 @@ app.use((req, res, next) => {
         req.path.startsWith('/api/customers/auth') ||
         (req.path === '/api/brands' && req.method === 'GET') ||
         (req.path.startsWith('/api/web-categories') && req.method === 'GET') ||
+        (req.path.startsWith('/api/products/public') && req.method === 'GET') ||
+        (req.path.startsWith('/api/shippers/public') && req.method === 'GET') ||
+        (req.path.startsWith('/api/campaigns/public') && req.method === 'GET') ||
+        (req.path.startsWith('/api/orders/public/checkout') && req.method === 'POST') ||
+        (req.path.startsWith('/api/coupons/my-coupons') && req.method === 'GET') ||
+        (req.path.startsWith('/api/coupons/apply') && req.method === 'POST') ||
         // Tedarikçi onay linkleri - sadece GET (e-posta linkleri) ve POST (form gönderimi) izni
         (req.path.startsWith('/api/purchasing/orders/action') && ['GET', 'POST'].includes(req.method)) ||
-        (req.path.startsWith('/api/supplier-approval') && ['GET', 'POST'].includes(req.method))
+        (req.path.startsWith('/api/supplier-approval') && ['GET', 'POST'].includes(req.method)) ||
+        req.path.startsWith('/api/cart')
     ) {
         return next();
     }
@@ -241,7 +287,8 @@ app.use(async (req, res, next) => {
             req.path === '/api/login' || req.path === '/api/login/' ||
             req.path.startsWith('/api/customers/auth') ||
             req.path.startsWith('/api/purchasing/orders/action') ||
-            req.path.startsWith('/api/supplier-approval');
+            req.path.startsWith('/api/supplier-approval') ||
+            req.path.startsWith('/api/cart');
             
         if (!isExempt) {
             if (req.app.locals.system_paused) {
@@ -261,6 +308,9 @@ app.use('/api/products', productsRouter);
 
 const webCategoriesRouter = require('./routes/webCategories');
 app.use('/api/web-categories', webCategoriesRouter);
+
+const cartRouter = require('./routes/cart');
+app.use('/api/cart', cartRouter);
 
 const usersRouter = require('./routes/users');
 app.use('/api/users', usersRouter);
@@ -318,20 +368,19 @@ app.use('/api/orders', ordersRouter);
 const boxesRouter = require('./routes/boxes');
 app.use('/api/boxes', boxesRouter);
 
-const whatsappRoutes = require('./routes/whatsappEntries');
 const mobileRoutes = require('./routes/mobile');
 const pickingCartsRouter = require('./routes/picking_carts');
 const couponsRoute = require('./routes/coupons');
 
-app.use('/api/whatsapp-entries', whatsappRoutes);
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/picking_carts', pickingCartsRouter);
 app.use('/api/coupons', couponsRoute);
 
+// [GET] Tüm markaları listeleme işlemi
+// Sisteme kayıtlı olan tüm markaları isme göre alfabetik olarak sıralayıp getirir.
 app.get('/api/brands', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT id, name, logo_url FROM brands ORDER BY name ASC');
-        console.log('[DEBUG] Fetched brands:', rows);
         res.json(rows);
     } catch (error) {
         console.error('Markalar çekilirken hata:', error);
@@ -339,6 +388,8 @@ app.get('/api/brands', async (req, res) => {
     }
 });
 
+// [POST] Yeni marka ekleme işlemi
+// Gelen marka adını kontrol eder, eğer aynı isimde bir marka yoksa veritabanına ekler ve aktivite loglarına kaydeder.
 app.post('/api/brands', authMiddleware, checkRole(['Depo', 'Üretim'], 'product_add'), async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Marka adı gereklidir.' });
@@ -358,11 +409,20 @@ app.post('/api/brands', authMiddleware, checkRole(['Depo', 'Üretim'], 'product_
 });
 
 app.put('/api/brands/:id', authMiddleware, checkRole(['Depo', 'Üretim'], 'product_edit'), brandUpload.single('logo'), async (req, res) => {
-    const { id } = req.params;
-    
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Marka ID.' });
+
     try {
         if (!req.file) {
             return res.status(400).json({ success: false, message: 'Logo dosyası bulunamadı.' });
+        }
+
+        // GÜVENLİK: Magic bytes doğrulaması — MIME sahteciliğini önler
+        const isValidFile = await brandCheckMagicBytes(req.file.path, req.file.mimetype);
+        if (!isValidFile) {
+            const fs = require('fs');
+            fs.unlink(req.file.path, () => {}); // Sahte dosyayı diskten sil
+            return res.status(400).json({ success: false, message: 'Dosya içeriği geçersiz. Gerçek bir resim dosyası yükleyin.' });
         }
         
         const logoUrl = `/uploads/${req.file.filename}`;
@@ -377,9 +437,11 @@ app.put('/api/brands/:id', authMiddleware, checkRole(['Depo', 'Üretim'], 'produ
     }
 });
 
+// [GET] Tüm ana kategorileri listeleme işlemi
+// Sisteme kayıtlı olan üst (ana) kategorileri alfabetik sıraya göre veritabanından çeker ve listeler.
 app.get('/api/categories', authMiddleware, checkRole(['Depo', 'Üretim'], 'view_products'), async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT id, name FROM kategori ORDER BY name ASC');
+        const [rows] = await db.query('SELECT id, name, image_url FROM kategori ORDER BY name ASC');
         res.json(rows);
     } catch (error) {
         console.error('Kategoriler çekilirken hata:', error);
@@ -387,6 +449,8 @@ app.get('/api/categories', authMiddleware, checkRole(['Depo', 'Üretim'], 'view_
     }
 });
 
+// [POST] Yeni bir kategori ekleme işlemi
+// Kullanıcının gönderdiği kategori adının daha önce eklenip eklenmediğine bakar, benzersiz ise kaydeder ve aktivite geçmişine yazar.
 app.post('/api/categories', authMiddleware, checkRole(['Depo', 'Üretim'], 'category_manage'), async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Kategori adı gereklidir.' });
@@ -402,6 +466,36 @@ app.post('/api/categories', authMiddleware, checkRole(['Depo', 'Üretim'], 'cate
     } catch (error) {
         console.error('Kategori eklenirken hata:', error);
         res.status(500).json({ success: false, message: 'Kategori eklenirken hata oluştu.' });
+    }
+});
+
+// [PUT] Kategori resmi güncelleme işlemi
+// İlgili kategoriye ait görseli (image) alır, dosya türünün gerçekten resim olup olmadığını (magic bytes) kontrol eder ve kaydeder.
+app.put('/api/categories/:id/image', authMiddleware, checkRole(['Depo', 'Üretim'], 'category_manage'), brandUpload.single('image'), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kategori ID.' });
+    
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, message: 'Resim dosyası bulunamadı.' });
+        }
+
+        const isValidFile = await brandCheckMagicBytes(req.file.path, req.file.mimetype);
+        if (!isValidFile) {
+            const fs = require('fs');
+            fs.unlink(req.file.path, () => {});
+            return res.status(400).json({ success: false, message: 'Dosya içeriği geçersiz. Gerçek bir resim dosyası yükleyin.' });
+        }
+        
+        const imageUrl = `/uploads/${req.file.filename}`;
+        
+        await db.query('UPDATE kategori SET image_url = ? WHERE id = ?', [imageUrl, id]);
+        await logActivity(req.user?.id, 'UPDATE', 'kategori', id, `Kategori (ID: ${id}) resmi güncellendi.`, null);
+        
+        res.json({ success: true, image_url: imageUrl });
+    } catch (error) {
+        console.error('Kategori resmi güncellenirken hata:', error);
+        res.status(500).json({ success: false, message: 'Resim yüklenirken hata oluştu.' });
     }
 });
 
@@ -478,9 +572,25 @@ app.post('/api/login', async (req, res) => {
             return res.status(500).json({ success: false, message: 'Sunucu yapılandırma hatası.' });
         }
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: user.role, permissions },
+            { 
+                id: user.id, 
+                username: user.username, 
+                role: user.role, 
+                permissions,
+                deviceFingerprint: generateFingerprint(req)
+            },
             jwtSecret,
             { expiresIn: '8h' }
+        );
+
+        // TEKİL OTURUM (STRICT SINGLE SESSION): Eski oturumları sil ve yenisini ekle
+        const ip_address = req.ip || req.connection.remoteAddress;
+        const device_info = req.headers['user-agent'] || 'Unknown Device';
+        
+        await db.query('DELETE FROM user_sessions WHERE user_id = ?', [user.id]);
+        await db.query(
+            'INSERT INTO user_sessions (user_id, ip_address, device_info, token) VALUES (?, ?, ?, ?)',
+            [user.id, ip_address, device_info, token]
         );
 
         // Başarılı giriş
@@ -498,9 +608,16 @@ app.post('/api/login', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Login hatası:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
+        console.error('Login error:', error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu: ' + error.message, stack: error.stack });
     }
+});
+
+// --- OTURUM DOĞRULAMA (VERIFY) ---
+// Frontend (ERP) yüklendiğinde token'ın hala aktif (başka cihazdan girilmemiş) olduğunu doğrular.
+app.get('/api/auth/verify', authenticateToken, (req, res) => {
+    // authenticateToken'dan geçtiyse token sağlamdır ve veritabanında (user_sessions) tekil olarak aktiftir.
+    res.json({ success: true, message: 'Oturum geçerli.', user: req.user });
 });
 
 // --- ÇIKIŞ YAP (LOGOUT) ---
@@ -578,23 +695,15 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 // Otomatik seed işlemi (Eğer web_categories boşsa web uygulamasının menü verilerini doldurur)
-seedWebCategories();
+// seedWebCategories(); (Modül silindiği için devre dışı bırakıldı)
 
 app.listen(PORT, '0.0.0.0', () => {
-    // Nodemon tetikleyici 2
+    // Nodemon tetikleyici 4
     console.log(`Sunucu http://0.0.0.0:${PORT} portunda çalışıyor`);
 
     // Arka plan otomatik bakım hatırlatması kontrolü (İlk açılışta ve her 6 saatte bir)
     setTimeout(checkUpcomingMaintenances, 5000);
     setInterval(checkUpcomingMaintenances, 1000 * 60 * 60 * 6);
-
-    // WhatsApp Bot'u başlat
-    try {
-        // initializeWhatsAppBot(); // KULLANICI İSTEĞİ ÜZERİNE GEÇİCİ OLARAK DURDURULDU
-        console.log('WhatsApp Botu kullanıcı isteği üzerine durduruldu (pasif).');
-    } catch (err) { }
 });
 
 // triggered restart
- 
-

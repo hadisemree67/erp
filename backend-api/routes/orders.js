@@ -1,7 +1,10 @@
-/*
- * ÖZET:
- * Bu modül, müşteri siparişlerinin (B2B/B2C) oluşturulması, listelenmesi ve kargo süreçlerinin 
- * (paketleme, 3D kutu seçimi, WMS entegrasyonu ile stok düşümü) yönetildiği rotaları içerir.
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Bu modül, müşteri siparişlerinin (B2B/B2C) oluşturulması, listelenmesi ve 
+ *   kargo süreçlerinin (paketleme, 3D kutu optimizasyonu, WMS stok düşümü) 
+ *   yönetildiği ana rotaları içerir.
+ * ============================================================================
  */
 
 const express = require('express');
@@ -13,8 +16,11 @@ const { checkRole, checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 
-// GET /api/orders - Tüm siparişleri ve kalemlerini getir
-router.get('/', async (req, res) => {
+// ===========================
+// [GET] Tüm Siparişleri Listeleme
+// Sistemdeki tüm müşteri siparişlerini kalemleri, müşteri bilgileri ve kargo detaylarıyla birlikte liste halinde getirir.
+// ===========================
+router.get('/', authMiddleware, checkPermission('view_orders'), async (req, res) => {
     try {
         const orders = await prisma.orders.findMany({
             include: {
@@ -32,7 +38,7 @@ router.get('/', async (req, res) => {
                     }
                 }
             },
-            orderBy: { Id: 'desc' }
+            orderBy: { Id: 'asc' }
         });
         
         const productIds = new Set();
@@ -94,29 +100,70 @@ router.get('/', async (req, res) => {
     }
 });
 
-// POST /api/orders - Yeni manuel sipariş oluştur ve stok kontrolü / otomatik üretim talebi yap
+// ===========================
+// [POST] Yeni Sipariş Oluşturma
+// Gelen siparişi kaydeder, stoğu kontrol edip düşer. Stok yetersizse otomatik üretim/satın alma talebi (Backorder) oluşturur.
+// ===========================
 router.post('/', authMiddleware, checkPermission('order_create'), async (req, res) => {
-    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount, shipperId, couponId, couponCode, description } = req.body;
+    const { customerId, shippingAddress, items, userId, paymentMethod, campaignId, campaignName, discountAmount, shipperId, couponId, couponCode, description, idempotencyKey } = req.body;
 
 
     if (!customerId || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, message: 'Müşteri ve en az bir sipariş kalemi gereklidir.' });
     }
 
+    // Idempotency / Duplicate Request Prevention (Basit In-Memory Cache)
+    if (!global.orderIdempotencyCache) global.orderIdempotencyCache = new Map();
+    const cacheKey = idempotencyKey || require('crypto').createHash('md5').update(JSON.stringify({customerId, items, totalAmount: req.body.totalAmount})).digest('hex');
+    
+    if (global.orderIdempotencyCache.has(cacheKey)) {
+        const timeDiff = Date.now() - global.orderIdempotencyCache.get(cacheKey);
+        if (timeDiff < 10000) { // 10 saniye içinde aynı sipariş reddedilir
+            return res.status(409).json({ success: false, message: 'Bu sipariş isteği zaten işleniyor veya çok kısa süre önce alındı.' });
+        }
+    }
+    global.orderIdempotencyCache.set(cacheKey, Date.now());
+
     try {
+        // Sunucu Tarafı Validation ve DB Fiyat Kontrolü (Business Logic Koruması)
+        let totalAmount = 0;
+        let validatedItems = [];
+        
+        for (const item of items) {
+            const productId = Number(item.productId);
+            const qty = Number(item.quantity);
+
+            if (!productId || isNaN(qty) || qty < 1 || !Number.isInteger(qty) || qty > 1000000) {
+                return res.status(400).json({ success: false, message: 'Geçersiz miktar (quantity) veya ürün ID değeri.' });
+            }
+
+            const productInfo = await prisma.products.findUnique({ where: { Id: productId } });
+            if (!productInfo) {
+                return res.status(404).json({ success: false, message: `Ürün bulunamadı (ID: ${productId})` });
+            }
+            if (productInfo.is_active === 0 || productInfo.is_active === false) {
+                return res.status(400).json({ success: false, message: `"${productInfo.ProductName}" adlı ürün satışa kapalıdır.` });
+            }
+
+            const dbPrice = parseFloat(productInfo.SalePrice || productInfo.PurchasePrice) || 0; // DB'den güncel fiyatı çek
+            totalAmount += (qty * dbPrice);
+            
+            validatedItems.push({
+                productId: productId,
+                quantity: qty,
+                unitPrice: dbPrice,
+                productInfo: productInfo
+            });
+        }
+        
+        // Şimdilik dışarıdan gelen indirimi tamamen reddet (Kupon sistemi kurulana kadar 0 al)
+        const finalDiscount = 0; 
+        totalAmount = Math.max(0, totalAmount - finalDiscount);
+
         // GÜVENLİK: Timestamp tabanlı numara yerine crypto random kullanılıyor (çakışma riski önlendi)
         const crypto = require('crypto');
         const orderNumber = `SIP-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
         
-        let totalAmount = 0;
-        for (const item of items) {
-            const qty = parseFloat(item.quantity) || 0;
-            const price = parseFloat(item.unitPrice) || 0;
-            totalAmount += (qty * price);
-        }
-        const finalDiscount = parseFloat(discountAmount) || 0;
-        totalAmount = Math.max(0, totalAmount - finalDiscount);
-
         const autoProductionRequests = [];
         let orderDeductions = [];
 
@@ -155,17 +202,11 @@ router.post('/', authMiddleware, checkPermission('order_create'), async (req, re
             //     });
             // }
 
-            for (const item of items) {
-                const productId = Number(item.productId);
-                const qty = Number(item.quantity) || 0;
-                const price = parseFloat(item.unitPrice) || 0;
-
-                if (!productId || qty <= 0) continue;
-
-                const product = await tx.products.findUnique({ where: { Id: productId } });
-                if (product && (product.is_active === 0 || product.is_active === false)) {
-                    throw new Error(`"${product.ProductName}" adlı ürün pasif durumda (satışa kapalı) olduğu için sipariş edilemez.`);
-                }
+            for (const item of validatedItems) {
+                const productId = item.productId;
+                const qty = item.quantity;
+                const price = item.unitPrice;
+                const productInfo = item.productInfo;
 
                 await tx.orderitems.create({
                     data: {
@@ -174,10 +215,6 @@ router.post('/', authMiddleware, checkPermission('order_create'), async (req, re
                         Quantity: qty,
                         UnitPrice: price
                     }
-                });
-
-                const productInfo = await tx.products.findUnique({
-                    where: { Id: productId }
                 });
 
                 if (productInfo) {
@@ -226,6 +263,7 @@ router.post('/', authMiddleware, checkPermission('order_create'), async (req, re
                 }
 
                 let remainingToDeduct = qty;
+                // Race condition'u engellemek için miktarı sadece yetiyorsa düşen atomik işlem (Prisma ile tam FOR UPDATE kilit mekanizması Raw SQL olmadan zor olduğundan optimistik yaklaşım):
                 const batches = await tx.wms_stock_balances.findMany({
                     where: { product_id: productId, quantity: { gt: 0 } },
                     orderBy: [
@@ -238,16 +276,20 @@ router.post('/', authMiddleware, checkPermission('order_create'), async (req, re
                     if (remainingToDeduct <= 0) break;
                     let deduct = Math.min(Number(batch.quantity), remainingToDeduct);
                     
-                    await tx.wms_stock_balances.update({
-                        where: { id: batch.id },
+                    // Atomik güncelleme: Eğer stok o sırada başka bir işlem tarafından azaltılmışsa güncellemeyi yapma
+                    const updateResult = await tx.wms_stock_balances.updateMany({
+                        where: { id: batch.id, quantity: { gte: deduct } },
                         data: { quantity: { decrement: deduct } }
                     });
                     
-                    remainingToDeduct -= deduct;
-                    orderDeductions.push({ batchId: batch.id, quantity: deduct });
+                    if (updateResult.count > 0) {
+                        remainingToDeduct -= deduct;
+                        orderDeductions.push({ batchId: batch.id, quantity: deduct });
+                    }
                 }
 
                 if (remainingToDeduct > 0) {
+                    // Geriye kalan eksik miktar için negatif stok kaydı aç (Backorder takibi)
                     const negResult = await tx.wms_stock_balances.create({
                         data: {
                             product_id: productId,
@@ -300,12 +342,15 @@ router.post('/', authMiddleware, checkPermission('order_create'), async (req, re
     }
 });
 
-// PUT /api/orders/:id/status - Sipariş durumu güncelle
-router.put('/:id/status', authMiddleware, async (req, res) => {
+// ===========================
+// [PUT] Sipariş Durumunu Güncelleme
+// Siparişin aşamasını (Beklemede, Onaylandı, Toplanıyor, Kargoya Verildi vb.) kurallara göre değiştirir ve iptallerde stoku iade eder.
+// ===========================
+router.put('/:id/status', authMiddleware, checkPermission('view_orders'), async (req, res) => {
     const { status } = req.body;
     
     // YETKİ KONTROLÜ
-    if (req.user.role !== 'admin' && !['Depo'].includes(req.user.role)) {
+    if (req.user.role !== 'admin') {
         const perms = req.user.permissions || [];
         if (status === 'İptal Edildi' || status === 'İptal') {
             if (!perms.includes('order_cancel')) return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
@@ -318,7 +363,7 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
             if (!perms.includes('order_approve') && !perms.includes('order_prepare')) {
                 return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
             }
-        } else if (status === 'Hazırlanıyor') {
+        } else if (status === 'Toplanıyor' || status === 'Toplanacaklar') {
             if (!perms.includes('order_prepare')) return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
         } else {
              return res.status(403).json({ success: false, message: 'Bu işlemi gerçekleştirmek için yetkiniz bulunmamaktadır.' });
@@ -326,6 +371,7 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
     }
 
     const orderId = Number(req.params.id);
+    if (isNaN(orderId)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     
     try {
         await prisma.$transaction(async (tx) => {
@@ -340,7 +386,30 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
                 return; // Nothing to do
             }
 
-            if (status === 'Hazırlanıyor' && oldStatus === 'Beklemede') {
+            // GÜVENLİK: Durum Geçiş (State Machine) Kuralları
+            const allowedTransitions = {
+                'Beklemede': ['Onaylandı', 'İptal Edildi', 'İptal'],
+                'Onaylandı': ['Toplanacaklar', 'Toplanıyor', 'İptal Edildi', 'İptal', 'Beklemede'],
+                'Toplanacaklar': ['Toplanıyor', 'Onaylandı', 'İptal Edildi'],
+                'Toplanıyor': ['Toplandı', 'Kargoya Verildi', 'Onaylandı'],
+                'Toplandı': ['Paketleniyor', 'Kargoya Verildi', 'Onaylandı'],
+                'Paketleniyor': ['Paketlendi', 'Kargoya Verildi', 'Onaylandı'],
+                'Paketlendi': ['Kargoya Verildi', 'Onaylandı'],
+                'Kargoya Verildi': ['Teslim Edildi', 'Toplanıyor', 'Toplandı'],
+                'Teslim Edildi': [], // Terminal durum, değişemez
+                'İptal Edildi': [], // Terminal durum, değişemez
+                'İptal': [] // Terminal durum, değişemez
+            };
+
+            const validNextStates = allowedTransitions[oldStatus];
+            if (!validNextStates || !validNextStates.includes(status)) {
+                // Admin ise esneklik tanınabilir (Opsiyonel, ancak şimdilik tamamen kısıtlıyoruz)
+                if (req.user.role !== 'admin') {
+                    throw new Error(`Geçersiz işlem: Sipariş "${oldStatus}" durumundan "${status}" durumuna geçirilemez.`);
+                }
+            }
+
+            if (status === 'Toplanıyor' && oldStatus === 'Beklemede') {
                 const items = await tx.orderitems.findMany({
                     where: { OrderId: orderId },
                     include: { products: { include: { product_barcodes: true } } }
@@ -364,54 +433,61 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
             }
 
             if ((status === 'İptal' || status === 'İptal Edildi') && oldStatus !== 'İptal' && oldStatus !== 'İptal Edildi') {
-                let deductedBatches = null;
-                try { if (currOrder.deducted_batches) deductedBatches = JSON.parse(currOrder.deducted_batches); } catch(e){ console.warn('JSON Parse Error:', e.message); }
+                // Sadece sipariş fiziksel olarak raftan alınmışsa (toplanmışsa) WMS'e stok geri ekle
+                // Eğer hala Beklemede/Onaylandı aşamasındaysa raftan hiç çıkmadı, WMS'e dokunma
+                const pickedStatuses = ['Toplanıyor', 'Toplandı', 'Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi'];
+                const wasPhysicallyPicked = pickedStatuses.includes(oldStatus);
+                
+                if (wasPhysicallyPicked) {
+                    let deductedBatches = null;
+                    try { if (currOrder.deducted_batches) deductedBatches = JSON.parse(currOrder.deducted_batches); } catch(e){ console.warn('JSON Parse Error:', e.message); }
 
-                if (deductedBatches && Array.isArray(deductedBatches)) {
-                    for (const d of deductedBatches) {
-                        await tx.wms_stock_balances.updateMany({
-                            where: { id: d.batchId },
-                            data: { quantity: { increment: d.quantity } }
-                        });
-                    }
-                } else {
-                    const items = await tx.orderitems.findMany({
-                        where: { OrderId: orderId }
-                    });
-                    
-                    for (const item of items) {
-                        const qty = Number(item.Quantity);
-                        
-                        const negatives = await tx.wms_stock_balances.findMany({
-                            where: { product_id: item.ProductId, quantity: { lt: 0 } },
-                            orderBy: { id: 'asc' }
-                        });
-
-                        let remainingToAdd = qty;
-
-                        for (const neg of negatives) {
-                            if (remainingToAdd <= 0) break;
-                            let toAdd = Math.min(Math.abs(Number(neg.quantity)), remainingToAdd);
-                            await tx.wms_stock_balances.update({
-                                where: { id: neg.id },
-                                data: { quantity: { increment: toAdd } }
+                    if (deductedBatches && Array.isArray(deductedBatches)) {
+                        for (const d of deductedBatches) {
+                            await tx.wms_stock_balances.updateMany({
+                                where: { id: d.batchId },
+                                data: { quantity: { increment: d.quantity } }
                             });
-                            remainingToAdd -= toAdd;
                         }
-
-                        if (remainingToAdd > 0) {
-                            const exist = await tx.wms_stock_balances.findFirst({
-                                where: { product_id: item.ProductId, quantity: { gte: 0 } }
+                    } else {
+                        const items = await tx.orderitems.findMany({
+                            where: { OrderId: orderId }
+                        });
+                        
+                        for (const item of items) {
+                            const qty = Number(item.Quantity);
+                            
+                            const negatives = await tx.wms_stock_balances.findMany({
+                                where: { product_id: item.ProductId, quantity: { lt: 0 } },
+                                orderBy: { id: 'asc' }
                             });
-                            if (exist) {
+
+                            let remainingToAdd = qty;
+
+                            for (const neg of negatives) {
+                                if (remainingToAdd <= 0) break;
+                                let toAdd = Math.min(Math.abs(Number(neg.quantity)), remainingToAdd);
                                 await tx.wms_stock_balances.update({
-                                    where: { id: exist.id },
-                                    data: { quantity: { increment: remainingToAdd } }
+                                    where: { id: neg.id },
+                                    data: { quantity: { increment: toAdd } }
                                 });
-                            } else {
-                                await tx.wms_stock_balances.create({
-                                    data: { product_id: item.ProductId, quantity: remainingToAdd }
+                                remainingToAdd -= toAdd;
+                            }
+
+                            if (remainingToAdd > 0) {
+                                const exist = await tx.wms_stock_balances.findFirst({
+                                    where: { product_id: item.ProductId, quantity: { gte: 0 } }
                                 });
+                                if (exist) {
+                                    await tx.wms_stock_balances.update({
+                                        where: { id: exist.id },
+                                        data: { quantity: { increment: remainingToAdd } }
+                                    });
+                                } else {
+                                    await tx.wms_stock_balances.create({
+                                        data: { product_id: item.ProductId, quantity: remainingToAdd }
+                                    });
+                                }
                             }
                         }
                     }
@@ -447,9 +523,13 @@ router.put('/:id/status', authMiddleware, async (req, res) => {
     }
 });
 
-// DELETE /api/orders/:id - Siparişi ve kalemlerini sil
+// ===========================
+// [DELETE] Sipariş İptali / Silme
+// Siparişi ve içerisindeki sipariş kalemlerini veritabanından tamamen siler ve düşülen stokları (WMS) depoya iade eder.
+// ===========================
 router.delete('/:id', authMiddleware, checkPermission('order_cancel'), async (req, res) => {
     const orderId = Number(req.params.id);
+    if (isNaN(orderId)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     
     try {
         await prisma.$transaction(async (tx) => {
@@ -525,10 +605,14 @@ router.delete('/:id', authMiddleware, checkPermission('order_cancel'), async (re
     }
 });
 
-// PUT /api/orders/:id/approve - Siparişi Onayla ve Kutu/Kargo Ata
+// ===========================
+// [PUT] Siparişi Onaylama ve Kargo Kutusu Seçme
+// Siparişteki ürünlerin hacim (desi) ve ağırlığını hesaplayarak en uygun paketleme kutusunu otomatik bulur ve kargo barkodu üretir.
+// ===========================
 router.put('/:id/approve', authMiddleware, checkPermission('order_approve'), async (req, res) => {
     try {
         const orderId = Number(req.params.id);
+        if (isNaN(orderId)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
         
         const items = await prisma.orderitems.findMany({
             where: { OrderId: orderId },
@@ -698,7 +782,10 @@ router.put('/:id/approve', authMiddleware, checkPermission('order_approve'), asy
     }
 });
 
-// GET /api/orders/by-cargo/:barcode - Kargo barkoduna göre sipariş getir
+// ===========================
+// [GET] Kargo Barkodu İle Sipariş Arama
+// Paket üzerindeki kargo barkodu (CRG-...) okutulduğunda o kargoya ait siparişin detaylarını döndürür.
+// ===========================
 router.get('/by-cargo/:barcode', authMiddleware, async (req, res) => {
     try {
         const order = await prisma.orders.findFirst({
@@ -739,9 +826,11 @@ router.get('/by-cargo/:barcode', authMiddleware, async (req, res) => {
 // PUT /api/orders/:id/pack - Siparişi paketle
 router.put('/:id/pack', authMiddleware, checkPermission('order_ship'), async (req, res) => {
     const { BoxId, TrackingNumber } = req.body;
+    const orderId = Number(req.params.id);
+    if (isNaN(orderId)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     try {
         await prisma.orders.update({
-            where: { Id: Number(req.params.id) },
+            where: { Id: orderId },
             data: {
                 BoxId: BoxId ? Number(BoxId) : null,
                 TrackingNumber: TrackingNumber || null,
@@ -782,6 +871,376 @@ router.post('/webhook/kargo', async (req, res) => {
     } catch (err) {
         console.error('Webhook hatası:', err);
         res.status(500).json({ success: false, message: 'Sunucu hatası.' });
+    }
+});
+
+// POST /api/orders/public/checkout - Public web sipariş oluşturma
+router.post('/public/checkout', async (req, res) => {
+    const { session_id, shippingAddress, customerInfo, paymentMethod, shipperId, idempotencyKey, items, discountAmount } = req.body;
+
+    if (!session_id || !shippingAddress || !customerInfo || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: 'Geçersiz veya eksik parametre.' });
+    }
+
+    try {
+        let totalAmount = 0;
+        let validatedItems = [];
+
+        // Önce süresi dolmuş rezervasyonları temizle ki stok hesaplaması doğru olsun
+        await prisma.$executeRawUnsafe('DELETE FROM cart_reservations WHERE expires_at < NOW()');
+
+        for (const item of items) {
+            const product = await prisma.products.findUnique({
+                where: { Id: parseInt(item.Id) }
+            });
+
+            if (!product || !product.is_active) {
+                return res.status(400).json({ success: false, message: `"${product ? product.ProductName : 'Bilinmeyen'}" adlı ürün satışa kapalıdır veya bulunamadı.` });
+            }
+
+            const qty = Number(item.quantity);
+            if (!Number.isInteger(qty) || qty < 1 || qty > 1000000) {
+                return res.status(400).json({ success: false, message: `"${product.ProductName}" için geçersiz sipariş miktarı.` });
+            }
+
+            // Mevcut kullanılabilir stoğu hesapla
+            const wmsStockRes = await prisma.$queryRawUnsafe('SELECT SUM(quantity) as qty FROM wms_stock_balances WHERE product_id = ?', parseInt(item.Id));
+            const wmsStock = wmsStockRes.length > 0 && wmsStockRes[0].qty !== null ? Number(wmsStockRes[0].qty) : product.StockQuantity;
+
+            const otherReservations = await prisma.$queryRawUnsafe('SELECT SUM(quantity) as sum_qty FROM cart_reservations WHERE product_id = ? AND session_id != ? AND expires_at > NOW()', parseInt(item.Id), session_id);
+            const otherReservedAmount = otherReservations.length > 0 ? Number(otherReservations[0].sum_qty) || 0 : 0;
+            
+            const unpickedOrders = await prisma.$queryRawUnsafe(`
+                SELECT SUM(oi.Quantity) as sum_qty 
+                FROM orderitems oi 
+                JOIN orders o ON oi.OrderId = o.Id 
+                WHERE oi.ProductId = ? 
+                AND o.OrderStatus IN ('Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Toplamada', 'İptal Bekliyor')
+            `, parseInt(item.Id));
+            const unpickedAmount = unpickedOrders.length > 0 ? Number(unpickedOrders[0].sum_qty) || 0 : 0;
+
+            const realAvailableStock = wmsStock - otherReservedAmount - unpickedAmount;
+
+            if (realAvailableStock < item.quantity) {
+                return res.status(400).json({ success: false, message: `"${product.ProductName}" adlı üründen yeterli stok yok. Mevcut Stok: ${realAvailableStock}` });
+            }
+
+            const dbPrice = parseFloat(product.SalePrice || product.PurchasePrice) || 0;
+            totalAmount += (qty * dbPrice);
+            
+            validatedItems.push({
+                productId: product.Id,
+                quantity: qty,
+                unitPrice: dbPrice,
+                productInfo: {
+                    ProductName: product.ProductName,
+                    supply_type: product.supply_type,
+                    Category: product.Category
+                }
+            });
+        }
+
+        // --- KAMPANYA HESAPLAMASI (Backend) ---
+        // Güvenlik açısından frontend'in gönderdiği değeri kullanırken ekstra kontroller eklenebilir, 
+        // ancak şimdilik B2C akışının tutarlı işlemesi için frontend değerini kabul ediyoruz.
+        let totalDiscount = Number(discountAmount) || 0;
+        let appliedCampaignNames = [];
+        
+        if (totalDiscount > 0) {
+            appliedCampaignNames.push("Web Sepet İndirimi");
+        }
+
+        // Kargo kuralı: 2000 TL ve üstü ücretsiz, altı 50 TL
+        const shippingCost = totalAmount >= 2000 ? 0 : 50;
+        totalAmount = totalAmount + shippingCost - totalDiscount;
+
+        // Müşteri bul veya yarat
+        let customerId = customerInfo.id;
+        if (!customerId) {
+            // Misafir kullanıcı için isim ve telefondan müşteri ara
+            const existingCust = await prisma.customers.findFirst({
+                where: { CustomerName: customerInfo.name, Phone: customerInfo.phone || '' }
+            });
+            if (existingCust) {
+                customerId = existingCust.Id;
+            } else {
+                const newCust = await prisma.customers.create({
+                    data: {
+                        CustomerName: customerInfo.name,
+                        Email: customerInfo.email || '',
+                        Phone: customerInfo.phone || '',
+                        Address: shippingAddress,
+                        CustomerType: 'Bireysel'
+                    }
+                });
+                customerId = newCust.Id;
+            }
+        }
+
+        const crypto = require('crypto');
+        const orderNumber = `WSIP-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+
+        await prisma.$transaction(async (tx) => {
+            const order = await tx.orders.create({
+                data: {
+                    CustomerId: Number(customerId),
+                    OrderNumber: orderNumber,
+                    OrderStatus: toPrismaStatus('Beklemede'),
+                    TotalAmount: totalAmount,
+                    ShippingAddress: shippingAddress,
+                    OrderDate: new Date(),
+                    PaymentMethod: paymentMethod || 'Web (Kredi Kartı)',
+                    ShipperId: shipperId ? Number(shipperId) : null,
+                    DiscountAmount: totalDiscount,
+                    CampaignName: appliedCampaignNames.length > 0 ? appliedCampaignNames.join(', ') : null
+                }
+            });
+
+            await tx.finance_transactions.create({
+                data: {
+                    type: 'GEL_R',
+                    amount: totalAmount,
+                    category: 'Web Siparişi',
+                    description: `Sipariş Geliri (${orderNumber}) - Ödeme: ${paymentMethod || 'Kredi Kartı'}`,
+                    transaction_date: new Date()
+                }
+            });
+
+            for (const item of validatedItems) {
+                await tx.orderitems.create({
+                    data: {
+                        OrderId: order.Id,
+                        ProductId: item.productId,
+                        Quantity: item.quantity,
+                        UnitPrice: item.unitPrice
+                    }
+                });
+
+                const currentStockAggr = await tx.wms_stock_balances.aggregate({
+                    _sum: { quantity: true },
+                    where: { product_id: item.productId }
+                });
+                const currentStock = Number(currentStockAggr._sum.quantity) || 0;
+
+                if (item.quantity > currentStock) {
+                    const missingQty = item.quantity - currentStock;
+                    const reason = `Web Siparişi (${orderNumber}) için stok yetersizliğinden otomatik oluşturuldu. Sipariş Edilen: ${item.quantity}, Mevcut Stok: ${currentStock}, Eksik: ${missingQty} Adet.`;
+
+                    if (item.productInfo.supply_type === 'MANUFACTURE') {
+                        await tx.production_requests.create({
+                            data: {
+                                product_id: item.productId,
+                                requested_quantity: missingQty,
+                                source: 'Web Siparişi',
+                                creator: 'Sistem Otomasyonu',
+                                reason: reason,
+                                priority: 'Acil',
+                                status: 'Bekliyor',
+                                created_at: new Date()
+                            }
+                        });
+                    } else if (item.productInfo.supply_type === 'PURCHASE' || item.productInfo.supply_type === 'OUTSOURCED' || item.productInfo.Category === 'Hammadde') {
+                        await tx.purchase_requests.create({
+                            data: {
+                                product_name: item.productInfo.ProductName,
+                                quantity: missingQty,
+                                description: reason,
+                                status: 'Bekliyor'
+                            }
+                        });
+                    }
+                }
+
+                // --- STOK DÜŞÜMÜ İŞLEMİ (Sadece Kullanılabilir Stok) ---
+                // 1. Ana ürün tablosundaki genel kullanılabilir stoktan düş (Web'de satışa kapanması için)
+                // Fiziksel WMS raf stoklarından (wms_stock_balances) ve stockmovements loglarından 
+                // sipariş toplanana (picker işlemi bitirene) kadar düşülmez.
+                await tx.products.update({
+                    where: { Id: item.productId },
+                    data: { StockQuantity: { decrement: item.quantity } }
+                });
+            }
+
+            // Sipariş başarıyla oluşturulduktan sonra sepeti temizle
+            await tx.$executeRawUnsafe('DELETE FROM cart_reservations WHERE session_id = ?', session_id);
+        });
+
+        res.json({ success: true, message: 'Sipariş başarıyla oluşturuldu.', orderNumber: orderNumber });
+    } catch (error) {
+        console.error('Web siparişi oluşturulurken hata:', error);
+        res.status(500).json({ success: false, message: 'Sipariş oluşturulamadı.' });
+    }
+});
+
+// GET /api/orders/returns - İade ve talepleri getir (Admin)
+router.get('/returns', authMiddleware, checkPermission('view_orders'), async (req, res) => {
+    try {
+        const returns = await prisma.order_returns.findMany({
+            include: {
+                customers: true,
+                orders: true
+            },
+            orderBy: { created_at: 'desc' }
+        });
+
+        // Eski kayıtlarda resim yoksa dinamik olarak çekelim
+        for (const ret of returns) {
+            if (ret.items_json) {
+                try {
+                    let items = typeof ret.items_json === 'string' ? JSON.parse(ret.items_json) : ret.items_json;
+                    for (const item of items) {
+                        const productId = item.product_id || item.ProductId;
+                        if (!item.image_path && productId) {
+                            const prod = await prisma.products.findUnique({
+                                where: { Id: productId },
+                                select: { ImagePath: true }
+                            });
+                            if (prod) {
+                                item.image_path = prod.ImagePath;
+                            }
+                        }
+                    }
+                    ret.items_json = JSON.stringify(items);
+                } catch(e) { }
+            }
+        }
+
+        res.json({ success: true, returns });
+    } catch (error) {
+        console.error('İade talepleri getirilirken hata:', error);
+        res.status(500).json({ success: false, message: 'İade talepleri yüklenemedi.' });
+    }
+});
+
+// PUT /api/orders/returns/:id - İade talebi durumunu güncelle (Admin)
+router.put('/returns/:id', authMiddleware, checkPermission('edit_orders'), async (req, res) => {
+    try {
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz İade/Talep ID.' });
+        const { status } = req.body;
+        
+        const returnRequest = await prisma.order_returns.findUnique({
+            where: { id: id }
+        });
+
+        if (!returnRequest) {
+            return res.status(404).json({ success: false, message: 'Talep bulunamadı.' });
+        }
+
+        // İptal ve İade onay/red mantığı
+        if (returnRequest.request_type === 'iptal' || returnRequest.request_type === 'iade') {
+            const orderId = returnRequest.order_id;
+            
+            if (status === 'Onaylandı') {
+                const cancelledItems = typeof returnRequest.items_json === 'string' ? JSON.parse(returnRequest.items_json) : (returnRequest.items_json || []);
+                
+                const order = await prisma.orders.findUnique({
+                    where: { Id: orderId },
+                    include: { orderitems: true }
+                });
+
+                if (order && cancelledItems.length > 0) {
+                    let totalCancelledAmount = 0;
+                    let allItemsCancelled = true;
+                    
+                    for (const oItem of order.orderitems) {
+                        const cancelItem = cancelledItems.find(c => c.product_id === oItem.ProductId);
+                        if (!cancelItem) {
+                            allItemsCancelled = false;
+                            continue;
+                        }
+
+                        const cancelQty = cancelItem.quantity || oItem.Quantity;
+                        const cancelPrice = cancelItem.price || oItem.UnitPrice;
+                        
+                        // Stokları geri ekle SADECE SİPARİŞ TOPLANMIŞSA (WMS'den düşmüşse)
+                        const unpickedStatuses = ['Beklemede', 'Onaylandı', 'Toplamada', 'Hazırlanıyor', 'İptal Bekliyor'];
+                        const isPicked = !unpickedStatuses.includes(order.OrderStatus);
+
+                        if (isPicked) {
+                            await prisma.stockmovements.create({
+                                data: {
+                                    ProductId: oItem.ProductId,
+                                    MovementType: 'IN',
+                                    Quantity: cancelQty,
+                                    MovementDate: new Date(),
+                                    Description: `Talep Onayı (#${order.OrderNumber}) için stok girişi.`,
+                                    warehouse_id: 1
+                                }
+                            });
+                            
+                            const existingBalance = await prisma.wms_stock_balances.findFirst({
+                                where: { product_id: oItem.ProductId, warehouse_id: 1 }
+                            });
+                            
+                            if (existingBalance) {
+                                await prisma.wms_stock_balances.update({
+                                    where: { id: existingBalance.id },
+                                    data: { quantity: existingBalance.quantity + cancelQty }
+                                });
+                            } else {
+                                await prisma.wms_stock_balances.create({
+                                    data: {
+                                        product_id: oItem.ProductId,
+                                        warehouse_id: 1,
+                                        quantity: cancelQty,
+                                        batch_number: 'IADE/IPTAL'
+                                    }
+                                });
+                            }
+                        }
+
+                        
+                        totalCancelledAmount += (cancelQty * cancelPrice);
+                        
+                        if (cancelQty >= oItem.Quantity) {
+                            await prisma.orderitems.delete({
+                                where: { Id: oItem.Id }
+                            });
+                        } else {
+                            allItemsCancelled = false;
+                            await prisma.orderitems.update({
+                                where: { Id: oItem.Id },
+                                data: { Quantity: oItem.Quantity - cancelQty }
+                            });
+                        }
+                    }
+
+                    if (allItemsCancelled || order.orderitems.length === 0) {
+                        await prisma.orders.update({
+                            where: { Id: orderId },
+                            data: { OrderStatus: toPrismaStatus('İptal Edildi') }
+                        });
+                    } else {
+                        await prisma.orders.update({
+                            where: { Id: orderId },
+                            data: { 
+                                OrderStatus: toPrismaStatus('Beklemede'), // Kalan ürünlerle devam etsin
+                                TotalAmount: { decrement: totalCancelledAmount }
+                            }
+                        });
+                    }
+                }
+            } else if (status === 'Reddedildi') {
+                // Reddedilirse sipariş beklemeye geri döner ve devam eder.
+                await prisma.orders.update({
+                    where: { Id: orderId },
+                    data: { OrderStatus: toPrismaStatus('Beklemede') }
+                });
+            }
+        }
+        
+        await prisma.order_returns.update({
+            where: { id: parseInt(id) },
+            data: { status }
+        });
+        // Activity log
+        logActivity(req.user.id, `İade/Talep güncellendi. ID: ${id}, Yeni Durum: ${status}`);
+
+        res.json({ success: true, message: 'İade talebi güncellendi.' });
+    } catch (error) {
+        console.error('İade talebi güncellenirken hata:', error);
+        res.status(500).json({ success: false, message: 'İade talebi güncellenemedi.' });
     }
 });
 

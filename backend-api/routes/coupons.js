@@ -1,7 +1,15 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: coupons
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const authMiddleware = require('../middleware/auth');
+const customerAuthMiddleware = require('../middleware/customerAuth');
 const { checkPermission } = require('../middleware/rbac');
 
 // Get all coupons
@@ -24,7 +32,8 @@ router.post('/', authMiddleware, checkPermission('campaign_manage'), async (req,
             code, discount_type, discount_value, minimum_order_amount,
             maximum_discount_amount, buy_quantity, free_quantity,
             gift_product_id, target_category, target_product_id,
-            usage_limit, start_date, end_date, is_active
+            usage_limit, start_date, end_date, is_active,
+            target_audience, target_customer_ids
         } = req.body;
 
         const existing = await prisma.coupons.findUnique({ where: { code } });
@@ -47,30 +56,35 @@ router.post('/', authMiddleware, checkPermission('campaign_manage'), async (req,
                 usage_limit: usage_limit ? parseInt(usage_limit) : null,
                 start_date: start_date ? new Date(start_date) : null,
                 end_date: end_date ? new Date(end_date) : null,
-                is_active: is_active !== undefined ? is_active : true
+                is_active: is_active !== undefined ? is_active : true,
+                target_audience: target_audience || 'all',
+                target_customer_ids: target_customer_ids || null
             }
         });
 
         res.json({ success: true, message: 'Kupon oluşturuldu.', coupon: newCoupon });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: 'Kupon oluşturulurken hata oluştu.' });
+        res.status(500).json({ success: false, message: 'Kupon oluşturulurken hata oluştu: ' + error.message });
     }
 });
 
 // Update coupon
 router.put('/:id', authMiddleware, checkPermission('campaign_manage'), async (req, res) => {
     try {
-        const { id } = req.params;
+        const idInt = parseInt(req.params.id, 10);
+        if (isNaN(idInt)) return res.status(400).json({ success: false, message: 'Geçersiz Kupon ID.' });
+        
         const {
             code, discount_type, discount_value, minimum_order_amount,
             maximum_discount_amount, buy_quantity, free_quantity,
             gift_product_id, target_category, target_product_id,
-            usage_limit, start_date, end_date, is_active
+            usage_limit, start_date, end_date, is_active,
+            target_audience, target_customer_ids
         } = req.body;
 
         const updatedCoupon = await prisma.coupons.update({
-            where: { id: parseInt(id) },
+            where: { id: idInt },
             data: {
                 code,
                 discount_type,
@@ -85,7 +99,9 @@ router.put('/:id', authMiddleware, checkPermission('campaign_manage'), async (re
                 usage_limit: usage_limit ? parseInt(usage_limit) : null,
                 start_date: start_date ? new Date(start_date) : null,
                 end_date: end_date ? new Date(end_date) : null,
-                is_active: is_active !== undefined ? is_active : true
+                is_active: is_active !== undefined ? is_active : true,
+                target_audience: target_audience || 'all',
+                target_customer_ids: target_customer_ids || null
             }
         });
 
@@ -99,8 +115,10 @@ router.put('/:id', authMiddleware, checkPermission('campaign_manage'), async (re
 // Delete coupon
 router.delete('/:id', authMiddleware, checkPermission('campaign_manage'), async (req, res) => {
     try {
-        const { id } = req.params;
-        await prisma.coupons.delete({ where: { id: parseInt(id) } });
+        const idInt = parseInt(req.params.id, 10);
+        if (isNaN(idInt)) return res.status(400).json({ success: false, message: 'Geçersiz Kupon ID.' });
+
+        await prisma.coupons.delete({ where: { id: idInt } });
         res.json({ success: true, message: 'Kupon silindi.' });
     } catch (error) {
         console.error(error);
@@ -116,6 +134,8 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
         if (!code) {
             return res.status(400).json({ success: false, message: 'Kupon kodu eksik.' });
         }
+
+        const validItems = Array.isArray(items) ? items : [];
 
         const coupon = await prisma.coupons.findUnique({ where: { code } });
         if (!coupon) {
@@ -141,7 +161,7 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
         let eligibleAmount = 0; // Tutar üzerinden indirim (Yüzde veya Sabit) için uygun tutar
         let eligibleQuantity = 0; // BuyXGetY veya Gift için uygun ürün sayısı
 
-        items.forEach(item => {
+        validItems.forEach(item => {
             const qty = parseFloat(item.quantity) || 0;
             const price = parseFloat(item.unitPrice) || 0;
             const lineTotal = qty * price;
@@ -187,7 +207,7 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
             case 'BuyXGetY':
                 if (coupon.buy_quantity && coupon.free_quantity) {
                     if (eligibleQuantity >= coupon.buy_quantity) {
-                        const eligibleItems = items.filter(item => {
+                        const eligibleItems = validItems.filter(item => {
                             if (coupon.target_category && item.Category !== coupon.target_category) return false;
                             if (coupon.target_product_id && parseInt(item.productId) !== coupon.target_product_id) return false;
                             return true;
@@ -254,4 +274,86 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
     }
 });
 
+// [MÜŞTERİ] GET /api/coupons/my-coupons
+router.get('/my-coupons', customerAuthMiddleware, async (req, res) => {
+    try {
+        const customerId = req.user.id;
+        const db = require('../db');
+        // Müşteriye özel (JSON listesinde ID'si olan) veya herkese açık (all) olan aktif kuponlar
+        const [coupons] = await db.query(`
+            SELECT * FROM coupons 
+            WHERE is_active = 1 
+            AND (end_date IS NULL OR end_date >= CURDATE())
+            AND (
+                target_audience = 'all' 
+                OR (target_audience = 'specific' AND JSON_CONTAINS(target_customer_ids, CAST(? AS JSON), '$'))
+            )
+        `, [customerId]);
+        
+        res.json({ success: true, coupons });
+    } catch (error) {
+        console.error('Kuponları çekerken hata:', error);
+        res.status(500).json({ success: false, message: 'Kuponlar alınamadı.' });
+    }
+});
+
+// [MÜŞTERİ] POST /api/coupons/apply
+router.post('/apply', customerAuthMiddleware, async (req, res) => {
+    try {
+        const { code, cartTotal } = req.body;
+        const customerId = req.user.id;
+        
+        if (!code) return res.status(400).json({ success: false, message: 'Kupon kodu gereklidir.' });
+        
+        const db = require('../db');
+        const [coupons] = await db.query(`
+            SELECT * FROM coupons 
+            WHERE code = ? AND is_active = 1 
+            AND (end_date IS NULL OR end_date >= CURDATE())
+        `, [code]);
+        
+        if (coupons.length === 0) return res.status(404).json({ success: false, message: 'Geçersiz veya süresi dolmuş kupon kodu.' });
+        
+        const coupon = coupons[0];
+        
+        // Müşteri uygunluğu kontrolü
+        if (coupon.target_audience === 'specific') {
+            const allowedIds = typeof coupon.target_customer_ids === 'string' ? JSON.parse(coupon.target_customer_ids) : coupon.target_customer_ids;
+            if (!allowedIds || !allowedIds.includes(customerId)) {
+                return res.status(403).json({ success: false, message: 'Bu kupon hesabınız için geçerli değildir.' });
+            }
+        }
+        
+        // Sepet limiti kontrolü
+        if (coupon.minimum_order_amount && cartTotal < coupon.minimum_order_amount) {
+            return res.status(400).json({ success: false, message: `Bu kuponu kullanmak için sepet tutarınız en az ${coupon.minimum_order_amount} TL olmalıdır.` });
+        }
+        
+        // Kullanım limiti kontrolü
+        if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit) {
+            return res.status(400).json({ success: false, message: 'Kupon kullanım limitine ulaşmış.' });
+        }
+        
+        // İndirim hesaplama
+        let discountAmount = 0;
+        if (coupon.discount_type === 'Percentage') {
+            discountAmount = (cartTotal * coupon.discount_value) / 100;
+            if (coupon.maximum_discount_amount && discountAmount > coupon.maximum_discount_amount) {
+                discountAmount = coupon.maximum_discount_amount;
+            }
+        } else if (coupon.discount_type === 'FixedAmount') {
+            discountAmount = coupon.discount_value;
+        }
+        
+        // İndirim tutarı sepetten büyük olamaz
+        if (discountAmount > cartTotal) discountAmount = cartTotal;
+        
+        res.json({ success: true, discountAmount, coupon });
+    } catch (error) {
+        console.error('Kupon uygulama hatası:', error);
+        res.status(500).json({ success: false, message: 'Kupon uygulanamadı.' });
+    }
+});
+
 module.exports = router;
+

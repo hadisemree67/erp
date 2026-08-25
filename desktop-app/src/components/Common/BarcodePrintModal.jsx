@@ -1,11 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: BarcodePrintModal.jsx
- * MODÜL / KATMAN: Önyüz Ortak Bileşen (Common Component) - Barkod Yazdırma
- * 
+ * BİLEŞEN ADI: BarcodePrintModal
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistem içerisindeki ürün, kutu veya sepet barkodlarının termal etiket
- *   yazıcılarından veya normal yazıcılardan çıkarılması için kullanılan pop-up pencere.
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
  * ============================================================================
  */
 import React, { useState, useRef } from 'react';
@@ -124,3 +121,4 @@ const BarcodePrintModal = ({ isOpen, onClose, barcodeValue, title }) => {
 };
 
 export default BarcodePrintModal;
+

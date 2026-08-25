@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: suppliers
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, malzeme ve hizmet satın alınan dış tedarikçi firmaların iletişim bilgileri, 
@@ -45,7 +52,8 @@ router.post('/', authMiddleware, checkPermission('supplier_manage'), async (req,
 
 // Tedarikçi güncelle
 router.put('/:id', authMiddleware, checkPermission('supplier_manage'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Tedarikçi ID.' });
     const { SupplierName, ContactPerson, Phone, Email, Address, supplier_type } = req.body;
 
     if (!SupplierName) {
@@ -72,7 +80,8 @@ router.put('/:id', authMiddleware, checkPermission('supplier_manage'), async (re
 
 // Tedarikçi sil
 router.delete('/:id', authMiddleware, checkPermission('supplier_manage'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Tedarikçi ID.' });
 
     try {
         const [result] = await db.query('DELETE FROM suppliers WHERE Id = ?', [id]);
@@ -89,3 +98,4 @@ router.delete('/:id', authMiddleware, checkPermission('supplier_manage'), async 
 });
 
 module.exports = router;
+

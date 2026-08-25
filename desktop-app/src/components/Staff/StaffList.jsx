@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: StaffList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Sistem Kullanıcıları Modülü / Kullanıcı Hesapları Listesi
- * 
+ * BİLEŞEN ADI: StaffList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sisteme erişim hakkı olan tüm hesapları ve yetki seviyelerini listeler. Kullanıcı hesaplarını aktif/pasif yapma, şifre sıfırlama veya yetki düzenleme işlemlerine giriş noktası sunar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Kullanıcı Tablosu, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Sistem yönetimi modülünün ana ekranıdır; `/api/users` rotasından hesap bilgilerini çeker.
+ *   Kullanıcı yetkilendirme ve sisteme giriş yapan personelleri yönetme ekranı.
  * ============================================================================
  */
 
@@ -203,3 +195,4 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
 };
 
 export default StaffList;
+

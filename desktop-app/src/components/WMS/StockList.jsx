@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: StockList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Stok Hareket Geçmişi (Stock Ledger)
- * 
+ * BİLEŞEN ADI: StockList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Depolarda gerçekleşen tüm stok giriş, çıkış, transfer, mal kabul ve fire hareketlerinin tarihsel günlüğünü (log table) sunar. İşlem tarihi, ürün, depo ve hareket türüne göre filtreleme sağlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Hareket Günlüğü Tablosu, Tarih ve İşlem Filtreleri, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - WMS modülünün denetim merkezidir; `/api/wms/stock-moves` API rotasından hareket geçmişini sorgular.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -22,7 +14,6 @@
 import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect, Fragment } from 'react';
 import StockEntry from './StockEntry';
-import * as XLSX from 'xlsx';
 import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const StockList = ({ currentUser, initialEntryVisible = false }) => {
@@ -270,7 +261,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                 style={{ position: 'absolute', top: '24px', right: '32px', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>
                 ✕ Listeye Dön
             </button>
-            <StockEntry currentUser={currentUser} />
+            <StockEntry currentUser={currentUser} onSuccess={() => { setIsEntryVisible(false); fetchStockList(); }} />
         </div>
     );
   }
@@ -558,7 +549,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                 let displayBarcode = group.barcode;
                 let barcodeList = [];
                 if (displayBarcode?.startsWith('[')) {
-                    try { barcodeList = JSON.parse(displayBarcode); } catch(e){}
+                    try { barcodeList = JSON.parse(displayBarcode); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                 } else if (displayBarcode) {
                     barcodeList = displayBarcode.split(',').map(b => b.trim());
                 }
@@ -621,21 +612,42 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                             )}
                         </td>
                         <td style={{ padding: '16px', color: '#475569', fontSize: '14px' }}>
-                            {group.category} / {group.brand}
+                            {(() => {
+                                const firstBatch = group.batches[0] || {};
+                                let webCat = '';
+                                let webSub = '';
+                                let webTitle = '';
+                                try { webCat = Array.isArray(firstBatch.web_categories) ? firstBatch.web_categories[0] : (typeof firstBatch.web_categories === 'string' ? JSON.parse(firstBatch.web_categories)[0] : ''); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
+                                try { webSub = Array.isArray(firstBatch.web_subcategories) ? firstBatch.web_subcategories[0] : (typeof firstBatch.web_subcategories === 'string' ? JSON.parse(firstBatch.web_subcategories)[0] : ''); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
+                                try { webTitle = Array.isArray(firstBatch.web_subtitles) ? firstBatch.web_subtitles[0] : (typeof firstBatch.web_subtitles === 'string' ? JSON.parse(firstBatch.web_subtitles)[0] : ''); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
+                                return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        {webCat && <span style={{ fontWeight: '600', color: '#0f172a' }}>{webCat}</span>}
+                                        {webSub && <span style={{ fontSize: '12px', color: '#64748b' }}>{webSub}</span>}
+                                        {webTitle && <span style={{ fontSize: '12px', color: '#94a3b8' }}>{webTitle}</span>}
+                                        {!webCat && !webSub && !webTitle && <span style={{ color: '#94a3b8' }}>{group.category || '-'}</span>}
+                                        <span style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', fontWeight: '600' }}>{group.brand}</span>
+                                    </div>
+                                );
+                            })()}
                         </td>
                         <td style={{ padding: '16px', fontSize: '13px' }}>
                             {group.total_quantity === 0 && !group.batches[0]?.shelf_code ? (
-                                <span style={{ color: '#ef4444', fontWeight: '700' }}>0 / 0 (Raf Yok)</span>
+                                <span style={{ color: '#ef4444', fontWeight: '700' }}>Raf Yok</span>
                             ) : (
-                                <>
-                                    <span style={{ color: '#334155', fontWeight: '500' }}>
-                                    {[...new Set(group.batches.map(b => b.warehouse_name).filter(Boolean))].length > 1 ? 'Çoklu Depo' : (group.batches[0]?.warehouse_name || 'Depo Yok')}
-                                    </span>
-                                    <span style={{ color: '#94a3b8', margin: '0 6px' }}>•</span>
-                                    <span style={{ color: '#64748b' }}>
-                                    Raf: {[...new Set(group.batches.map(b => b.shelf_code).filter(Boolean))].length > 1 ? 'Çoklu Raf' : (group.batches[0]?.shelf_code || 'Yok')}
-                                    </span>
-                                </>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    {[...new Map(
+                                        group.batches
+                                            .filter(b => b.shelf_code)
+                                            .map(b => [`${b.warehouse_name}-${b.shelf_code}`, b])
+                                    ).values()].map((b, idx) => (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span style={{ color: '#334155', fontWeight: '500' }}>{b.warehouse_name || 'Depo'}</span>
+                                            <span style={{ color: '#94a3b8' }}>•</span>
+                                            <span style={{ color: '#64748b' }}>Raf: {b.shelf_code}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </td>
                         <td style={{ padding: '16px', fontWeight: 'bold', color: '#0f172a', fontSize: '15px', textAlign: 'center' }}>
@@ -1042,7 +1054,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                 const availableShelves = stockItems.filter(item => {
                                     let displayBarcode = item.barcode;
                                     if (displayBarcode?.startsWith('[')) {
-                                        try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch(e){}
+                                        try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                                     }
                                     return item.barcode?.toLowerCase() === search || displayBarcode?.toLowerCase() === search;
                                 }).reduce((acc, item) => {
@@ -1128,3 +1140,4 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   );
 };
 export default StockList;
+

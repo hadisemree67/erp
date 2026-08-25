@@ -4,7 +4,7 @@
 }
 
 .title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-dark);
   margin: 0 0 8px 0;
@@ -43,7 +43,7 @@
 }
 
 .formGroup label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-dark);
 }
@@ -82,14 +82,14 @@
   align-items: center;
   gap: 4px;
   color: var(--primary);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   pointer-events: none;
 }
 
 .unverified {
   color: #ef4444;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -107,7 +107,7 @@
   border: none;
   border-radius: 4px;
   padding: 4px 12px;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
@@ -160,3 +160,5 @@
 .saveBtn:hover {
   background-color: var(--primary-dark);
 }
+
+

@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: main
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web uygulamasının (e-ticaret) alt bileşenidir. Ziyaretçilere kullanıcı dostu arayüz sunar.
+ * ============================================================================
+ */
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -14,3 +21,5 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+

@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: LoginScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file LoginScreen.js
  * @description Uygulamanın giriş ekranı. Kullanıcı adı ve şifre ile sisteme giriş yapılmasını sağlar.
  * Başarılı girişte AuthContext üzerinden token ve kullanıcı bilgileri kaydedilir.
@@ -182,3 +189,5 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     }
 });
+
+

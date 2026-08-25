@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: PopularCategories
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Popüler Kategoriler
 // Açıklama: Kullanıcıların en çok ziyaret ettiği ürün kategorilerini ana sayfada öne çıkarır.
@@ -49,3 +56,5 @@ const PopularCategories = () => {
 };
 
 export default PopularCategories;
+
+

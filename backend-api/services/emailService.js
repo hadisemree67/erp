@@ -1,9 +1,13 @@
-/*
- * ÖZET:
- * Bu modül, sistem içindeki otomatik bilgilendirmeleri, kritik stok uyarılarını, 
- * satın alma onay bildirimlerini ve şifre sıfırlama e-postalarını göndermekten sorumlu e-posta servisidir.
+/**
+ * ============================================================================
+ * DOSYA ADI: emailService.js
+ * MODÜL / KATMAN: Servis (Service) - Dış İletişim
+ * 
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistem içindeki otomatik bilgilendirmeleri, kritik stok uyarılarını, 
+ *   satın alma onay bildirimlerini ve şifre sıfırlama e-postalarını göndermekten sorumlu modüldür.
+ * ============================================================================
  */
-
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
@@ -38,6 +42,13 @@ const getTransporter = async () => {
     }
 };
 
+/**
+ * Kritik stok seviyesine düşen ürünler için tedarikçiye onay talebi e-postası gönderir.
+ * @param {Object} supplier - Tedarikçi bilgileri nesnesi
+ * @param {Object} product - Ürün bilgileri nesnesi
+ * @param {string} requestToken - Satın alma talebini onaylamak için benzersiz token
+ * @returns {Promise<boolean>} Gönderim başarılı ise true döner
+ */
 const sendLowStockEmail = async (supplier, product, requestToken) => {
     try {
         const transporter = await getTransporter();

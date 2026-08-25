@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: BulkActionModal.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Toplu Stok İşlemleri Modalı
- * 
+ * BİLEŞEN ADI: BulkActionModal
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Depodaki birden fazla stok kalemi üzerinde toplu sayım düzeltmesi, toplu durum değiştirme (örn: karantinaya alma) veya toplu lokasyon/raf taşıma işlemlerini gerçekleştiren araçtır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Toplu WMS İşlem Mantığı, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - StockList.jsx veya InventoryList.jsx üzerinden seçilen kalemleri `/api/wms/bulk-action` rotasıyla işler.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -218,3 +210,4 @@ const BulkActionModal = ({ isOpen, onClose, selectedIds, currentUser, onActionSu
 };
 
 export default BulkActionModal;
+

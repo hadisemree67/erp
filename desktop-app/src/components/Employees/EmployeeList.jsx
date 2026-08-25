@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: EmployeeList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - İnsan Kaynakları / Çalışan Listesi ve Yönetimi
- * 
+ * BİLEŞEN ADI: EmployeeList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Şirket bünyesindeki tüm çalışanları (personelleri) tablo halinde listeler. Departman, durum (aktif/pasif) veya isme göre arama/filtreleme sağlar; yeni çalışan ekleme, düzenleme, toplu işlem veya işten çıkarma modallarını tetikler.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Lucide-React, Tablo Veri Yönetimi, Filtreleme Mantığı
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - İnsan Kaynakları modülünün ana ekranıdır; `/api/employees` rotasından verileri çeker ve alt modalları yönetir.
+ *   Personel, İK, maaş, izin ve işten ayrılış işlemlerini barındıran bileşen.
  * ============================================================================
  */
 
@@ -472,3 +464,4 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
 };
 
 export default EmployeeList;
+

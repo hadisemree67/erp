@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: HeroSlider
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Ana Kayan Vitrin (Slider)
 // Açıklama: Ana sayfadaki büyük kayan görsel kampanyaları ve öne çıkan duyuruları gösterir.
@@ -119,3 +126,5 @@ const HeroSlider = () => {
 };
 
 export default HeroSlider;
+
+

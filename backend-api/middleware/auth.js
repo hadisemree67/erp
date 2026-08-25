@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: auth
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * Bu modül, gelen API isteklerindeki JSON Web Token (JWT) bilgisini kontrol ederek 
  * kimlik doğrulamasını (authentication) gerçekleştiren bir ara katmandır (middleware).
@@ -6,6 +13,7 @@
 // JWT (JSON Web Token) kütüphanesi içeri aktarılıyor
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const { generateFingerprint } = require('../utils/fingerprint');
 
 
 
@@ -30,6 +38,13 @@ const authMiddleware = async (req, res, next) => {
             return res.status(401).json({ success: false, message: 'Bu oturum kapatılmış (Geçersiz Token). Lütfen tekrar giriş yapın.' });
         }
 
+        // TEKİL OTURUM (STRICT SINGLE SESSION): Veritabanında bu token hala aktif mi?
+        const [activeSessionRows] = await db.query('SELECT id FROM user_sessions WHERE token = ?', [token]);
+        if (activeSessionRows.length === 0) {
+            console.warn(`[GÜVENLİK UYARISI] Personel hesabı başka cihazdan açıldığı için eski oturum düşürüldü.`);
+            return res.status(401).json({ success: false, message: 'Hesabınıza başka bir cihazdan giriş yapıldı. Güvenliğiniz için bu oturum sonlandırıldı.' });
+        }
+
         // Token'ın geçerliliği gizli anahtar (JWT_SECRET) kullanılarak doğrulanıyor
         const secretKey = process.env.JWT_SECRET;
         if (!secretKey) throw new Error("JWT_SECRET is not defined!");
@@ -38,6 +53,15 @@ const authMiddleware = async (req, res, next) => {
         // CROSS-ROLE ISOLATION: Müşteri token'larının personel paneline erişimini engelle.
         if (!decoded.role || decoded.role === 'customer') {
             return res.status(403).json({ success: false, message: 'Bu alana erişim yetkiniz yok (Yetki Uyuşmazlığı).' });
+        }
+        
+        // SESSION HIJACKING KORUMASI: Token içindeki parmak izi ile mevcut cihazın parmak izini karşılaştır
+        if (decoded.deviceFingerprint) {
+            const currentFingerprint = generateFingerprint(req);
+            if (decoded.deviceFingerprint !== currentFingerprint) {
+                console.warn(`[GÜVENLİK UYARISI] Personel Oturumu Çalınma Girişimi Engellendi! Personel: ${decoded.username || decoded.id}`);
+                return res.status(401).json({ success: false, message: 'Oturum çalınma şüphesi veya farklı cihazdan giriş. Lütfen tekrar giriş yapın.' });
+            }
         }
 
         const now = Date.now();
@@ -97,3 +121,4 @@ authMiddleware.clearAuthCache = (userId) => {
 
 // Ara katman (middleware) dışa aktarılıyor
 module.exports = authMiddleware;
+

@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: CampaignList
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   İndirim kampanyaları ve kupon yönetimi işlemlerini sağlayan ekran.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (CampaignList.jsx), Kampanya listeleme, ekleme ve düzenleme işlemlerini yöneten bileşenleri içerir.
@@ -441,3 +448,5 @@ const CampaignList = ({ currentUser, onNavigate }) => {
 };
 
 export default CampaignList;
+
+

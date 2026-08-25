@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: SummaryScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file SummaryScreen.js
  * @description Sipariş paketleme işlemi tamamlandıktan sonra gösterilen özet (başarı) ekranı.
  * Kutu bilgisi, toplam ağırlık ve oluşturulan kargo barkodunu ekranda görüntüler.
@@ -151,3 +158,5 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     }
 });
+
+

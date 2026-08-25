@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: BulkEditModal.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Ürün Katalog Modülü / Toplu Ürün Güncelleme Modalı
- * 
+ * BİLEŞEN ADI: BulkEditModal
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Seçilen çok sayıda ürünün satış fiyatı, KDV oranı, kategori, marka veya minimum stok uyarı eşiği gibi özelliklerini tek seferde toplu olarak değiştirmeye yarayan işlem penceresidir.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Toplu Form Düzenleme Mantığı, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - ProductList.jsx üzerinden seçilen ürün ID'lerini alır ve `/api/products/bulk-update` rotasıyla veritabanını günceller.
+ *   Sistemdeki ürünlerin, varyantların ve stok kartlarının yönetildiği modül.
  * ============================================================================
  */
 
@@ -305,3 +297,4 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
 };
 
 export default BulkEditModal;
+

@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: megaMenuData
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Geniş Menü Verisi
 // Açıklama: Geniş açılır menüde (Mega Menu) gösterilecek olan kategori linklerini ve yapısal verileri barındırır.
@@ -6,9 +13,8 @@ import React from 'react';
 import { Smile, User, Droplet, Wind, Sun, Heart, Sparkles, Box, Activity, Beaker, Droplets, ShieldCheck, Scissors, UserCheck } from 'lucide-react';
 
 const charMap = { 'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u', 'Ç': 'c', 'Ğ': 'g', 'İ': 'i', 'Ö': 'o', 'Ş': 's', 'Ü': 'u' };
-// Verilen metni (kategori adı vb.) URL dostu, küçük harfli ve boşluksuz bir yapıya (slug) dönüştürür
   function slugify(text) {
-  return text.toLowerCase().replace(/[çğıöşüÇĞİÖŞÜ]/g, match => charMap[match] || match).replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  return encodeURIComponent(text);
 }
 
 // Kategori yapısı içindeki link dizilerini, sistemde kullanılabilir URL objelerine (href, label) çevirir
@@ -20,43 +26,43 @@ const charMap = { 'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': '
 }
 
 export const categoriesList = [
-  { id: 'cilt', name: 'Cilt Bakımı', icon: <Smile size={18} strokeWidth={1.5} />, url: '/kategori/cilt-bakimi' },
-  { id: 'sac', name: 'Saç Bakımı', icon: <Wind size={18} strokeWidth={1.5} />, url: '/kategori/sac-bakimi' },
-  { id: 'vucut', name: 'Vücut Bakımı', icon: <User size={18} strokeWidth={1.5} />, url: '/kategori/vucut-bakimi' },
-  { id: 'makyaj', name: 'Makyaj', icon: <Sparkles size={18} strokeWidth={1.5} />, url: '/kategori/makyaj' },
-  { id: 'parfum', name: 'Parfüm', icon: <Droplet size={18} strokeWidth={1.5} />, url: '/kategori/parfum' },
-  { id: 'anne', name: 'Anne & Bebek', icon: <Heart size={18} strokeWidth={1.5} />, url: '/kategori/anne-bebek' },
-  { id: 'agiz', name: 'Ağız & Diş Bakımı', icon: <Smile size={18} strokeWidth={1.5} />, url: '/kategori/agiz-dis-bakimi' },
-  { id: 'saglik', name: 'Sağlık / Takviye', icon: <ShieldCheck size={18} strokeWidth={1.5} />, url: '/kategori/saglik-takviye' },
-  { id: 'kisisel', name: 'Kişisel Bakım', icon: <Scissors size={18} strokeWidth={1.5} />, url: '/kategori/kisisel-bakim' },
-  { id: 'erkek', name: 'Erkek Bakım', icon: <UserCheck size={18} strokeWidth={1.5} />, url: '/kategori/erkek-bakim' },
-  { id: 'medikal', name: 'Medikal Ürünler', icon: <Activity size={18} strokeWidth={1.5} />, url: '/kategori/medikal-urunler' },
-  { id: 'dogal', name: 'Doğal & Organik', icon: <Droplets size={18} strokeWidth={1.5} />, url: '/kategori/dogal-organik' },
-  { id: 'gunes', name: 'Güneş Ürünleri', icon: <Sun size={18} strokeWidth={1.5} />, url: '/kategori/gunes-urunleri' },
-  { id: 'hediyelik', name: 'Hediyelik Ürünler', icon: <Heart size={18} strokeWidth={1.5} />, url: '/kategori/hediyelik-urunler' },
+  { id: 'cilt', name: 'Cilt Bakımı', icon: <Smile size={18} strokeWidth={1.5} />, url: '/category/cilt-bakimi' },
+  { id: 'sac', name: 'Saç Bakımı', icon: <Wind size={18} strokeWidth={1.5} />, url: '/category/sac-bakimi' },
+  { id: 'vucut', name: 'Vücut Bakımı', icon: <User size={18} strokeWidth={1.5} />, url: '/category/vucut-bakimi' },
+  { id: 'makyaj', name: 'Makyaj', icon: <Sparkles size={18} strokeWidth={1.5} />, url: '/category/makyaj' },
+  { id: 'parfum', name: 'Parfüm', icon: <Droplet size={18} strokeWidth={1.5} />, url: '/category/parfum' },
+  { id: 'anne', name: 'Anne & Bebek', icon: <Heart size={18} strokeWidth={1.5} />, url: '/category/anne-bebek' },
+  { id: 'agiz', name: 'Ağız & Diş Bakımı', icon: <Smile size={18} strokeWidth={1.5} />, url: '/category/agiz-dis-bakimi' },
+  { id: 'saglik', name: 'Sağlık / Takviye', icon: <ShieldCheck size={18} strokeWidth={1.5} />, url: '/category/saglik-takviye' },
+  { id: 'kisisel', name: 'Kişisel Bakım', icon: <Scissors size={18} strokeWidth={1.5} />, url: '/category/kisisel-bakim' },
+  { id: 'erkek', name: 'Erkek Bakım', icon: <UserCheck size={18} strokeWidth={1.5} />, url: '/category/erkek-bakim' },
+  { id: 'medikal', name: 'Medikal Ürünler', icon: <Activity size={18} strokeWidth={1.5} />, url: '/category/medikal-urunler' },
+  { id: 'dogal', name: 'Doğal & Organik', icon: <Droplets size={18} strokeWidth={1.5} />, url: '/category/dogal-organik' },
+  { id: 'gunes', name: 'Güneş Ürünleri', icon: <Sun size={18} strokeWidth={1.5} />, url: '/category/gunes-urunleri' },
+  { id: 'hediyelik', name: 'Hediyelik Ürünler', icon: <Heart size={18} strokeWidth={1.5} />, url: '/category/hediyelik-urunler' },
 ];
 
 export const megaMenuData = {
   cilt: {
     mainTitle: 'Cilt Bakımı',
     description: 'Cildinizin ihtiyacı olan tüm dermokozmetik ve medikal bakım ürünleri.',
-    url: '/kategori/cilt-bakimi',
+    url: '/category/cilt-bakimi',
     columns: [
       {
         title: 'Cilt Tipine Göre', icon: Wind, // using wind as placeholder for the subtle icon
-        links: createLinks('/kategori/cilt-bakimi/cilt-tipine-gore', ['Kuru Cilt', 'Yağlı Cilt', 'Karma Cilt', 'Hassas Cilt', 'Normal Cilt', 'Akneye Eğilimli Cilt'])
+        links: createLinks('/category/cilt-bakimi/cilt-tipine-gore', ['Kuru Cilt', 'Yağlı Cilt', 'Karma Cilt', 'Hassas Cilt', 'Normal Cilt', 'Akneye Eğilimli Cilt'])
       },
       {
         title: 'Temizleme', icon: Box,
-        links: createLinks('/kategori/cilt-bakimi/temizleme', ['Yüz Temizleme Jelleri', 'Temizleme Köpükleri', 'Misel Sular', 'Makyaj Temizleyiciler', 'Temizleme Yağları', 'Tonikler'])
+        links: createLinks('/category/cilt-bakimi/temizleme', ['Yüz Temizleme Jelleri', 'Temizleme Köpükleri', 'Misel Sular', 'Makyaj Temizleyiciler', 'Temizleme Yağları', 'Tonikler'])
       },
       {
         title: 'Cilt Bakım Ürünleri', icon: Beaker,
-        links: createLinks('/kategori/cilt-bakimi/cilt-bakim-urunleri', ['Nemlendiriciler', 'Serumlar', 'Maskeler', 'Peelingler', 'Göz Çevresi'])
+        links: createLinks('/category/cilt-bakimi/cilt-bakim-urunleri', ['Nemlendiriciler', 'Serumlar', 'Maskeler', 'Peelingler', 'Göz Çevresi'])
       },
       {
         title: 'Cilt Sorunlarına Göre', icon: Droplets,
-        links: createLinks('/kategori/cilt-bakimi/cilt-sorunlarina-gore', ['Akne & Sivilce', 'Leke', 'Kızarıklık', 'Gözenek', 'Kırışıklık'])
+        links: createLinks('/category/cilt-bakimi/cilt-sorunlarina-gore', ['Akne & Sivilce', 'Leke', 'Kızarıklık', 'Gözenek', 'Kırışıklık'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -84,23 +90,23 @@ export const megaMenuData = {
   sac: {
     mainTitle: 'Saç Bakımı',
     description: 'Güçlü, sağlıklı ve ışıldayan saçlar için profesyonel bakım ürünleri.',
-    url: '/kategori/sac-bakimi',
+    url: '/category/sac-bakimi',
     columns: [
       {
         title: 'Saç Tipine Göre', icon: Wind,
-        links: createLinks('/kategori/sac-bakimi/sac-tipine-gore', ['Kuru & Yıpranmış', 'Yağlı', 'İnce Telli', 'Kıvırcık & Dalgalı', 'Boyalı', 'Hassas Saç Derisi'])
+        links: createLinks('/category/sac-bakimi/sac-tipine-gore', ['Kuru & Yıpranmış', 'Yağlı', 'İnce Telli', 'Kıvırcık & Dalgalı', 'Boyalı', 'Hassas Saç Derisi'])
       },
       {
         title: 'Şampuanlar', icon: Box,
-        links: createLinks('/kategori/sac-bakimi/sampuanlar', ['Kepek Karşıtı', 'Dökülme Karşıtı', 'Hacim Veren', 'Nemlendirici', 'Boyalı Saçlar'])
+        links: createLinks('/category/sac-bakimi/sampuanlar', ['Kepek Karşıtı', 'Dökülme Karşıtı', 'Hacim Veren', 'Nemlendirici', 'Boyalı Saçlar'])
       },
       {
         title: 'Saç Bakım Ürünleri', icon: Droplets,
-        links: createLinks('/kategori/sac-bakimi/sac-bakim-urunleri', ['Saç Kremleri', 'Saç Maskeleri', 'Durulanmayan Bakım', 'Saç Serumları & Yağları', 'Ampuller'])
+        links: createLinks('/category/sac-bakimi/sac-bakim-urunleri', ['Saç Kremleri', 'Saç Maskeleri', 'Durulanmayan Bakım', 'Saç Serumları & Yağları', 'Ampuller'])
       },
       {
         title: 'Şekillendirme & Aletler', icon: Scissors,
-        links: createLinks('/kategori/sac-bakimi/sekillendirme-aletler', ['Saç Spreyleri', 'Köpükler', 'Wax & Jöle', 'Saç Kurutma Makineleri', 'Düzleştirici & Maşa'])
+        links: createLinks('/category/sac-bakimi/sekillendirme-aletler', ['Saç Spreyleri', 'Köpükler', 'Wax & Jöle', 'Saç Kurutma Makineleri', 'Düzleştirici & Maşa'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -128,23 +134,23 @@ export const megaMenuData = {
   vucut: {
     mainTitle: 'Vücut Bakımı',
     description: 'Pürüzsüz ve nemli bir cilt için vücut temizleme ve bakım ürünleri.',
-    url: '/kategori/vucut-bakimi',
+    url: '/category/vucut-bakimi',
     columns: [
       {
         title: 'Duş & Banyo', icon: Droplets,
-        links: createLinks('/kategori/vucut-bakimi/dus-banyo', ['Duş Jelleri', 'Katı Sabunlar', 'Banyo Köpükleri', 'Duş Yağları'])
+        links: createLinks('/category/vucut-bakimi/dus-banyo', ['Duş Jelleri', 'Katı Sabunlar', 'Banyo Köpükleri', 'Duş Yağları'])
       },
       {
         title: 'Vücut Nemlendirme', icon: User,
-        links: createLinks('/kategori/vucut-bakimi/vucut-nemlendirme', ['Vücut Kremleri', 'Vücut Losyonları', 'Vücut Yağları', 'El Kremleri'])
+        links: createLinks('/category/vucut-bakimi/vucut-nemlendirme', ['Vücut Kremleri', 'Vücut Losyonları', 'Vücut Yağları', 'El Kremleri'])
       },
       {
         title: 'Özel Bakım & Peeling', icon: Box,
-        links: createLinks('/kategori/vucut-bakimi/ozel-bakim', ['Vücut Peelingleri', 'Çatlak Bakımı', 'Selülit Bakımı', 'Sıkılaştırıcılar'])
+        links: createLinks('/category/vucut-bakimi/ozel-bakim', ['Vücut Peelingleri', 'Çatlak Bakımı', 'Selülit Bakımı', 'Sıkılaştırıcılar'])
       },
       {
         title: 'El, Ayak & Deodorant', icon: Wind,
-        links: createLinks('/kategori/vucut-bakimi/el-ayak-deodorant', ['El Bakımı', 'Ayak Kremleri', 'Topuk Bakımı', 'Deodorant & Antiperspirant'])
+        links: createLinks('/category/vucut-bakimi/el-ayak-deodorant', ['El Bakımı', 'Ayak Kremleri', 'Topuk Bakımı', 'Deodorant & Antiperspirant'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -172,23 +178,23 @@ export const megaMenuData = {
   makyaj: {
     mainTitle: 'Makyaj',
     description: 'Kusursuz bir görünüm için en iyi dermokozmetik ve renkli kozmetik markaları.',
-    url: '/kategori/makyaj',
+    url: '/category/makyaj',
     columns: [
       {
         title: 'Ten Makyajı', icon: User,
-        links: createLinks('/kategori/makyaj/ten-makyaji', ['Fondöten', 'BB & CC Kremler', 'Kapatıcı', 'Pudra', 'Allık', 'Bronzer', 'Highlighter'])
+        links: createLinks('/category/makyaj/ten-makyaji', ['Fondöten', 'BB & CC Kremler', 'Kapatıcı', 'Pudra', 'Allık', 'Bronzer', 'Highlighter'])
       },
       {
         title: 'Göz Makyajı', icon: Sparkles,
-        links: createLinks('/kategori/makyaj/goz-makyaji', ['Maskara', 'Eyeliner', 'Göz Kalemi', 'Far', 'Kaş Ürünleri'])
+        links: createLinks('/category/makyaj/goz-makyaji', ['Maskara', 'Eyeliner', 'Göz Kalemi', 'Far', 'Kaş Ürünleri'])
       },
       {
         title: 'Dudak Makyajı', icon: Smile,
-        links: createLinks('/kategori/makyaj/dudak-makyaji', ['Ruj', 'Dudak Parlatıcısı', 'Dudak Kalemi', 'Dudak Bakımı'])
+        links: createLinks('/category/makyaj/dudak-makyaji', ['Ruj', 'Dudak Parlatıcısı', 'Dudak Kalemi', 'Dudak Bakımı'])
       },
       {
         title: 'Aksesuarlar & Temizleme', icon: Scissors,
-        links: createLinks('/kategori/makyaj/aksesuarlar', ['Makyaj Fırçaları', 'Makyaj Süngerleri', 'Kirpik Kıvırıcı', 'Makyaj Aynaları', 'Makyaj Temizleme Suları'])
+        links: createLinks('/category/makyaj/aksesuarlar', ['Makyaj Fırçaları', 'Makyaj Süngerleri', 'Kirpik Kıvırıcı', 'Makyaj Aynaları', 'Makyaj Temizleme Suları'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -216,23 +222,23 @@ export const megaMenuData = {
   parfum: {
     mainTitle: 'Parfüm',
     description: 'Dünyaca ünlü markaların en kalıcı ve özel imza parfümleri.',
-    url: '/kategori/parfum',
+    url: '/category/parfum',
     columns: [
       {
         title: 'Kadın Parfümleri', icon: User,
-        links: createLinks('/kategori/parfum/kadin', ['EDP Kadın', 'EDT Kadın', 'Roll-on Parfümler', 'Çiçeksi Notalar', 'Odunsu Notalar'])
+        links: createLinks('/category/parfum/kadin', ['EDP Kadın', 'EDT Kadın', 'Roll-on Parfümler', 'Çiçeksi Notalar', 'Odunsu Notalar'])
       },
       {
         title: 'Erkek Parfümleri', icon: UserCheck,
-        links: createLinks('/kategori/parfum/erkek', ['EDP Erkek', 'EDT Erkek', 'Tıraş Sonrası Losyonlar', 'Baharatlı Notalar', 'Ferah Notalar'])
+        links: createLinks('/category/parfum/erkek', ['EDP Erkek', 'EDT Erkek', 'Tıraş Sonrası Losyonlar', 'Baharatlı Notalar', 'Ferah Notalar'])
       },
       {
         title: 'Unisex & Niş Parfümler', icon: Droplet,
-        links: createLinks('/kategori/parfum/unisex-nis', ['Unisex Parfümler', 'Niş (Niche) Parfümler', 'Seyahat Boy Parfümler'])
+        links: createLinks('/category/parfum/unisex-nis', ['Unisex Parfümler', 'Niş (Niche) Parfümler', 'Seyahat Boy Parfümler'])
       },
       {
         title: 'Yan Ürünler', icon: Wind,
-        links: createLinks('/kategori/parfum/yan-urunler', ['Vücut Spreyleri', 'Deodorantlar', 'Saç Parfümleri', 'Parfüm Setleri'])
+        links: createLinks('/category/parfum/yan-urunler', ['Vücut Spreyleri', 'Deodorantlar', 'Saç Parfümleri', 'Parfüm Setleri'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -260,23 +266,23 @@ export const megaMenuData = {
   anne: {
     mainTitle: 'Anne & Bebek',
     description: 'Bebeğinizin hassas cildi ve anne sağlığı için pediatrist onaylı ürünler.',
-    url: '/kategori/anne-bebek',
+    url: '/category/anne-bebek',
     columns: [
       {
         title: 'Bebek Cilt & Vücut', icon: Smile,
-        links: createLinks('/kategori/anne-bebek/bebek-cilt', ['Pişik Kremleri', 'Bebek Yağları', 'Bebek Losyonları', 'Bebek Pudraları'])
+        links: createLinks('/category/anne-bebek/bebek-cilt', ['Pişik Kremleri', 'Bebek Yağları', 'Bebek Losyonları', 'Bebek Pudraları'])
       },
       {
         title: 'Bebek Banyo & Temizlik', icon: Droplets,
-        links: createLinks('/kategori/anne-bebek/bebek-banyo', ['Bebek Şampuanları', 'Bebek Sabunları', 'Islak Mendiller', 'Bebek Banyo Ürünleri'])
+        links: createLinks('/category/anne-bebek/bebek-banyo', ['Bebek Şampuanları', 'Bebek Sabunları', 'Islak Mendiller', 'Bebek Banyo Ürünleri'])
       },
       {
         title: 'Bebek Beslenme', icon: Beaker,
-        links: createLinks('/kategori/anne-bebek/bebek-beslenme', ['Biberon', 'Emzik', 'Mama', 'Beslenme Aksesuarları'])
+        links: createLinks('/category/anne-bebek/bebek-beslenme', ['Biberon', 'Emzik', 'Mama', 'Beslenme Aksesuarları'])
       },
       {
         title: 'Anne Bakımı & Hijyen', icon: Heart,
-        links: createLinks('/kategori/anne-bebek/anne-bakimi', ['Göğüs Ucu Kremleri', 'Emzirme Ürünleri', 'Anne Hijyeni', 'Bebek Bezleri', 'Bebek Bakım Setleri'])
+        links: createLinks('/category/anne-bebek/anne-bakimi', ['Göğüs Ucu Kremleri', 'Emzirme Ürünleri', 'Anne Hijyeni', 'Bebek Bezleri', 'Bebek Bakım Setleri'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -304,23 +310,23 @@ export const megaMenuData = {
   agiz: {
     mainTitle: 'Ağız & Diş Bakımı',
     description: 'Sağlıklı dişler ve mükemmel gülüşler için özel ağız bakım çözümleri.',
-    url: '/kategori/agiz-dis-bakimi',
+    url: '/category/agiz-dis-bakimi',
     columns: [
       {
         title: 'Diş Macunları', icon: Box,
-        links: createLinks('/kategori/agiz-dis-bakimi/dis-macunlari', ['Beyazlatıcı Macunlar', 'Hassasiyet Karşıtı', 'Florürsüz Macunlar', 'Diş Eti Koruması'])
+        links: createLinks('/category/agiz-dis-bakimi/dis-macunlari', ['Beyazlatıcı Macunlar', 'Hassasiyet Karşıtı', 'Florürsüz Macunlar', 'Diş Eti Koruması'])
       },
       {
         title: 'Diş Fırçaları', icon: Smile,
-        links: createLinks('/kategori/agiz-dis-bakimi/dis-fircalari', ['Manuel Fırçalar', 'Elektrikli Fırçalar', 'Arayüz Fırçaları', 'Çocuk Fırçaları'])
+        links: createLinks('/category/agiz-dis-bakimi/dis-fircalari', ['Manuel Fırçalar', 'Elektrikli Fırçalar', 'Arayüz Fırçaları', 'Çocuk Fırçaları'])
       },
       {
         title: 'Ağız Suları & Spreyler', icon: Droplets,
-        links: createLinks('/kategori/agiz-dis-bakimi/agiz-sulari', ['Ağız Gargaraları', 'Ağız Spreyleri', 'Alkolsüz Gargaralar'])
+        links: createLinks('/category/agiz-dis-bakimi/agiz-sulari', ['Ağız Gargaraları', 'Ağız Spreyleri', 'Alkolsüz Gargaralar'])
       },
       {
         title: 'Ekstra Bakım', icon: Activity,
-        links: createLinks('/kategori/agiz-dis-bakimi/ekstra-bakim', ['Diş İpi', 'Diş Beyazlatma Setleri', 'Protez Bakımı', 'Çocuk Ağız & Diş Bakımı'])
+        links: createLinks('/category/agiz-dis-bakimi/ekstra-bakim', ['Diş İpi', 'Diş Beyazlatma Setleri', 'Protez Bakımı', 'Çocuk Ağız & Diş Bakımı'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -348,23 +354,23 @@ export const megaMenuData = {
   saglik: {
     mainTitle: 'Sağlık / Takviye',
     description: 'Günlük enerjinizi destekleyen, güvenilir marka vitamin ve besin takviyeleri.',
-    url: '/kategori/saglik-takviye',
+    url: '/category/saglik-takviye',
     columns: [
       {
         title: 'Vitaminler', icon: Activity,
-        links: createLinks('/kategori/saglik-takviye/vitaminler', ['Multivitamin', 'C Vitamini', 'D Vitamini', 'B Vitaminleri', 'E Vitamini'])
+        links: createLinks('/category/saglik-takviye/vitaminler', ['Multivitamin', 'C Vitamini', 'D Vitamini', 'B Vitaminleri', 'E Vitamini'])
       },
       {
         title: 'Mineraller', icon: Box,
-        links: createLinks('/kategori/saglik-takviye/mineraller', ['Magnezyum', 'Çinko', 'Demir', 'Kalsiyum'])
+        links: createLinks('/category/saglik-takviye/mineraller', ['Magnezyum', 'Çinko', 'Demir', 'Kalsiyum'])
       },
       {
         title: 'Özel Destekler', icon: Heart,
-        links: createLinks('/kategori/saglik-takviye/ozel-destekler', ['Kolajen', 'Omega 3', 'Probiyotik', 'Glukozamin', 'Melatonin'])
+        links: createLinks('/category/saglik-takviye/ozel-destekler', ['Kolajen', 'Omega 3', 'Probiyotik', 'Glukozamin', 'Melatonin'])
       },
       {
         title: 'Bitkisel Takviyeler', icon: Droplets,
-        links: createLinks('/kategori/saglik-takviye/bitkisel-takviyeler', ['Bitkisel Çaylar', 'Ginseng', 'Zerdeçal', 'Propolis', 'Ekinezya'])
+        links: createLinks('/category/saglik-takviye/bitkisel-takviyeler', ['Bitkisel Çaylar', 'Ginseng', 'Zerdeçal', 'Propolis', 'Ekinezya'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -392,23 +398,23 @@ export const megaMenuData = {
   kisisel: {
     mainTitle: 'Kişisel Bakım',
     description: 'Günlük hijyen ve kişisel bakım rutininiz için ihtiyacınız olan her şey.',
-    url: '/kategori/kisisel-bakim',
+    url: '/category/kisisel-bakim',
     columns: [
       {
         title: 'Tıraş & Epilasyon', icon: Scissors,
-        links: createLinks('/kategori/kisisel-bakim/tiras-epilasyon', ['Tıraş Makineleri', 'Tıraş Bıçakları', 'Tıraş Köpükleri', 'Tıraş Sonrası', 'Ağda & Tüy Dökücüler'])
+        links: createLinks('/category/kisisel-bakim/tiras-epilasyon', ['Tıraş Makineleri', 'Tıraş Bıçakları', 'Tıraş Köpükleri', 'Tıraş Sonrası', 'Ağda & Tüy Dökücüler'])
       },
       {
         title: 'Hijyen', icon: Droplets,
-        links: createLinks('/kategori/kisisel-bakim/hijyen', ['El Dezenfektanı', 'Islak Mendil', 'Pamuk & Kulak Çubuğu', 'Sıvı Sabunlar'])
+        links: createLinks('/category/kisisel-bakim/hijyen', ['El Dezenfektanı', 'Islak Mendil', 'Pamuk & Kulak Çubuğu', 'Sıvı Sabunlar'])
       },
       {
         title: 'Kadın Bakımı', icon: Heart,
-        links: createLinks('/kategori/kisisel-bakim/kadin-bakimi', ['Ped', 'Tampon', 'Günlük Ped', 'İntim Bakım'])
+        links: createLinks('/category/kisisel-bakim/kadin-bakimi', ['Ped', 'Tampon', 'Günlük Ped', 'İntim Bakım'])
       },
       {
         title: 'Aksesuarlar', icon: Box,
-        links: createLinks('/kategori/kisisel-bakim/aksesuarlar', ['Kişisel Bakım Aksesuarları', 'Tırnak Makası & Törpü', 'Banyo Süngerleri'])
+        links: createLinks('/category/kisisel-bakim/aksesuarlar', ['Kişisel Bakım Aksesuarları', 'Tırnak Makası & Törpü', 'Banyo Süngerleri'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -436,23 +442,23 @@ export const megaMenuData = {
   erkek: {
     mainTitle: 'Erkek Bakım',
     description: 'Erkeklerin cilt ve saç yapısına özel olarak formüle edilmiş dermokozmetik çözümler.',
-    url: '/kategori/erkek-bakim',
+    url: '/category/erkek-bakim',
     columns: [
       {
         title: 'Erkek Cilt Bakımı', icon: Smile,
-        links: createLinks('/kategori/erkek-bakim/cilt-bakimi', ['Yüz Yıkama Jeli', 'Erkek Nemlendirici', 'Göz Çevresi Bakımı', 'Akne Karşıtı'])
+        links: createLinks('/category/erkek-bakim/cilt-bakimi', ['Yüz Yıkama Jeli', 'Erkek Nemlendirici', 'Göz Çevresi Bakımı', 'Akne Karşıtı'])
       },
       {
         title: 'Sakal & Bıyık Bakımı', icon: UserCheck,
-        links: createLinks('/kategori/erkek-bakim/sakal-bakimi', ['Sakal Yağı', 'Sakal Şampuanı', 'Sakal Balmı', 'Sakal Tarağı'])
+        links: createLinks('/category/erkek-bakim/sakal-bakimi', ['Sakal Yağı', 'Sakal Şampuanı', 'Sakal Balmı', 'Sakal Tarağı'])
       },
       {
         title: 'Tıraş', icon: Scissors,
-        links: createLinks('/kategori/erkek-bakim/tiras', ['Tıraş Köpüğü', 'Tıraş Jeli', 'Tıraş Sonrası (Aftershave)', 'Kan Taşı & Şap'])
+        links: createLinks('/category/erkek-bakim/tiras', ['Tıraş Köpüğü', 'Tıraş Jeli', 'Tıraş Sonrası (Aftershave)', 'Kan Taşı & Şap'])
       },
       {
         title: 'Saç & Vücut', icon: Wind,
-        links: createLinks('/kategori/erkek-bakim/sac-vucut', ['Erkek Saç Bakımı', 'Kepek Karşıtı Şampuan', 'Erkek Parfümleri', 'Erkek Deodorant'])
+        links: createLinks('/category/erkek-bakim/sac-vucut', ['Erkek Saç Bakımı', 'Kepek Karşıtı Şampuan', 'Erkek Parfümleri', 'Erkek Deodorant'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -480,23 +486,23 @@ export const megaMenuData = {
   medikal: {
     mainTitle: 'Medikal Ürünler',
     description: 'Evdeki acil durumlar ve düzenli takipleriniz için güvenilir medikal gereçler.',
-    url: '/kategori/medikal-urunler',
+    url: '/category/medikal-urunler',
     columns: [
       {
         title: 'Ölçüm Cihazları', icon: Activity,
-        links: createLinks('/kategori/medikal-urunler/olcum-cihazlari', ['Ateş Ölçer', 'Tansiyon Aletleri', 'Şeker Ölçüm', 'Oksimetre', 'Baskül'])
+        links: createLinks('/category/medikal-urunler/olcum-cihazlari', ['Ateş Ölçer', 'Tansiyon Aletleri', 'Şeker Ölçüm', 'Oksimetre', 'Baskül'])
       },
       {
         title: 'Yara & İlk Yardım', icon: Box,
-        links: createLinks('/kategori/medikal-urunler/yara-ilkyardim', ['Yara Bakımı', 'Bandaj & Flaster', 'Yanık Kremi', 'Antiseptik & Baticon'])
+        links: createLinks('/category/medikal-urunler/yara-ilkyardim', ['Yara Bakımı', 'Bandaj & Flaster', 'Yanık Kremi', 'Antiseptik & Baticon'])
       },
       {
         title: 'Koruyucu Ürünler', icon: ShieldCheck,
-        links: createLinks('/kategori/medikal-urunler/koruyucu-urunler', ['Medikal Eldiven', 'Maske', 'Hasta Bezi', 'Ortopedik Destekler'])
+        links: createLinks('/category/medikal-urunler/koruyucu-urunler', ['Medikal Eldiven', 'Maske', 'Hasta Bezi', 'Ortopedik Destekler'])
       },
       {
         title: 'Evde Sağlık', icon: Beaker,
-        links: createLinks('/kategori/medikal-urunler/evde-saglik', ['Medikal Cihazlar', 'Buhar Makinesi', 'Isıtıcı Bantlar', 'Sıcak Su Torbası'])
+        links: createLinks('/category/medikal-urunler/evde-saglik', ['Medikal Cihazlar', 'Buhar Makinesi', 'Isıtıcı Bantlar', 'Sıcak Su Torbası'])
       },
       {
         title: 'Popüler Markalar', icon: Heart,
@@ -524,23 +530,23 @@ export const megaMenuData = {
   dogal: {
     mainTitle: 'Doğal & Organik',
     description: 'Doğadan ilham alan, temiz içerikli, vegan ve sürdürülebilir güzellik ürünleri.',
-    url: '/kategori/dogal-organik',
+    url: '/category/dogal-organik',
     columns: [
       {
         title: 'Cilt Bakımı', icon: Smile,
-        links: createLinks('/kategori/dogal-organik/cilt-bakimi', ['Organik Cilt Bakımı', 'Doğal Yüz Temizleme', 'Saf Aromaterapi Yağları', 'Vegan Göz Kremleri'])
+        links: createLinks('/category/dogal-organik/cilt-bakimi', ['Organik Cilt Bakımı', 'Doğal Yüz Temizleme', 'Saf Aromaterapi Yağları', 'Vegan Göz Kremleri'])
       },
       {
         title: 'Saç Bakımı', icon: Wind,
-        links: createLinks('/kategori/dogal-organik/sac-bakimi', ['Doğal Saç Bakımı', 'Organik Şampuan', 'Katı Şampuan (Sıfır Atık)', 'Sülfatsız Şampuan'])
+        links: createLinks('/category/dogal-organik/sac-bakimi', ['Doğal Saç Bakımı', 'Organik Şampuan', 'Katı Şampuan (Sıfır Atık)', 'Sülfatsız Şampuan'])
       },
       {
         title: 'Vücut & Kozmetik', icon: Droplets,
-        links: createLinks('/kategori/dogal-organik/vucut-kozmetik', ['Doğal Vücut Bakımı', 'Organik El Yapımı Sabunlar', 'Vegan Kozmetik', 'Cruelty Free Ürünler', 'Bitkisel Ürünler'])
+        links: createLinks('/category/dogal-organik/vucut-kozmetik', ['Doğal Vücut Bakımı', 'Organik El Yapımı Sabunlar', 'Vegan Kozmetik', 'Cruelty Free Ürünler', 'Bitkisel Ürünler'])
       },
       {
         title: 'Bebek & Anne', icon: Heart,
-        links: createLinks('/kategori/dogal-organik/bebek-anne', ['Organik Bebek Şampuanı', 'Doğal Pişik Kremi', 'Organik Emzirme Çayı'])
+        links: createLinks('/category/dogal-organik/bebek-anne', ['Organik Bebek Şampuanı', 'Doğal Pişik Kremi', 'Organik Emzirme Çayı'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -568,23 +574,23 @@ export const megaMenuData = {
   gunes: {
     mainTitle: 'Güneş Ürünleri',
     description: 'Cildinizi zararlı UV ışınlarından koruyan dermatolojik güneş kremleri.',
-    url: '/kategori/gunes-urunleri',
+    url: '/category/gunes-urunleri',
     columns: [
       {
         title: 'Yüz Güneş Kremleri', icon: Smile,
-        links: createLinks('/kategori/gunes-urunleri/yuz', ['Kuru Cilt Güneş Kremi', 'Yağlı Cilt Güneş Kremi', 'Renkli Güneş Kremleri', 'Leke Karşıtı Güneş Kremi'])
+        links: createLinks('/category/gunes-urunleri/yuz', ['Kuru Cilt Güneş Kremi', 'Yağlı Cilt Güneş Kremi', 'Renkli Güneş Kremleri', 'Leke Karşıtı Güneş Kremi'])
       },
       {
         title: 'Vücut & Çocuk', icon: User,
-        links: createLinks('/kategori/gunes-urunleri/vucut-cocuk', ['Vücut Güneş Kremleri', 'Güneş Koruyucu Spreyler', 'Çocuk Güneş Kremleri', 'Mineral Filtreli Kremler'])
+        links: createLinks('/category/gunes-urunleri/vucut-cocuk', ['Vücut Güneş Kremleri', 'Güneş Koruyucu Spreyler', 'Çocuk Güneş Kremleri', 'Mineral Filtreli Kremler'])
       },
       {
         title: 'Güneş Sonrası', icon: Wind,
-        links: createLinks('/kategori/gunes-urunleri/gunes-sonrasi', ['Güneş Sonrası Losyonlar', 'Aloe Vera Jelleri', 'Yanık Rahatlatıcılar'])
+        links: createLinks('/category/gunes-urunleri/gunes-sonrasi', ['Güneş Sonrası Losyonlar', 'Aloe Vera Jelleri', 'Yanık Rahatlatıcılar'])
       },
       {
         title: 'Bronzlaştırıcılar', icon: Droplets,
-        links: createLinks('/kategori/gunes-urunleri/bronzlastiricilar', ['Bronzlaştırıcı Yağlar', 'Oto Bronzanlar (Güneşsiz)', 'Havuç & Kakao Yağı'])
+        links: createLinks('/category/gunes-urunleri/bronzlastiricilar', ['Bronzlaştırıcı Yağlar', 'Oto Bronzanlar (Güneşsiz)', 'Havuç & Kakao Yağı'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -612,23 +618,23 @@ export const megaMenuData = {
   hediyelik: {
     mainTitle: 'Hediyelik Ürünler',
     description: 'Sevdiklerinizi mutlu edecek en seçkin parfüm ve bakım setleri.',
-    url: '/kategori/hediyelik-urunler',
+    url: '/category/hediyelik-urunler',
     columns: [
       {
         title: 'Hediye Setleri', icon: Box,
-        links: createLinks('/kategori/hediyelik-urunler/hediye-setleri', ['Kadın Hediye Setleri', 'Erkek Hediye Setleri', 'Özel Gün Hediyeleri', 'Yılbaşı Hediye Kutuları'])
+        links: createLinks('/category/hediyelik-urunler/hediye-setleri', ['Kadın Hediye Setleri', 'Erkek Hediye Setleri', 'Özel Gün Hediyeleri', 'Yılbaşı Hediye Kutuları'])
       },
       {
         title: 'Cilt Bakım Setleri', icon: Smile,
-        links: createLinks('/kategori/hediyelik-urunler/cilt-bakim', ['Kırışıklık Karşıtı Setler', 'Nemlendirici Kofreler', 'Seyahat Boy (Travel Size)'])
+        links: createLinks('/category/hediyelik-urunler/cilt-bakim', ['Kırışıklık Karşıtı Setler', 'Nemlendirici Kofreler', 'Seyahat Boy (Travel Size)'])
       },
       {
         title: 'Saç & Vücut Setleri', icon: Droplets,
-        links: createLinks('/kategori/hediyelik-urunler/sac-vucut', ['Saç Bakım Setleri', 'Duş & Vücut Setleri', 'Masaj & Spa Setleri'])
+        links: createLinks('/category/hediyelik-urunler/sac-vucut', ['Saç Bakım Setleri', 'Duş & Vücut Setleri', 'Masaj & Spa Setleri'])
       },
       {
         title: 'Parfüm Setleri', icon: Wind,
-        links: createLinks('/kategori/hediyelik-urunler/parfum', ['Kadın Parfüm Setleri', 'Erkek Parfüm Setleri', 'Mini Parfüm Koleksiyonu'])
+        links: createLinks('/category/hediyelik-urunler/parfum', ['Kadın Parfüm Setleri', 'Erkek Parfüm Setleri', 'Mini Parfüm Koleksiyonu'])
       },
       {
         title: 'Popüler Markalar', icon: ShieldCheck,
@@ -653,3 +659,5 @@ export const megaMenuData = {
     }
   }
 };
+
+

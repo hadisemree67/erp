@@ -55,3 +55,69 @@
 .navItem:hover {
   color: var(--primary);
 }
+
+/* Brands Dropdown */
+.brandsWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.brandsDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: var(--white);
+  border: 1px solid var(--border-color);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  padding: 20px;
+  width: max-content;
+  max-width: 1000px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 16px;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+}
+
+.brandsWrapper:hover .brandsDropdown,
+.brandsWrapper:focus-within .brandsDropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.brandItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 10px;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--text-dark);
+}
+
+.brandItem:hover {
+  background-color: #f8fafc;
+}
+
+.brandLogo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+
+.brandName {
+  font-size: 13px;
+  font-weight: 500;
+}

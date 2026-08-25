@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: api.js
- * MODÜL / KATMAN: Önyüz Yardımcısı (Utility) - Merkezi HTTP İstek Yöneticisi
- * 
+ * BİLEŞEN ADI: api
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Uygulama genelinde arkayüz (backend) API uç noktalarına yapılan tüm HTTP (GET, POST, PUT, DELETE) isteklerini standart hale getiren, yetkilendirme token'larını (JWT) başlığa ekleyen ve hata yakalamayı merkezi olarak yöneten yardımcı modüldür.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - Fetch API Wrapper, Asenkron İletişim, Hata Yakalama (Error Interception)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Tüm önyüz bileşenleri ve servisleri tarafından arkayüzle konuşmak için ortaklaşa kullanılan temel iletişim köprüsüdür.
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
  * ============================================================================
  */
 
@@ -26,6 +18,7 @@ export const apiFetch = async (url, options = {}) => {
     } else if (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         url = url.replace('http://localhost:3000', window.location.origin).replace('http://127.0.0.1:3000', window.location.origin);
     }
+    
     const token = localStorage.getItem('token');
     
     // Varsayılan headers ayarı
@@ -64,3 +57,4 @@ export const apiFetch = async (url, options = {}) => {
         throw error;
     }
 };
+

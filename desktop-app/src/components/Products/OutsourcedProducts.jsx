@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: OutsourcedProducts
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemdeki ürünlerin, varyantların ve stok kartlarının yönetildiği modül.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (OutsourcedProducts.jsx), Ürün katalogu, fason/satın alma detayları, barkod işlemleri ve toplu ürün güncelleme araçlarını içerir.
@@ -160,7 +167,7 @@ const OutsourcedProducts = ({ currentUser }) => {
                                     
                                     let displayBarcode = product.Barcode;
                                     if (displayBarcode?.startsWith('[')) {
-                                        try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch(e){}
+                                        try { displayBarcode = JSON.parse(displayBarcode)[0] || ''; } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                                     }
 
                                     return (
@@ -304,3 +311,5 @@ const OutsourcedProducts = ({ currentUser }) => {
 };
 
 export default OutsourcedProducts;
+
+

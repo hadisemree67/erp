@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ProductionRequests.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Üretim Modülü / Üretim Talepleri ve Onay Ekranı
- * 
+ * BİLEŞEN ADI: ProductionRequests
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Satış veya stok departmanlarından gelen üretim taleplerini (imalat ihtiyaçlarını) inceler; yöneticilerin bu talepleri onaylayarak doğrudan üretim emrine dönüştürmesini sağlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Talep Onay İş Akışı (Workflow), Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/production/requests` uç noktasıyla haberleşerek departmanlar arası üretim koordinasyonunu sağlar.
+ *   Üretim emirleri, makine takibi ve imalat operasyonlarını yöneten arayüz.
  * ============================================================================
  */
 
@@ -614,3 +606,4 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
 };
 
 export default ProductionRequests;
+

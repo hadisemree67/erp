@@ -1,101 +1,148 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: ProductCarousel
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Ürün Kaydırıcı (Carousel)
 // Açıklama: Yeni ürünler veya çok satanlar gibi ürün vitrinlerini yatay olarak kaydırılabilir şekilde sunar.
 // -----------------------------------------------------------------------------
 import React from 'react';
-import { ArrowRight, Heart, Star } from 'lucide-react';
+import { ArrowRight, Heart, Star, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useCart } from '../../context/CartContext';
+import { useFavorites } from '../../context/FavoritesContext';
 import styles from './ProductCarousel.module.css';
 
-const products = [
-  {
-    id: 1,
-    brand: 'La Roche-Posay',
-    name: 'Effaclar Yüz Yıkama Jeli 400 ml',
-    price: '499,90 TL',
-    oldPrice: '599,90 TL',
-    rating: 4.8,
-    reviews: 1245,
-    badge: '%20',
-    badgeType: 'discount',
-    image: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?q=100&w=800&auto=format&fit=crop'
-  },
-  {
-    id: 2,
-    brand: 'Cerave',
-    name: 'Nemlendirici Krem 340 gr',
-    price: '349,90 TL',
-    rating: 4.9,
-    reviews: 856,
-    badge: 'Yeni',
-    badgeType: 'new',
-    image: 'https://images.unsplash.com/photo-1617897903246-719242758050?q=100&w=800&auto=format&fit=crop'
-  },
-  {
-    id: 3,
-    brand: 'Vichy',
-    name: 'Mineral 89 Probiyotik Serum 30 ml',
-    price: '899,90 TL',
-    rating: 4.7,
-    reviews: 432,
-    image: 'https://images.unsplash.com/photo-1629198688000-71f23e745b6e?q=100&w=800&auto=format&fit=crop'
-  },
-  {
-    id: 4,
-    brand: 'Bioderma',
-    name: 'Sensibio H2O Micellar Su 500 ml',
-    price: '299,90 TL',
-    oldPrice: '349,90 TL',
-    rating: 4.9,
-    reviews: 2150,
-    image: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?q=100&w=800&auto=format&fit=crop'
-  }
-];
+const ProductCarousel = ({ title = "Ürünler", products = [] }) => {
+  const { addToCart } = useCart();
+  const { toggleFavorite, isFavorite } = useFavorites();
+  const [addingId, setAddingId] = React.useState(null);
+  const [localProducts, setLocalProducts] = React.useState([]);
+  const [currentIndex, setCurrentIndex] = React.useState(0);
 
-const ProductCarousel = () => {
+  const isBestsellerSection = title === "Çok Satan Ürünler";
+
+  const handleNext = () => {
+    if (currentIndex + 5 >= localProducts.length) {
+      setCurrentIndex(0);
+    } else {
+      setCurrentIndex(currentIndex + 5);
+    }
+  };
+
+  React.useEffect(() => {
+    setLocalProducts(products);
+  }, [products]);
+
+  const handleAddToCart = async (product) => {
+    if (product.AvailableStock <= 0) return;
+    setAddingId(product.Id);
+    const res = await addToCart(product, 1);
+    setAddingId(null);
+    if (!res.success) {
+        // toast handles error
+    } else {
+        setLocalProducts(prev => 
+            prev.map(p => 
+                p.Id === product.Id 
+                ? { ...p, AvailableStock: p.AvailableStock - 1 } 
+                : p
+            )
+        );
+    }
+  };
+
   // 4. Arayüz (UI) Çizimi ve Render Edilmesi
   return (
     <div className={`container ${styles.carouselWrapper}`}>
       <div className={styles.sectionHeader}>
-        <div className={styles.sectionTitle}>Çok Satan Ürünler</div>
+        <div className={styles.sectionTitle}>{title}</div>
         <button className={styles.viewAll}>
           Tümünü Gör <ArrowRight size={16} />
         </button>
       </div>
       
-      <div className={styles.productGrid}>
-        {products.map((product) => (
-          <div key={product.id} className={styles.productCard}>
-            {product.badge && (
-              <div className={`${styles.badge} ${styles[product.badgeType]}`}>
-                {product.badge}
+      <div className={styles.productGridContainer}>
+        <div className={styles.productGrid}>
+          {localProducts.slice(currentIndex, currentIndex + 5).map((product) => {
+          let mainImage = 'https://via.placeholder.com/300x300?text=Görsel+Yok';
+          if (product.images && product.images.length > 0) {
+            const imgPath = product.images[0];
+            if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
+              mainImage = imgPath;
+            } else {
+              mainImage = `http://localhost:3000${imgPath}`;
+            }
+          }
+            
+          return (
+            <div key={product.Id} className={`${styles.productCard} ${isBestsellerSection ? styles.bestsellerCard : ''}`}>
+              {/* Çok Satan Rozeti */}
+              {isBestsellerSection && (
+                <div className={styles.bestsellerBadge}>
+                  <Star size={12} fill="#fff" stroke="none" style={{ marginRight: '4px' }} /> ÇOK SATAN
+                </div>
+              )}
+              {/* Örnek rozet mantığı */}
+              {product.isNew && !isBestsellerSection && (
+                <div className={`${styles.badge} ${styles.new}`}>Yeni</div>
+              )}
+              {product.AvailableStock <= 0 && (
+                <div style={{ position: 'absolute', top: product.isNew ? '40px' : '14px', left: '14px', background: '#fee2e2', color: '#dc2626', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', zIndex: 10 }}>Tükendi</div>
+              )}
+              {product.AvailableStock > 0 && product.AvailableStock < 100 && (
+                <div style={{ position: 'absolute', top: product.isNew ? '40px' : '14px', left: '14px', background: '#fef08a', color: '#a16207', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', zIndex: 10 }}>Azalan Stok</div>
+              )}
+              
+              <button className={styles.favoriteBtn} onClick={() => toggleFavorite(product)}>
+                <Heart size={20} fill={isFavorite(product.Id) ? "#e11d48" : "none"} color={isFavorite(product.Id) ? "#e11d48" : "currentColor"} />
+              </button>
+              
+              <Link to={`/product/${product.Id}`} className={styles.imageLink}>
+                <img src={mainImage} alt={product.ProductName} className={styles.productImage} style={{ mixBlendMode: 'multiply' }} />
+              </Link>
+              
+              <div className={styles.productBrand}>{product.Brand || 'Markasız'}</div>
+              <Link to={`/product/${product.Id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div className={styles.productName} title={product.ProductName}>
+                  {product.ProductName}
+                </div>
+              </Link>
+              
+              <div className={styles.ratingRow}>
+                <Star size={14} className={styles.star} fill="currentColor" />
+                <span className={styles.ratingCount}>(0)</span>
               </div>
-            )}
-            
-            <button className={styles.favoriteBtn}>
-              <Heart size={20} />
-            </button>
-            
-            <img src={product.image} alt={product.name} className={styles.productImage} style={{ mixBlendMode: 'multiply' }} />
-            
-            <div className={styles.productBrand}>{product.brand}</div>
-            <div className={styles.productName}>{product.name}</div>
-            
-            <div className={styles.ratingRow}>
-              <Star size={14} className={styles.star} fill="currentColor" />
-              <span className={styles.ratingCount}>({product.reviews})</span>
-            </div>
-            
-            <div className={styles.productPrice}>
-              {product.price}
-              {product.oldPrice && <span className={styles.oldPrice}>{product.oldPrice}</span>}
-            </div>
+              
+              <div className={styles.productPrice}>
+                {product.SalePrice ? `${product.SalePrice} TL` : 'Fiyat Yok'}
+              </div>
 
-            <button className={styles.addToCartBtn}>Sepete Ekle</button>
-          </div>
-        ))}
+              <button 
+                className={styles.addToCartBtn} 
+                onClick={() => handleAddToCart(product)}
+                disabled={product.AvailableStock <= 0 || addingId === product.Id}
+                style={{ opacity: product.AvailableStock <= 0 ? 0.5 : 1, cursor: product.AvailableStock <= 0 ? 'not-allowed' : 'pointer' }}
+              >
+                {product.AvailableStock <= 0 ? 'TÜKENDİ' : (addingId === product.Id ? 'EKLENİYOR...' : 'SEPETE EKLE')}
+              </button>
+            </div>
+          );
+        })}
+        </div>
+        {localProducts.length > 5 && (
+          <button className={styles.nextBtn} onClick={handleNext}>
+            <ChevronRight size={24} />
+          </button>
+        )}
       </div>
     </div>
   );
 };
 
 export default ProductCarousel;
+
+

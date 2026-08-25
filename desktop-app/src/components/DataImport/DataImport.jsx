@@ -1,10 +1,17 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: DataImport
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Dış kaynaklı verileri (Excel vb.) sisteme aktarma modülü.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (DataImport.jsx), sisteme Excel (.xlsx) veya .csv dosyalarından toplu veri aktarmak için kullanılır.
  */
 
 import React, { useState } from 'react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { apiFetch } from '../../utils/api';
 
 const MODULES = [
@@ -48,29 +55,51 @@ const DataImport = ({ currentUser }) => {
     const [isImporting, setIsImporting] = useState(false);
 
     // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
-    const handleFileUpload = (e) => {
+    const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            const bstr = evt.target.result;
-            const wb = XLSX.read(bstr, { type: 'binary' });
-            const wsname = wb.SheetNames[0];
-            const ws = wb.Sheets[wsname];
-            const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        try {
+            const workbook = new ExcelJS.Workbook();
+            const arrayBuffer = await file.arrayBuffer();
+            await workbook.xlsx.load(arrayBuffer);
             
-            if (data.length > 0) {
-                const headers = data[0].filter(h => h); // Boş başlıkları atla
-                const rows = data.slice(1).map(row => {
-                    let rowData = {};
-                    headers.forEach((h, i) => {
-                        rowData[h] = row[i];
-                    });
-                    return rowData;
-                }).filter(row => Object.keys(row).length > 0);
+            const ws = workbook.worksheets[0];
+            if (!ws) {
+                alert('Excel dosyası boş veya geçersiz.');
+                return;
+            }
 
-                setExcelHeaders(headers);
+            let headers = [];
+            let rows = [];
+
+            ws.eachRow((row, rowNumber) => {
+                if (rowNumber === 1) {
+                    // İlk satır başlıklar
+                    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+                        headers[colNumber] = cell.value ? cell.value.toString().trim() : `Sütun ${colNumber}`;
+                    });
+                } else {
+                    let rowData = {};
+                    let hasData = false;
+                    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                        const header = headers[colNumber];
+                        if (header) {
+                            rowData[header] = cell.value;
+                            hasData = true;
+                        }
+                    });
+                    if (hasData) {
+                        rows.push(rowData);
+                    }
+                }
+            });
+
+            // Boş başlıkları temizle (dizideki empty sloları siler)
+            const cleanHeaders = Object.values(headers).filter(h => h);
+
+            if (rows.length > 0) {
+                setExcelHeaders(cleanHeaders);
                 setExcelData(rows);
                 setStep(2);
                 
@@ -84,9 +113,13 @@ const DataImport = ({ currentUser }) => {
                     });
                     setMapping(initialMap);
                 }
+            } else {
+                alert('Excel dosyasında okunacak veri bulunamadı.');
             }
-        };
-        reader.readAsBinaryString(file);
+        } catch (error) {
+            console.error('Excel okuma hatası:', error);
+            alert('Excel dosyası okunamadı. Lütfen geçerli bir .xlsx dosyası seçin.');
+        }
     };
 
     const handleMappingChange = (dbField, excelHeader) => {
@@ -322,3 +355,5 @@ const DataImport = ({ currentUser }) => {
 };
 
 export default DataImport;
+
+

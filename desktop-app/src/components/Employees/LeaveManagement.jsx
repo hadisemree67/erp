@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: LeaveManagement.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - İnsan Kaynakları / İzin ve Tatil Yönetimi
- * 
+ * BİLEŞEN ADI: LeaveManagement
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Çalışanların yıllık izin, mazeret izni veya hastalık izni taleplerini oluşturmalarını, kalan izin günlerini görüntülemelerini ve yöneticilerin bu izin taleplerini onaylamasını veya reddetmesini sağlayan yönetim ekranıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, İzin Gün Hesaplama, Durum Yönetimi (Onay/Red Akışları)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/employees/:id/leaves` ve `/api/employees/:id/leave-summary` uç noktalarıyla haberleşerek personel izin bakiye takibini sağlar.
+ *   Personel, İK, maaş, izin ve işten ayrılış işlemlerini barındıran bileşen.
  * ============================================================================
  */
 
@@ -352,3 +344,4 @@ const LeaveManagement = ({ currentUser }) => {
 };
 
 export default LeaveManagement;
+

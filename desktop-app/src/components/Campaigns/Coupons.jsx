@@ -1,11 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: Coupons.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Kampanya ve İndirim Kuponları
- * 
+ * BİLEŞEN ADI: Coupons
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemde kullanılacak indirim kuponlarının (Yüzde, Sabit Tutar, Hediye Ürün vb.)
- *   listelenmesi, oluşturulması, güncellenmesi ve silinmesi işlemlerini yönetir.
+ *   İndirim kampanyaları ve kupon yönetimi işlemlerini sağlayan ekran.
  * ============================================================================
  */
 import React, { useState, useEffect } from 'react';
@@ -33,11 +30,14 @@ const Coupons = ({ currentUser }) => {
         usage_limit: '',
         start_date: '',
         end_date: '',
-        is_active: true
+        is_active: true,
+        target_audience: 'all',
+        target_customer_ids: []
     });
 
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [customers, setCustomers] = useState([]);
 
     useEffect(() => {
         fetchCoupons();
@@ -63,8 +63,9 @@ const Coupons = ({ currentUser }) => {
 
     const fetchProductsAndCategories = async () => {
         try {
-            const [prodRes] = await Promise.all([
-                apiFetch('http://localhost:3000/api/products')
+            const [prodRes, custRes] = await Promise.all([
+                apiFetch('http://localhost:3000/api/products'),
+                apiFetch('http://localhost:3000/api/customers')
             ]);
             
             if (prodRes.ok) {
@@ -74,6 +75,11 @@ const Coupons = ({ currentUser }) => {
                 // Sadece benzersiz (unique) kategorileri ayıkla
                 const uniqueCategories = [...new Set(filteredProducts.map(p => p.Category).filter(Boolean))];
                 setCategories(uniqueCategories);
+            }
+
+            if (custRes.ok) {
+                const cData = await custRes.json();
+                setCustomers(cData.customers || []);
             }
         } catch (error) {
             console.error('Veriler çekilirken hata:', error);
@@ -97,7 +103,9 @@ const Coupons = ({ currentUser }) => {
                 usage_limit: coupon.usage_limit || '',
                 start_date: coupon.start_date ? coupon.start_date.split('T')[0] : '',
                 end_date: coupon.end_date ? coupon.end_date.split('T')[0] : '',
-                is_active: coupon.is_active !== false
+                is_active: coupon.is_active !== false,
+                target_audience: coupon.target_audience || 'all',
+                target_customer_ids: (typeof coupon.target_customer_ids === 'string' ? JSON.parse(coupon.target_customer_ids) : coupon.target_customer_ids) || []
             });
         } else {
             setEditingId(null);
@@ -115,7 +123,9 @@ const Coupons = ({ currentUser }) => {
                 usage_limit: '',
                 start_date: '',
                 end_date: '',
-                is_active: true
+                is_active: true,
+                target_audience: 'all',
+                target_customer_ids: []
             });
         }
         setIsModalOpen(true);
@@ -197,11 +207,17 @@ const Coupons = ({ currentUser }) => {
                         ) : coupons.length === 0 ? (
                             <tr><td colSpan="6" style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Kayıtlı kupon bulunmamaktadır.</td></tr>
                         ) : coupons.map(c => (
-                            <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '12px', fontWeight: 'bold' }}>{c.code}</td>
-                                <td style={{ padding: '12px' }}>{c.discount_type}</td>
-                                <td style={{ padding: '12px' }}>{c.discount_value || '-'}</td>
-                                <td style={{ padding: '12px' }}>{c.used_count || 0} / {c.usage_limit || 'Sınırsız'}</td>
+                            <tr key={c.id} style={{ borderBottom: '1px solid #f1f5f9', color: '#1e293b' }}>
+                                <td style={{ padding: '12px', fontWeight: 'bold', color: '#0f172a' }}>{c.code}</td>
+                                <td style={{ padding: '12px', color: '#334155' }}>
+                                    {c.discount_type === 'Percentage' ? 'Yüzde İndirim' : 
+                                     c.discount_type === 'FixedAmount' ? 'Sabit İndirim' : 
+                                     c.discount_type === 'BuyXGetY' ? 'X Al Y Öde' : 
+                                     c.discount_type === 'GiftProduct' ? 'Hediye Ürün' : 
+                                     c.discount_type === 'FreeShipping' ? 'Kargo Bedava' : c.discount_type}
+                                </td>
+                                <td style={{ padding: '12px', color: '#334155' }}>{c.discount_value ? (c.discount_type === 'Percentage' ? `%${c.discount_value}` : `${c.discount_value} TL`) : '-'}</td>
+                                <td style={{ padding: '12px', color: '#334155' }}>{c.used_count || 0} / {c.usage_limit || 'Sınırsız'}</td>
                                 <td style={{ padding: '12px' }}>
                                     <span style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: c.is_active ? '#dcfce7' : '#fee2e2', color: c.is_active ? '#166534' : '#991b1b', fontSize: '12px', fontWeight: '600' }}>
                                         {c.is_active ? 'Aktif' : 'Pasif'}
@@ -293,6 +309,32 @@ const Coupons = ({ currentUser }) => {
                                 </select>
                             </div>
 
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '600', color: '#334155' }}>Hedef Kitle (Kime Özel?)</label>
+                                <select required value={formData.target_audience} onChange={e => setFormData({...formData, target_audience: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', color: '#0f172a', backgroundColor: 'white' }}>
+                                    <option value="all">Herkese Açık (Genel Kampanya)</option>
+                                    <option value="specific">Belirli Müşterilere Özel</option>
+                                </select>
+                            </div>
+
+                            {formData.target_audience === 'specific' && (
+                                <div style={{ gridColumn: '1 / -1' }}>
+                                    <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '600', color: '#334155' }}>Müşterileri Seçin (Çoklu Seçim)</label>
+                                    <select 
+                                        multiple 
+                                        value={formData.target_customer_ids} 
+                                        onChange={e => {
+                                            const selectedOptions = Array.from(e.target.selectedOptions, option => parseInt(option.value));
+                                            setFormData({...formData, target_customer_ids: selectedOptions});
+                                        }} 
+                                        style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', color: '#0f172a', backgroundColor: 'white', minHeight: '120px' }}
+                                    >
+                                        {customers.map(c => <option key={c.Id} value={c.Id}>{c.CustomerName} ({c.Email || c.Phone})</option>)}
+                                    </select>
+                                    <small style={{ color: '#64748b' }}>Birden fazla seçmek için CTRL (veya CMD) tuşuna basılı tutarak tıklayın.</small>
+                                </div>
+                            )}
+
                             <div>
                                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '600', color: '#334155' }}>Kullanım Limiti (Adet)</label>
                                 <input type="number" value={formData.usage_limit} onChange={e => setFormData({...formData, usage_limit: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', color: '#0f172a', backgroundColor: 'white' }} />
@@ -329,3 +371,4 @@ const Coupons = ({ currentUser }) => {
 };
 
 export default Coupons;
+

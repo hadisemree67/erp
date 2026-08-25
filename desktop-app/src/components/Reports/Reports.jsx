@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: Reports
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistem verilerini analiz edip raporlayan istatistik ve döküm ekranı.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (Reports.jsx), Satış, üretim ve envanter verilerine dair kapsamlı analiz raporları ve grafikleri sunar.
@@ -402,3 +409,5 @@ function Reports({ currentUser }) {
 }
 
 export default Reports;
+
+

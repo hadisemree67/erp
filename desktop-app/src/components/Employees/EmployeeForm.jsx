@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: EmployeeForm.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - İnsan Kaynakları / Çalışan Ekleme ve Düzenleme Formu
- * 
+ * BİLEŞEN ADI: EmployeeForm
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Yeni bir personel/çalışan kaydı oluşturmak veya mevcut çalışanın kişisel bilgilerini, maaşını, departmanını, işe başlama tarihini ve iletişim detaylarını düzenlemek için kullanılan form arayüzüdür.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React (useState, useEffect), Form Doğrulama (Validation), Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Arkayüzdeki `/api/employees` rotasının POST (ekleme) ve PUT (güncelleme) uç noktalarıyla iletişim kurar.
+ *   Personel, İK, maaş, izin ve işten ayrılış işlemlerini barındıran bileşen.
  * ============================================================================
  */
 
@@ -339,3 +331,4 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
 };
 
 export default EmployeeForm;
+

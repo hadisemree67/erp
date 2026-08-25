@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: GoodsReceipt.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Mal Kabul (Goods Receipt) Ekranı
- * 
+ * BİLEŞEN ADI: GoodsReceipt
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Tedarikçilerden gelen irsaliyeli veya satın alma siparişine bağlı ürünlerin depoya fiziksel kabulünü gerçekleştirir. Gelen ürünlerin barkodlarının okutulması, miktar sayımı, hasar/kalite kontrolü ve depo rafına ilk giriş kaydının yapılmasını sağlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Barkod Okuma Entegrasyonu, İrsaliye ve miktar eşleme, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/wms/goods-receipt` ve `/api/purchasing/orders` rotalarıyla entegre çalışarak stokları artırır.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -176,7 +168,7 @@ const GoodsReceipt = () => {
                 if (data.success) {
                     setOrders(data.data.filter(o => o.status === 'Depo Kabul Bekliyor'));
                 }
-            } catch (e) {}
+            } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
         }, 10000);
         
         return () => clearInterval(intervalId);
@@ -660,3 +652,4 @@ const GoodsReceipt = () => {
 };
 
 export default GoodsReceipt;
+

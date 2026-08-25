@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: AddressModal
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web uygulamasının (e-ticaret) alt bileşenidir. Ziyaretçilere kullanıcı dostu arayüz sunar.
+ * ============================================================================
+ */
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import styles from './AddressModal.module.css';
@@ -281,3 +288,5 @@ const AddressModal = ({ isOpen, onClose, onSave, initialData }) => {
 };
 
 export default AddressModal;
+
+

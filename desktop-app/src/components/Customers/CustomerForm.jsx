@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: CustomerForm
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Müşteri kayıtları, b2b/b2c cari takibi ve müşteri ilişkileri arayüzü.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (CustomerForm.jsx), Müşteri kayıtlarını, B2B/B2C ayrımını ve müşteri detaylarını yöneten bileşenleri içerir.
@@ -226,3 +233,5 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
 };
 
 export default CustomerForm;
+
+

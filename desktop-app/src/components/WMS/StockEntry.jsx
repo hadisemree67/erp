@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: StockEntry.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Hızlı Stok Giriş ve Çıkış İşlemleri
- * 
+ * BİLEŞEN ADI: StockEntry
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Üretimden depoya mamul girişi, üretime hammadde çıkışı, fire/zayi çıkışı veya numune gönderimi gibi günlük operasyonel stok hareketlerini hızlıca kaydetmek için kullanılan ekrandır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Hareket Tipi Seçimi (Giriş/Çıkış/Fire), Barkod Desteği
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/wms/stock-movements` rotası üzerinden depodaki stok miktarlarını anlık artırır veya azaltır.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -23,7 +15,7 @@ import { apiFetch } from '../../utils/api';
 import React, { useState, useEffect } from 'react';
 import ShelfBarcodeScanner from './ShelfBarcodeScanner';
 
-const StockEntry = ({ currentUser, onNavigate }) => {
+const StockEntry = ({ currentUser, onNavigate, onSuccess }) => {
     // 1. Durum (State) Tanımlamaları ve Hook'lar
     const [products, setProducts] = useState([]);
     const [warehouses, setWarehouses] = useState([]);
@@ -141,7 +133,7 @@ const StockEntry = ({ currentUser, onNavigate }) => {
                                 hasChanges = true;
                             }
                         }
-                    } catch (e) {}
+                    } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                 }
             }
             if (hasChanges) {
@@ -272,7 +264,12 @@ const StockEntry = ({ currentUser, onNavigate }) => {
         setProductSearchBarcode(val);
         if (val.trim() === '') return;
         
-        const found = products.find(p => p.Barcode === val.trim());
+        const found = products.find(p => {
+            if (!p.Barcode) return false;
+            let b = typeof p.Barcode === 'string' ? p.Barcode.replace(/[\[\]"']/g, '') : String(p.Barcode);
+            return b === val.trim();
+        });
+        
         if (found) {
             setFormData(prev => ({ ...prev, productId: found.Id }));
             setScanningModal({ open: false, type: null });
@@ -352,7 +349,9 @@ const StockEntry = ({ currentUser, onNavigate }) => {
                     expirationDate: '', 
                     description: '' 
                 }));
-                if (onNavigate) {
+                if (onSuccess) {
+                    setTimeout(() => onSuccess(), 500);
+                } else if (onNavigate) {
                     setTimeout(() => onNavigate('stok-listesi'), 1000);
                 }
             } else {
@@ -404,9 +403,12 @@ const StockEntry = ({ currentUser, onNavigate }) => {
                                 style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px', width: '100%', boxSizing: 'border-box' }}
                             >
                                 <option value="">-- Ürün Ara veya Seç --</option>
-                                {products.map(p => (
-                                    <option key={p.Id} value={p.Id}>[{p.Barcode}] {p.ProductName} - Mevcut Genel Stok: {p.StockQuantity}</option>
-                                ))}
+                                {products.map(p => {
+                                    const cleanBarcode = p.Barcode ? (typeof p.Barcode === 'string' ? p.Barcode.replace(/[\[\]"']/g, '') : p.Barcode) : 'Barkod Yok';
+                                    return (
+                                        <option key={p.Id} value={p.Id}>[{cleanBarcode}] {p.ProductName} - Mevcut Genel Stok: {p.StockQuantity}</option>
+                                    );
+                                })}
                             </select>
                         </div>
                     </div>
@@ -470,14 +472,14 @@ const StockEntry = ({ currentUser, onNavigate }) => {
                             const selectedProduct = products.find(p => p.Id.toString() === formData.productId.toString());
 
                             return (
-                                <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '16px', marginBottom: '16px', alignItems: 'flex-start' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                <div key={index} style={{ marginBottom: '16px' }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '12px', alignItems: 'center' }}>
                                         <select 
                                             value={allocation.shelfCode} 
                                             onChange={(e) => handleAllocationChange(index, 'shelfCode', e.target.value)} 
                                             required 
                                             disabled={!formData.warehouseId || shelves.length === 0}
-                                            style={{ width: '100%', maxWidth: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: formData.warehouseId ? 'white' : '#f1f5f9', fontSize: '15px' }}
+                                            style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: formData.warehouseId ? 'white' : '#f1f5f9', fontSize: '15px' }}
                                         >
                                             <option value="">{shelves.length > 0 ? '-- Raf Seç --' : 'Önce Depo Seçiniz'}</option>
                                             {(() => {
@@ -542,31 +544,6 @@ const StockEntry = ({ currentUser, onNavigate }) => {
                                                 });
                                             })()}
                                         </select>
-                                        {capData ? (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#0369a1', fontWeight: '500' }}>
-                                                {(() => {
-                                                    const qty = capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1);
-                                                    const u = selectedProduct?.unit_type || 'Adet';
-                                                    let formattedQty = `${qty} ${u}`;
-                                                    if ((u === 'gr' || u === 'ml') && qty >= 1000) {
-                                                        formattedQty = `${+(qty / 1000).toFixed(2)} ${u === 'gr' ? 'kg' : 'L'}`;
-                                                    }
-                                                    return (
-                                                        <>
-                                                            ℹ️ Doluluk: %{capData.fillPercentage} ({capData.currentFilled} / {capData.maxVolume} cm³)
-                                                            <br/>
-                                                            📦 Boş Hacim: {capData.emptyVolume} cm³ (Maks: {formattedQty} / {capData.maxItems} {selectedProduct?.package_name || 'Kap'} sığar)
-                                                        </>
-                                                    );
-                                                })()}
-                                            </div>
-                                        ) : allocation.shelfCode ? (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>
-                                                ℹ️ Hacim bilgisi tanımlanmamış.
-                                            </div>
-                                        ) : null}
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                         <input 
                                             type="number" 
                                             value={allocation.quantity} 
@@ -574,27 +551,45 @@ const StockEntry = ({ currentUser, onNavigate }) => {
                                             required 
                                             min="1"
                                             placeholder="Giriş Miktarı"
-                                            style={{ width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px', boxSizing: 'border-box', borderColor: capData && allocation.quantity && (parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)) || !capData.physicallyFits) ? '#ef4444' : '#cbd5e1' }} 
+                                            style={{ width: '100%', padding: '12px', borderRadius: '6px', border: `1px solid ${capData && allocation.quantity && (parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)) || !capData.physicallyFits) ? '#ef4444' : '#cbd5e1'}`, fontSize: '15px', boxSizing: 'border-box' }} 
                                         />
-                                        {capData && !capData.physicallyFits && (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
-                                                ⚠️ Ürün bu rafa fiziksel olarak sığmıyor! (Boyut Uyuşmazlığı)
-                                            </div>
-                                        )}
-                                        {capData && capData.physicallyFits && allocation.quantity && parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)) && (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
-                                                {capData.isStackable === false || (capData.isStackable && capData.maxStackLimit < 999) ? (
-                                                    `⚠️ Uyarı: Bu ürün ambalaj yapısı gereği üst üste en fazla ${capData.isStackable ? capData.maxStackLimit : 1} kat dizilebilir. Seçilen rafın alanına göre bu rafa maksimum ${capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)} ${selectedProduct?.unit_type || 'Adet'} (${capData.maxItems} ${selectedProduct?.package_name || 'Kap'}) koyabilirsiniz.`
-                                                ) : (
-                                                    `⚠️ Seçilen ürünün boyutlarına göre bu rafa en fazla ${capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)} ${selectedProduct?.unit_type || 'Adet'} (${capData.maxItems} ${selectedProduct?.package_name || 'Kap'}) sığabilir!`
-                                                )}
-                                            </div>
+                                        {formData.shelfAllocations.length > 1 && (
+                                            <button type="button" onClick={() => removeAllocationField(index)} style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '47px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Rafı Kaldır">
+                                                ✕
+                                            </button>
                                         )}
                                     </div>
-                                    {formData.shelfAllocations.length > 1 && (
-                                        <button type="button" onClick={() => removeAllocationField(index)} style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '47px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Rafı Kaldır">
-                                            ✕
-                                        </button>
+
+                                    {capData ? (
+                                        <div style={{ marginTop: '6px', fontSize: '12px', color: '#0369a1', fontWeight: '500' }}>
+                                            {(() => {
+                                                const qty = capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1);
+                                                const u = selectedProduct?.unit_type || 'Adet';
+                                                let formattedQty = `${qty} ${u}`;
+                                                if ((u === 'gr' || u === 'ml') && qty >= 1000) {
+                                                    formattedQty = `${+(qty / 1000).toFixed(2)} ${u === 'gr' ? 'kg' : 'L'}`;
+                                                }
+                                                return <>ℹ️ Doluluk: %{capData.fillPercentage} ({capData.currentFilled} / {capData.maxVolume} cm³) · 📦 Boş Hacim: {capData.emptyVolume} cm³ (Maks: {formattedQty} / {capData.maxItems} {selectedProduct?.package_name || 'Kap'} sığar)</>;
+                                            })()}
+                                        </div>
+                                    ) : allocation.shelfCode ? (
+                                        <div style={{ marginTop: '6px', fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>
+                                            ℹ️ Hacim bilgisi tanımlanmamış.
+                                        </div>
+                                    ) : null}
+                                    {capData && !capData.physicallyFits && (
+                                        <div style={{ marginTop: '6px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
+                                            ⚠️ Ürün bu rafa fiziksel olarak sığmıyor! (Boyut Uyuşmazlığı)
+                                        </div>
+                                    )}
+                                    {capData && capData.physicallyFits && allocation.quantity && parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)) && (
+                                        <div style={{ marginTop: '6px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
+                                            {capData.isStackable === false || (capData.isStackable && capData.maxStackLimit < 999) ? (
+                                                `⚠️ Uyarı: Bu ürün ambalaj yapısı gereği üst üste en fazla ${capData.isStackable ? capData.maxStackLimit : 1} kat dizilebilir. Seçilen rafın alanına göre bu rafa maksimum ${capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)} ${selectedProduct?.unit_type || 'Adet'} (${capData.maxItems} ${selectedProduct?.package_name || 'Kap'}) koyabilirsiniz.`
+                                            ) : (
+                                                `⚠️ Seçilen ürünün boyutlarına göre bu rafa en fazla ${capData.maxItems * (parseFloat(selectedProduct?.package_capacity) || 1)} ${selectedProduct?.unit_type || 'Adet'} (${capData.maxItems} ${selectedProduct?.package_name || 'Kap'}) sığabilir!`
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             );
@@ -700,3 +695,4 @@ const StockEntry = ({ currentUser, onNavigate }) => {
 };
 
 export default StockEntry;
+

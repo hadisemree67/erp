@@ -1,7 +1,11 @@
-/*
- * ÖZET:
- * Bu modül, sistemdeki ürünlerin, kategorilerin, markaların listelenmesi, 
- * yeni ürün eklenmesi, düzenlenmesi ve toplu güncellenmesi işlemlerini yürüten API rotalarıdır.
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemdeki tüm ürünlerin (hammadde, mamul, paketli ürünler) eklenmesi, 
+ *   düzenlenmesi, vitrine çıkarılması ve stok durumlarının hesaplanması işlemlerini 
+ *   yürüten API rotalarıdır. Resim yükleme ve tedarikçi eşleştirmesi gibi alt 
+ *   bağlantılar da bu dosyada işlenir.
+ * ============================================================================
  */
 
 const express = require('express');
@@ -62,14 +66,130 @@ const parseStackable = (val, defaultVal = 0) => {
     return (val === '1' || val === 1 || val === 'true' || val === true) ? 1 : 0;
 };
 
-// GET: Tüm ürünleri getir
-// Bu uç nokta, sistemdeki tüm ürünleri (hammadde, mamul vb.) listelemek için kullanılır.
+// ===========================
+// [GET] Vitrin Ürünlerini Listeleme (Herkese Açık)
+// Web sitesi ve müşteri panelinde aktif ürünleri (kategori, marka vb. filtrelere göre) listeler. Güncel mevcut stoğu hesaplar.
+// ===========================
+router.get('/public', async (req, res) => {
+    try {
+        const { category, subcategory, subtitle, brand } = req.query;
+
+        let queryStr = `
+            SELECT Id, ProductName, ProductCode, FeaturedFeatures, Brand, Category, SalePrice, Description, ImagePath, web_categories, web_subcategories, web_subtitles, Highlights, is_bestseller,
+            (COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = products.Id), products.StockQuantity) - 
+             COALESCE((SELECT SUM(quantity) FROM cart_reservations WHERE product_id = products.Id AND expires_at > NOW()), 0) -
+             COALESCE((SELECT SUM(oi.Quantity) FROM orderitems oi JOIN orders o ON oi.OrderId = o.Id WHERE oi.ProductId = products.Id AND o.OrderStatus IN ('Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Toplamada', 'İptal Bekliyor')), 0)) AS AvailableStock
+            FROM products 
+            WHERE is_active = 1 
+              AND Category NOT IN ('Hammadde', 'Malzeme')
+        `;
+        const params = [];
+
+        if (brand) {
+            queryStr += ` AND Brand = ?`;
+            params.push(brand);
+        }
+
+        if (category) {
+            queryStr += ` AND (web_categories LIKE ? OR Category = ?)`;
+            params.push(`%"${category}"%`, category);
+        }
+        if (subcategory) {
+            queryStr += ` AND web_subcategories LIKE ?`;
+            params.push(`%"${subcategory}"%`);
+        }
+        if (subtitle) {
+            queryStr += ` AND web_subtitles LIKE ?`;
+            params.push(`%"${subtitle}"%`);
+        }
+
+        queryStr += ` ORDER BY Id DESC`;
+
+        console.log("EXECUTING QUERY:", queryStr, params);
+
+        const [rows] = await db.query(queryStr, params);
+        
+        // ImagePath JSON parse
+        const productsWithParsedImages = rows.map(product => {
+            let images = [];
+            try {
+                if (product.ImagePath) {
+                    images = JSON.parse(product.ImagePath);
+                }
+            } catch (e) {
+                if (product.ImagePath) images = [product.ImagePath];
+            }
+            return {
+                ...product,
+                images: images
+            };
+        });
+
+        res.json({ success: true, data: productsWithParsedImages });
+    } catch (error) {
+        console.error('Public ürünler listelenirken hata:', error);
+        res.status(500).json({ success: false, message: 'Ürünler getirilirken sunucu hatası oluştu.' });
+    }
+});
+
+// ===========================
+// [GET] Tekil Ürün Detayı Getirme (Herkese Açık)
+// Web sitesinde ürün detay sayfasına girildiğinde seçilen ürünün tüm bilgilerini (resimler, güncel stok, özellikler vb.) getirir.
+// ===========================
+router.get('/public/:id', async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Ürün ID.' });
+    try {
+        const [rows] = await db.query(`
+            SELECT Id, ProductName, ProductCode, FeaturedFeatures, Brand, Category, SalePrice, Description, ImagePath, web_categories, web_subcategories, web_subtitles, FeaturesImage, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse, BannerSlogan, BannerLogo, CircularFeatures, CalloutText, Highlights, is_bestseller,
+            (COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = products.Id), products.StockQuantity) - 
+             COALESCE((SELECT SUM(quantity) FROM cart_reservations WHERE product_id = products.Id AND expires_at > NOW()), 0) -
+             COALESCE((SELECT SUM(oi.Quantity) FROM orderitems oi JOIN orders o ON oi.OrderId = o.Id WHERE oi.ProductId = products.Id AND o.OrderStatus IN ('Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Toplamada', 'İptal Bekliyor')), 0)) AS AvailableStock
+            FROM products 
+            WHERE Id = ? AND is_active = 1 AND Category NOT IN ('Hammadde', 'Malzeme')
+        `, [req.params.id]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Ürün bulunamadı veya pasif durumda.' });
+        }
+
+        const product = rows[0];
+        let images = [];
+        try {
+            if (product.ImagePath) {
+                images = JSON.parse(product.ImagePath);
+            }
+        } catch (e) {
+            if (product.ImagePath) images = [product.ImagePath];
+        }
+        const [barcodeRows] = await db.query('SELECT barcode FROM product_barcodes WHERE product_id = ?', [product.Id]);
+        product.Barcode = barcodeRows.map(b => b.barcode);
+        product.images = images;
+
+        res.json({ success: true, data: product });
+    } catch (error) {
+        console.error('Public ürün detayı getirilirken hata:', error);
+        res.status(500).json({ success: false, message: 'Ürün getirilirken sunucu hatası oluştu.' });
+    }
+});
+
+// ===========================
+// [GET] Tüm Ürünleri Listeleme (Yönetim Paneli)
+// Depo veya üretim personelinin sistemi yönetirken kullanacağı tüm ürün listesini detaylarıyla çeker. (Tedarikçiler ve raf lokasyonları dahildir.)
+// ===========================
 router.get('/', authMiddleware, checkPermission('view_products'), async (req, res) => {
     try {
         // Ürünleri çekerken, WMS (Depo) sistemindeki raf stoklarını (wms_stock_balances) topluyoruz.
         // Eğer ürünün WMS'te hiçbir hareketi yoksa (yeni eklenmişse), 'COALESCE' kullanarak
         // ürün eklerken girilen başlangıç stoğunu (p.StockQuantity) baz alıyoruz.
-        const [rows] = await db.query('SELECT p.*, COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), p.StockQuantity) AS StockQuantity FROM products p ORDER BY p.Id DESC');
+        const [rows] = await db.query(`
+            SELECT p.*, 
+            COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), p.StockQuantity) AS StockQuantity,
+            (COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), p.StockQuantity) - 
+             COALESCE((SELECT SUM(quantity) FROM cart_reservations WHERE product_id = p.Id AND expires_at > NOW()), 0) -
+             COALESCE((SELECT SUM(oi.Quantity) FROM orderitems oi JOIN orders o ON oi.OrderId = o.Id WHERE oi.ProductId = p.Id AND o.OrderStatus IN ('Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Toplamada', 'İptal Bekliyor')), 0)) AS AvailableStock
+            FROM products p ORDER BY p.Id DESC
+        `);
 
         // Ürünlere ait tedarikçi bilgilerini (ürünü kimden alıyoruz) çekiyoruz.
         const [suppliers] = await db.query('SELECT ps.*, s.SupplierName FROM product_suppliers ps LEFT JOIN suppliers s ON ps.supplier_id = s.Id');
@@ -101,11 +221,12 @@ router.get('/', authMiddleware, checkPermission('view_products'), async (req, re
     }
 });
 
-// POST: Yeni ürün ekle
-// Bu uç nokta, yeni bir ürün oluşturmak ve aynı anda birden fazla tedarikçi atamak için kullanılır.
-// "upload.any()" kullanılarak multer üzerinden form-data içindeki resim ve pdf (sözleşme) dosyaları yakalanır.
+// ===========================
+// [POST] Yeni Ürün Ekleme İşlemi
+// Sisteme yeni bir ürün kaydeder. Aynı anda resim yükleme (multer), barkod ekleme ve çoklu tedarikçi atamalarını gerçekleştirir. İşlemi transaction ile güvenceye alır.
+// ===========================
 router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), async (req, res) => {
-    const { Barcode, ProductName, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type, is_active, web_categories, web_subcategories, web_subtitles } = req.body;
+    const { Barcode, ProductName, ProductCode, FeaturedFeatures, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type, is_active, is_bestseller, web_categories, web_subcategories, web_subtitles, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse, existingFeaturesImage, BannerSlogan, existingBannerLogo, CircularFeatures, CalloutText, Highlights } = req.body;
 
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode):', e.message); }
@@ -119,6 +240,24 @@ router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), a
     const newFiles = imagesFiles.map(f => `/uploads/${f.filename}`);
     const finalImagesArray = [...parsedExistingImages.filter(Boolean), ...newFiles];
     const finalImagePath = JSON.stringify(finalImagesArray);
+
+    const featuresImageFile = req.files ? req.files.find(f => f.fieldname === 'FeaturesImage') : null;
+    const finalFeaturesImage = featuresImageFile ? `/uploads/${featuresImageFile.filename}` : (existingFeaturesImage || null);
+
+    let parsedWhoCanUse = null;
+    try { if (WhoCanUse) parsedWhoCanUse = typeof WhoCanUse === 'string' ? WhoCanUse : JSON.stringify(WhoCanUse); } catch (e) {}
+
+    let parsedHowToUse = null;
+    try { if (HowToUse) parsedHowToUse = typeof HowToUse === 'string' ? HowToUse : JSON.stringify(HowToUse); } catch (e) {}
+
+    const bannerLogoFile = req.files ? req.files.find(f => f.fieldname === 'BannerLogo') : null;
+    const finalBannerLogo = bannerLogoFile ? `/uploads/${bannerLogoFile.filename}` : (existingBannerLogo || null);
+
+    let parsedCircularFeatures = null;
+    try { if (CircularFeatures) parsedCircularFeatures = typeof CircularFeatures === 'string' ? CircularFeatures : JSON.stringify(CircularFeatures); } catch (e) {}
+
+    let parsedHighlights = null;
+    try { if (Highlights) parsedHighlights = typeof Highlights === 'string' ? Highlights : JSON.stringify(Highlights); } catch (e) {}
 
     let parsedSuppliers = [];
     try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch (e) { console.warn('JSON Parse Error (suppliers):', e.message); }
@@ -159,20 +298,26 @@ router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), a
         const maxStackLimitVal = safeInt(max_stack_limit, 1);
 
         const isActiveVal = (is_active === 'false' || is_active === false || is_active === 0 || is_active === '0') ? 0 : 1;
+        const isBestsellerVal = (is_bestseller === 'true' || is_bestseller === true || is_bestseller === 1 || is_bestseller === '1') ? 1 : 0;
 
-        const query = `
-            INSERT INTO products 
-            (ProductName, Brand, Category, unit_type, package_capacity, package_name, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit, critical_stock_level, minimum_production_quantity, supplier_id, shelf_life_months, supply_type, is_active, web_categories, web_subcategories, web_subtitles) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        const insertQuery = `
+            INSERT INTO products (
+                ProductName, ProductCode, FeaturedFeatures, Brand, Category, PurchasePrice, SalePrice, 
+                StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula,
+                ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit,
+                unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity,
+                supplier_id, shelf_life_months, supply_type, is_active, is_bestseller, web_categories, web_subcategories, web_subtitles,
+                FeaturesImage, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse,
+                BannerSlogan, BannerLogo, CircularFeatures, CalloutText, Highlights
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
-        const values = [
+        const insertParams = [
             ProductName || '',
+            ProductCode || null,
+            FeaturedFeatures ? (typeof FeaturedFeatures === 'string' ? FeaturedFeatures : JSON.stringify(FeaturedFeatures)) : null,
             Brand || '',
             Category || '',
-            unit_type || 'Adet',
-            safeFloat(package_capacity, 1),
-            package_name || 'Kutu',
             safeFloat(PurchasePrice, 0),
             safeFloat(SalePrice, 0),
             safeFloat(StockQuantity, 0),
@@ -191,18 +336,32 @@ router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), a
             weightVal,
             isStackableVal,
             maxStackLimitVal,
+            unit_type || null,
+            safeFloat(package_capacity, 1),
+            package_name || null,
             safeInt(critical_stock_level, 0),
             safeInt(minimum_production_quantity, 0),
             safeInt(supplier_id, null),
             safeInt(shelf_life_months, 0),
             supply_type || 'MANUFACTURE',
             isActiveVal,
+            isBestsellerVal,
             web_categories ? JSON.stringify(web_categories) : null,
             web_subcategories ? JSON.stringify(web_subcategories) : null,
-            web_subtitles ? JSON.stringify(web_subtitles) : null
+            web_subtitles ? JSON.stringify(web_subtitles) : null,
+            finalFeaturesImage,
+            FeaturesBgColor || '#0d9488',
+            FeaturesTextColor || '#ffffff',
+            parsedWhoCanUse,
+            parsedHowToUse,
+            BannerSlogan || null,
+            finalBannerLogo,
+            parsedCircularFeatures,
+            CalloutText || null,
+            parsedHighlights
         ];
 
-        const [result] = await db.query(query, values);
+        const [result] = await db.query(insertQuery, insertParams);
         const productId = result.insertId;
 
         // 2. Barkodları yeni tabloya kaydet
@@ -245,7 +404,10 @@ router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), a
     }
 });
 
-// PUT: Toplu ürün düzenle
+// ===========================
+// [PUT] Toplu Ürün Güncelleme
+// Seçilen birden fazla üründe fiyat, kategori, aktif/pasif veya stok kritik seviyesi gibi alanları tek seferde topluca günceller.
+// ===========================
 router.put('/bulk-edit', authMiddleware, checkPermission('product_edit'), async (req, res) => {
     const { ids, updates } = req.body;
 
@@ -271,7 +433,7 @@ router.put('/bulk-edit', authMiddleware, checkPermission('product_edit'), async 
 
             for (const update of finalUpdates) {
                 const { field, type, value } = update;
-                if (!['SalePrice', 'PurchasePrice', 'Category', 'Brand', 'is_stackable', 'max_stack_limit', 'critical_stock_level', 'is_active', 'web_categories', 'web_subcategories', 'web_subtitles'].includes(field)) continue;
+                if (!['SalePrice', 'PurchasePrice', 'Category', 'Brand', 'is_stackable', 'max_stack_limit', 'critical_stock_level', 'is_active', 'is_bestseller', 'web_categories', 'web_subcategories', 'web_subtitles'].includes(field)) continue;
 
                 let newVal;
                 const isNumeric = ['SalePrice', 'PurchasePrice', 'max_stack_limit', 'critical_stock_level'].includes(field);
@@ -318,10 +480,14 @@ router.put('/bulk-edit', authMiddleware, checkPermission('product_edit'), async 
     }
 });
 
-// PUT: Ürün güncelle
+// ===========================
+// [PUT] Tekil Ürün Bilgilerini Güncelleme
+// Mevcut bir ürünün tüm özelliklerini, barkodlarını, tedarikçilerini ve yeni resimlerini günceller. Eski resimlerin yönetimi ve log (geçmiş) kaydını tutar.
+// ===========================
 router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any(), async (req, res) => {
-    const { id } = req.params;
-    const { Barcode, ProductName, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type, web_categories, web_subcategories, web_subtitles } = req.body;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Ürün ID.' });
+    const { Barcode, ProductName, ProductCode, FeaturedFeatures, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type, is_bestseller, web_categories, web_subcategories, web_subtitles, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse, existingFeaturesImage, removeFeaturesImage, BannerSlogan, existingBannerLogo, removeBannerLogo, CircularFeatures, CalloutText, Highlights } = req.body;
 
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode update):', e.message); }
@@ -335,6 +501,26 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
     const newFiles = imagesFiles.map(f => `/uploads/${f.filename}`);
     const finalImagesArray = [...parsedExistingImages.filter(Boolean), ...newFiles];
     const finalImagePath = JSON.stringify(finalImagesArray);
+
+    const featuresImageFile = req.files ? req.files.find(f => f.fieldname === 'FeaturesImage') : null;
+    let finalFeaturesImage = featuresImageFile ? `/uploads/${featuresImageFile.filename}` : (existingFeaturesImage || null);
+    if (removeFeaturesImage === 'true') finalFeaturesImage = 'REMOVED';
+
+    let parsedWhoCanUse = null;
+    try { if (WhoCanUse) parsedWhoCanUse = typeof WhoCanUse === 'string' ? WhoCanUse : JSON.stringify(WhoCanUse); } catch (e) {}
+
+    let parsedHowToUse = null;
+    try { if (HowToUse) parsedHowToUse = typeof HowToUse === 'string' ? HowToUse : JSON.stringify(HowToUse); } catch (e) {}
+
+    const bannerLogoFile = req.files ? req.files.find(f => f.fieldname === 'BannerLogo') : null;
+    let finalBannerLogo = bannerLogoFile ? `/uploads/${bannerLogoFile.filename}` : (existingBannerLogo || null);
+    if (removeBannerLogo === 'true') finalBannerLogo = 'REMOVED';
+
+    let parsedCircularFeatures = null;
+    try { if (CircularFeatures) parsedCircularFeatures = typeof CircularFeatures === 'string' ? CircularFeatures : JSON.stringify(CircularFeatures); } catch (e) {}
+
+    let parsedHighlights = null;
+    try { if (Highlights) parsedHighlights = typeof Highlights === 'string' ? Highlights : JSON.stringify(Highlights); } catch (e) {}
 
     let parsedSuppliers = [];
     try { if (suppliers) parsedSuppliers = JSON.parse(suppliers); } catch (e) { console.warn('JSON Parse Error (suppliers update):', e.message); }
@@ -380,6 +566,8 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
 
         const values = [
             req.body.ProductName !== undefined ? req.body.ProductName : oldData.ProductName,
+            req.body.ProductCode !== undefined ? req.body.ProductCode : oldData.ProductCode,
+            req.body.FeaturedFeatures !== undefined ? (typeof req.body.FeaturedFeatures === 'string' ? req.body.FeaturedFeatures : JSON.stringify(req.body.FeaturedFeatures)) : (typeof oldData.FeaturedFeatures === 'string' ? oldData.FeaturedFeatures : (oldData.FeaturedFeatures ? JSON.stringify(oldData.FeaturedFeatures) : null)),
             req.body.Brand !== undefined ? req.body.Brand : oldData.Brand,
             req.body.Category !== undefined ? req.body.Category : oldData.Category,
             req.body.unit_type !== undefined ? req.body.unit_type : oldData.unit_type,
@@ -409,15 +597,26 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
             req.body.shelf_life_months !== undefined ? safeInt(req.body.shelf_life_months, 0) : safeInt(oldData.shelf_life_months, 0),
             req.body.supply_type !== undefined ? req.body.supply_type : (oldData.supply_type || 'MANUFACTURE'),
             req.body.is_active !== undefined ? ((req.body.is_active === 'false' || req.body.is_active === false || req.body.is_active === 0 || req.body.is_active === '0') ? 0 : 1) : oldData.is_active,
+            req.body.is_bestseller !== undefined ? ((req.body.is_bestseller === 'true' || req.body.is_bestseller === true || req.body.is_bestseller === 1 || req.body.is_bestseller === '1') ? 1 : 0) : oldData.is_bestseller,
             req.body.web_categories !== undefined ? (typeof req.body.web_categories === 'string' ? req.body.web_categories : JSON.stringify(req.body.web_categories)) : (typeof oldData.web_categories === 'string' ? oldData.web_categories : (oldData.web_categories ? JSON.stringify(oldData.web_categories) : null)),
             req.body.web_subcategories !== undefined ? (typeof req.body.web_subcategories === 'string' ? req.body.web_subcategories : JSON.stringify(req.body.web_subcategories)) : (typeof oldData.web_subcategories === 'string' ? oldData.web_subcategories : (oldData.web_subcategories ? JSON.stringify(oldData.web_subcategories) : null)),
             req.body.web_subtitles !== undefined ? (typeof req.body.web_subtitles === 'string' ? req.body.web_subtitles : JSON.stringify(req.body.web_subtitles)) : (typeof oldData.web_subtitles === 'string' ? oldData.web_subtitles : (oldData.web_subtitles ? JSON.stringify(oldData.web_subtitles) : null)),
+            finalFeaturesImage === 'REMOVED' ? null : (finalFeaturesImage !== null ? finalFeaturesImage : oldData.FeaturesImage),
+            FeaturesBgColor !== undefined ? FeaturesBgColor : oldData.FeaturesBgColor,
+            FeaturesTextColor !== undefined ? FeaturesTextColor : oldData.FeaturesTextColor,
+            parsedWhoCanUse !== null ? parsedWhoCanUse : (typeof oldData.WhoCanUse === 'string' ? oldData.WhoCanUse : (oldData.WhoCanUse ? JSON.stringify(oldData.WhoCanUse) : null)),
+            parsedHowToUse !== null ? parsedHowToUse : (typeof oldData.HowToUse === 'string' ? oldData.HowToUse : (oldData.HowToUse ? JSON.stringify(oldData.HowToUse) : null)),
+            req.body.BannerSlogan !== undefined ? req.body.BannerSlogan : oldData.BannerSlogan,
+            finalBannerLogo === 'REMOVED' ? null : (finalBannerLogo !== null ? finalBannerLogo : oldData.BannerLogo),
+            parsedCircularFeatures !== null ? parsedCircularFeatures : (typeof oldData.CircularFeatures === 'string' ? oldData.CircularFeatures : (oldData.CircularFeatures ? JSON.stringify(oldData.CircularFeatures) : null)),
+            req.body.CalloutText !== undefined ? req.body.CalloutText : oldData.CalloutText,
+            parsedHighlights !== null ? parsedHighlights : (typeof oldData.Highlights === 'string' ? oldData.Highlights : (oldData.Highlights ? JSON.stringify(oldData.Highlights) : null)),
             id
         ];
 
         let query = `
             UPDATE products 
-            SET ProductName=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?, supply_type=?, is_active=?, web_categories=?, web_subcategories=?, web_subtitles=?
+            SET ProductName=?, ProductCode=?, FeaturedFeatures=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?, supply_type=?, is_active=?, is_bestseller=?, web_categories=?, web_subcategories=?, web_subtitles=?, FeaturesImage=?, FeaturesBgColor=?, FeaturesTextColor=?, WhoCanUse=?, HowToUse=?, BannerSlogan=?, BannerLogo=?, CircularFeatures=?, CalloutText=?, Highlights=?
             WHERE Id=?
         `;
 
@@ -469,7 +668,7 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
         }
 
         const fieldLabels = {
-            ProductName: 'Ürün Adı', Brand: 'Marka', Category: 'Kategori', unit_type: 'Birim',
+            ProductName: 'Ürün Adı', ProductCode: 'Ürün Kodu', FeaturedFeatures: 'Öne Çıkan Bilgiler', Brand: 'Marka', Category: 'Kategori', unit_type: 'Birim',
             package_capacity: 'Paket Kapasitesi', package_name: 'Paket Türü', PurchasePrice: 'Alış Fiyatı',
             SalePrice: 'Satış Fiyatı', StockQuantity: 'Stok Miktarı', ExpirationDate: 'SKT',
             BatchNumber: 'Parti No', Description: 'Açıklama', Location: 'Konum', Formula: 'Formül',
@@ -479,13 +678,13 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
         };
 
         const newValsMap = {
-            ProductName: values[0], Brand: values[1], Category: values[2], unit_type: values[3],
-            package_capacity: values[4], package_name: values[5], PurchasePrice: values[6],
-            SalePrice: values[7], StockQuantity: values[8], ExpirationDate: values[9],
-            BatchNumber: values[10], Description: values[11], Location: values[13], Formula: values[14],
-            ProductionTime: values[15], Width: values[16], Height: values[17], Depth: values[18],
-            Diameter: values[19], Volume: values[20], Weight: values[21], is_stackable: values[22], max_stack_limit: values[23],
-            critical_stock_level: values[24], minimum_production_quantity: values[25], shelf_life_months: values[27], is_active: values[29]
+            ProductName: values[0], ProductCode: values[1], FeaturedFeatures: values[2], Brand: values[3], Category: values[4], unit_type: values[5],
+            package_capacity: values[6], package_name: values[7], PurchasePrice: values[8],
+            SalePrice: values[9], StockQuantity: values[10], ExpirationDate: values[11],
+            BatchNumber: values[12], Description: values[13], Location: values[15], Formula: values[16],
+            ProductionTime: values[17], Width: values[18], Height: values[19], Depth: values[20],
+            Diameter: values[21], Volume: values[22], Weight: values[23], is_stackable: values[24], max_stack_limit: values[25],
+            critical_stock_level: values[26], minimum_production_quantity: values[27], shelf_life_months: values[29], is_active: values[31], is_bestseller: values[32]
         };
 
         const changes = [];
@@ -636,7 +835,8 @@ router.delete('/bulk', authMiddleware, checkPermission('product_delete'), async 
 
 // DELETE: Ürünü sil
 router.delete('/:id', authMiddleware, checkPermission('product_delete'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Ürün ID.' });
 
     try {
         await db.query('START TRANSACTION');

@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: rbac
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /**
  * Role-Based Access Control (RBAC) Middleware
  * 
@@ -72,3 +79,4 @@ module.exports = {
     checkRole,
     checkPermission
 };
+

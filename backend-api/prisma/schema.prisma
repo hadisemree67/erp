@@ -123,6 +123,8 @@ model coupons {
   end_date                DateTime? @db.Date
   is_active               Boolean?  @default(true)
   created_at              DateTime? @default(now()) @db.Timestamp(0)
+  target_audience         String?   @default("all") @db.VarChar(50)
+  target_customer_ids     Json?
   
   orders                  orders[]
 }
@@ -484,6 +486,8 @@ model products {
   Id                          Int                   @id @default(autoincrement())
 
   ProductName                 String                @db.VarChar(150)
+  ProductCode                 String?               @db.VarChar(100)
+  FeaturedFeatures            Json?
   Brand                       String                @db.VarChar(100)
   Category                    String                @db.VarChar(100)
   unit_type                   String?               @default("Adet") @db.VarChar(50)
@@ -495,6 +499,15 @@ model products {
   ExpirationDate              DateTime?             @db.Date
   BatchNumber                 String?               @db.VarChar(50)
   Description                 String?               @db.VarChar(500)
+  FeaturesImage               String?               @db.Text
+  FeaturesBgColor             String?               @default("#0d9488") @db.VarChar(50)
+  FeaturesTextColor           String?               @default("#ffffff") @db.VarChar(50)
+  WhoCanUse                   Json?
+  HowToUse                    Json?
+  BannerSlogan                String?               @db.VarChar(255)
+  BannerLogo                  String?               @db.Text
+  CircularFeatures            Json?
+  CalloutText                 String?               @db.Text
   ImagePath                   String?               @db.Text
   Location                    String?               @db.VarChar(50)
   Formula                     String?               @db.Text
@@ -526,6 +539,7 @@ model products {
   production_requests         production_requests[]
   stockmovements              stockmovements[]
   wms_stock_balances          wms_stock_balances[]
+  cart_reservations           cart_reservations[]
 }
 
 model purchase_orders {
@@ -843,3 +857,18 @@ model picking_cart_sections {
   
   cart            picking_carts  @relation(fields: [cart_id], references: [id], onDelete: Cascade)
 }
+
+model cart_reservations {
+  id          Int       @id @default(autoincrement())
+  session_id  String    @db.VarChar(255)
+  product_id  Int
+  quantity    Int
+  expires_at  DateTime  @db.Timestamp(0)
+  created_at  DateTime? @default(now()) @db.Timestamp(0)
+  products    products  @relation(fields: [product_id], references: [Id], onDelete: Cascade)
+  
+  @@index([session_id], map: "idx_session")
+  @@index([expires_at], map: "idx_expires")
+}
+
+

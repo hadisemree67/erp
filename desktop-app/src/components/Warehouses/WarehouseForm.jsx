@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: WarehouseForm.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Depo Tanım Modülü / Depo ve Konum Oluşturma Formu
- * 
+ * BİLEŞEN ADI: WarehouseForm
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sisteme yeni bir fiziksel depo, lokasyon veya şube tanımlamak; mevcut deponun adını, adresini, sorumlu personelini ve genel kapasite özelliklerini düzenlemek için kullanılan formdur.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Depo Tanım Doğrulama, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/warehouses` rotasına POST ve PUT istekleri göndererek lojistik yapılandırmayı günceller.
+ *   Depo tanımları, raf krokileri ve fiziki lokasyon yönetim bileşeni.
  * ============================================================================
  */
 
@@ -450,3 +442,4 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
 };
 
 export default WarehouseForm;
+

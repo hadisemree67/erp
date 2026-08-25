@@ -1,45 +1,43 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: Header
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Üst Başlık (Header)
 // Açıklama: Sitenin üst kısmındaki arama çubuğu, kullanıcı menüsü, sepet ve logoyu barındırır.
 // -----------------------------------------------------------------------------
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, User, Heart, ShoppingBag, Truck, CheckCircle2, Leaf, LogOut, Package, Ticket, MapPin, RefreshCcw, Bell, CreditCard, ShieldCheck, ChevronRight } from 'lucide-react';
 import LoginModal from '../LoginModal/LoginModal';
 import styles from './Header.module.css';
+import { useAuth } from '../../context/AuthContext';
+import { useCart } from '../../context/CartContext';
+import { useFavorites } from '../../context/FavoritesContext';
 
 const Header = () => {
   // 1. State Tanımlamaları (Durum Yönetimi)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-  // 2. Yan Etkiler ve Veri Çekme (useEffect)
+  const { currentUser, login, logout } = useAuth();
+  const { cartItemsCount } = useCart();
+  const { favoritesCount } = useFavorites();
+  
+  // 2. Yardımcı Fonksiyonlar (Helper Methods)
 
-  useEffect(() => {
-    // Check local storage on mount
-    const savedUser = localStorage.getItem('customerUser');
-    if (savedUser) {
-      try {
-        setCurrentUser(JSON.parse(savedUser));
-      } catch (e) {
-        console.error("Invalid user data in local storage");
-      }
-    }
-  }, []);
-  // 3. Yardımcı Fonksiyonlar (Helper Methods)
-
-  // Kullanıcının çıkış yapmasını sağlar ve yerel depolamadaki (local storage) oturum bilgilerini temizler
+  // Kullanıcının çıkış yapmasını sağlar
   const handleLogout = () => {
-    localStorage.removeItem('customerToken');
-    localStorage.removeItem('customerUser');
-    setCurrentUser(null);
+    logout();
   };
 
-  // Kullanıcı başarıyla giriş yaptıktan sonra sistemdeki state ve local storage verilerini günceller
-  const handleLoginSuccess = (user) => {
-    setCurrentUser(user);
-    localStorage.setItem('customerUser', JSON.stringify(user));
+  // Kullanıcı başarıyla giriş yaptıktan sonra
+  const handleLoginSuccess = (user, token) => {
+    login(user, token);
   };
-  // 4. Arayüz (UI) Çizimi ve Render Edilmesi
+  
+  // 3. Arayüz (UI) Çizimi ve Render Edilmesi
 
   return (
     <header>
@@ -197,15 +195,16 @@ const Header = () => {
                 </div>
               </div>
             )}
-            <button className={styles.actionItem}>
+            <Link to="/favorilerim" className={`${styles.actionItem} ${styles.cartItem}`} style={{ textDecoration: 'none', color: 'inherit' }}>
               <Heart size={22} strokeWidth={1.5} />
               <span className={styles.actionValue}>Favorilerim</span>
-            </button>
-            <button className={`${styles.actionItem} ${styles.cartItem}`}>
+              {favoritesCount > 0 && <span className={styles.cartBadge}>{favoritesCount}</span>}
+            </Link>
+            <Link to="/sepetim" className={`${styles.actionItem} ${styles.cartItem}`} style={{ textDecoration: 'none', color: 'inherit' }}>
               <ShoppingBag size={22} strokeWidth={1.5} />
               <span className={styles.actionValue}>Sepetim</span>
-              <span className={styles.cartBadge}>3</span>
-            </button>
+              {cartItemsCount > 0 && <span className={styles.cartBadge}>{cartItemsCount}</span>}
+            </Link>
           </div>
         </div>
       </div>
@@ -220,3 +219,5 @@ const Header = () => {
 };
 
 export default Header;
+
+

@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: picking_carts
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
@@ -100,7 +107,8 @@ router.post('/', authMiddleware, checkPermission('wms_transfer'),  checkRole(['D
 
 // PUT /api/picking_carts/:id - Update cart details and sections
 router.put('/:id', authMiddleware, checkPermission('wms_transfer'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Araba ID.' });
     const { name, warehouse_id, sections, barcode } = req.body; // sections: [{id?: number, section_name: string, barcode?: string}]
 
     if (!name || !warehouse_id) {
@@ -171,7 +179,8 @@ router.put('/:id', authMiddleware, checkPermission('wms_transfer'),  checkRole([
 
 // PUT /api/picking_carts/:id/toggle-active - Toggle active status
 router.put('/:id/toggle-active', authMiddleware, checkPermission('wms_transfer'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Araba ID.' });
     const { is_active } = req.body;
 
     try {
@@ -188,7 +197,8 @@ router.put('/:id/toggle-active', authMiddleware, checkPermission('wms_transfer')
 
 // DELETE /api/picking_carts/:id - Delete a cart
 router.delete('/:id', authMiddleware, checkPermission('wms_transfer'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Araba ID.' });
     
     try {
         await prisma.picking_carts.delete({
@@ -202,3 +212,4 @@ router.delete('/:id', authMiddleware, checkPermission('wms_transfer'),  checkRol
 });
 
 module.exports = router;
+

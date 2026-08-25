@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: InventoryEntry.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Envanter Giriş ve Sayım Kaydı
- * 
+ * BİLEŞEN ADI: InventoryEntry
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Depoya manuel stok girişi yapmak, sayım sonuçlarını veritabanına işlemek veya devir stoklarını sisteme kaydetmek için kullanılan operasyonel giriş formudur.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Ürün ve Raf Seçim Listeleri, Miktar ve Tarih Doğrulama
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/wms/inventory-entry` uç noktasına bağlanarak envanter bakiyelerinde doğrudan güncelleme yapar.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -43,7 +35,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
     const [warehouseSearchBarcode, setWarehouseSearchBarcode] = useState('');
     const [shelfSearchBarcode, setShelfSearchBarcode] = useState('');
     const [scanningModal, setScanningModal] = useState({ open: false, type: null }); // type: 'warehouse' | 'shelf'
-    
+
     // Barcode States
     const parseInitialBarcodes = () => {
         if (!editItem || !editItem.barcode) return [''];
@@ -59,9 +51,9 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
     const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
     const [scannedBarcode, setScannedBarcode] = useState('');
     const [currentScanningIndex, setCurrentScanningIndex] = useState(null);
-    
+
     // 4. Arayüz Etkileşim ve Kontrol Fonksiyonları (Event Handlers)
-    
+
     const handleBarcodeChange = (index, value) => {
         const newBarcodes = [...barcodes];
         newBarcodes[index] = value;
@@ -105,7 +97,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         if (newBarcodes.length === 0) newBarcodes.push('');
         setBarcodes(newBarcodes);
     };
-    
+
     const getBatch = () => editItem && editItem.batches && editItem.batches.length > 0 ? editItem.batches[0] : null;
     const batch = getBatch();
 
@@ -133,10 +125,10 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         max_stack_limit: editItem ? (editItem.product?.max_stack_limit || editItem.max_stack_limit || '') : '',
         critical_stock_level: editItem ? (editItem.product?.critical_stock_level || editItem.critical_stock_level || '') : '',
         contract_start_date: editItem ? (editItem.product?.contract_start_date ? editItem.product.contract_start_date.split('T')[0] : (editItem.contract_start_date ? editItem.contract_start_date.split('T')[0] : '')) : '',
-                contract_end_date: editItem ? (editItem.product?.contract_end_date ? editItem.product.contract_end_date.split('T')[0] : (editItem.contract_end_date ? editItem.contract_end_date.split('T')[0] : '')) : ''
-            });
+        contract_end_date: editItem ? (editItem.product?.contract_end_date ? editItem.product.contract_end_date.split('T')[0] : (editItem.contract_end_date ? editItem.contract_end_date.split('T')[0] : '')) : ''
+    });
 
-            
+
 
 
     const [contractFile, setContractFile] = useState(null);
@@ -154,8 +146,8 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         if (editItem) {
             const p = editItem.product || editItem;
             if (p.suppliers && p.suppliers.length > 0) {
-                setSuppliersData(p.suppliers.map(s => ({ 
-                    ...s, 
+                setSuppliersData(p.suppliers.map(s => ({
+                    ...s,
                     localId: Math.random().toString(),
                     contract_start_date: s.contract_start_date ? s.contract_start_date.split('T')[0] : '',
                     contract_end_date: s.contract_end_date ? s.contract_end_date.split('T')[0] : ''
@@ -175,7 +167,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
             setSuppliersData([]);
         }
     }, [editItem]);
-    
+
     const [success, setSuccess] = useState(false);
     const [shelfCapacities, setShelfCapacities] = useState({});
     const [allShelvesCapacity, setAllShelvesCapacity] = useState({});
@@ -200,7 +192,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
             const res = await apiFetch('http://localhost:3000/api/brands');
             const data = await res.json();
             if (Array.isArray(data)) setBrandList(data);
-        } catch (err) {}
+        } catch (err) { console.warn("Sessiz Hata Yakalandı:", err.message); }
     };
 
     const handleAddBrand = async () => {
@@ -219,8 +211,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 setShowNewBrandInput(false);
                 setNewBrandName('');
             }
-        } catch (err) {
-        } finally {
+        } catch (err) { console.warn("Sessiz Hata Yakalandı:", err.message); } finally {
             setAddingBrand(false);
         }
     };
@@ -236,7 +227,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 ]);
                 const whData = await whRes.json();
                 const supData = await supRes.json();
-                
+
                 if (Array.isArray(whData)) setWarehouses(whData.filter(w => w.warehouse_type === 'HAMMADDE'));
                 if (supData && Array.isArray(supData.data)) setSuppliers(supData.data);
             } catch (err) {
@@ -305,13 +296,13 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         const fetchCapacities = async () => {
             const newCaps = { ...shelfCapacities };
             let hasChanges = false;
-            
+
             // Eğer formda manuel ölçüler girildiyse (eksik ölçüleri tamamlama veya yeni ürün) bunları API'ye gönder.
             const queryParams = new URLSearchParams({
                 warehouseId: formData.warehouseId
             });
             if (targetProductId) queryParams.append('productId', targetProductId);
-            
+
             if (formData.width && formData.height && formData.depth) {
                 queryParams.append('pW', formData.width);
                 queryParams.append('pH', formData.height);
@@ -339,7 +330,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                                 hasChanges = true;
                             }
                         }
-                    } catch (e) {}
+                    } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                 }
             }
             if (hasChanges) {
@@ -354,12 +345,12 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
             const existingProduct = products.find(p => p.ProductName && p.ProductName.toLowerCase() === formData.materialName.trim().toLowerCase());
             const pId = existingProduct ? existingProduct.Id : (editItem ? editItem.product_id : 'new');
             const qs = `warehouseId=${formData.warehouseId}&productId=${pId}&w=${formData.width || 0}&h=${formData.height || 0}&d=${formData.depth || 0}&stackable=${formData.is_stackable ? 1 : 0}&max_stack=${formData.max_stack_limit || 1}&pCap=${formData.package_capacity || 1}`;
-            
+
             apiFetch(`http://localhost:3000/api/wms/warehouse-capacities?${qs}`)
                 .then(r => r.json())
                 .then(d => {
                     if (d.success) setAllShelvesCapacity(d.data);
-                }).catch(e => {});
+                }).catch(e => { });
         } else {
             setAllShelvesCapacity({});
         }
@@ -445,8 +436,8 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         if (products.length > 0 && formData.materialName && !editItem) {
             const existingProduct = products.find(p => p.ProductName && p.ProductName.toLowerCase() === formData.materialName.trim().toLowerCase());
             if (existingProduct && !formData.brand && (!barcodes || barcodes.length === 0 || (barcodes.length === 1 && barcodes[0] === ''))) {
-                setFormData(prev => ({ 
-                    ...prev, 
+                setFormData(prev => ({
+                    ...prev,
                     brand: existingProduct.Brand || '',
                     unit_type: existingProduct.unit_type || 'Adet',
                     package_name: existingProduct.package_name || '',
@@ -483,7 +474,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                         localId: Math.random().toString()
                     }]);
                 }
-                
+
                 let parsedBarcodes = [''];
                 try {
                     const parsed = JSON.parse(existingProduct.Barcode);
@@ -507,9 +498,9 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         if (name === 'materialName') {
             const existingProduct = products.find(p => p.ProductName && p.ProductName.toLowerCase() === value.trim().toLowerCase());
             if (existingProduct) {
-                setFormData(prev => ({ 
-                    ...prev, 
-                    materialName: value, 
+                setFormData(prev => ({
+                    ...prev,
+                    materialName: value,
                     brand: existingProduct.Brand || '',
                     unit_type: existingProduct.unit_type || 'Adet',
                     package_name: existingProduct.package_name || '',
@@ -525,7 +516,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                     max_stack_limit: existingProduct.max_stack_limit || '',
                     description: existingProduct.Description || ''
                 }));
-                
+
                 // Tedarikçi bilgilerini de yükle
                 if (existingProduct.suppliers && existingProduct.suppliers.length > 0) {
                     setSuppliersData(existingProduct.suppliers.map(s => ({
@@ -583,7 +574,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 fd.append('Category', 'Hammadde');
                 fd.append('Brand', formData.brand.trim());
                 fd.append('Barcode', JSON.stringify(barcodes.filter(b => b.trim() !== '')));
-                
+
                 if (existingProduct) {
                     fd.append('Width', formData.width || existingProduct.Width || 0);
                     fd.append('Height', formData.height || existingProduct.Height || 0);
@@ -630,7 +621,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                         fd.append('contractFile_' + (s.localId || index), s.fileObject);
                     }
                 });
-                
+
                 return fd;
             };
 
@@ -641,7 +632,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                     headers: { 'x-user-id': currentUser?.id },
                     body: createProductFormData(editItem.product)
                 });
-                
+
                 // Update stock balance
                 if (batch) {
                     await apiFetch(`http://localhost:3000/api/wms/stock/${batch.balance_id}`, {
@@ -658,10 +649,10 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                         })
                     });
                 }
-                
+
                 setSuccess(true);
                 if (onSuccess) {
-                    setTimeout(() => onSuccess(), 1000);
+                    setTimeout(() => onSuccess(), 500);
                 }
                 setLoading(false);
                 return;
@@ -671,7 +662,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
 
             if (existingProduct) {
                 targetProductId = existingProduct.Id;
-                
+
                 // Ensure the brand or barcode updates on existing material
                 await apiFetch(`http://localhost:3000/api/products/${existingProduct.Id}`, {
                     method: 'PUT',
@@ -713,13 +704,16 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
             const data = await res.json();
             if (data.success) {
                 setSuccess(true);
-                setFormData(prev => ({ 
-                    ...prev, 
-                    shelfAllocations: prev.shelfAllocations.map(a => ({ ...a, quantity: '' })), 
-                    batchNumber: '', 
-                    expirationDate: '', 
-                    description: '' 
+                setFormData(prev => ({
+                    ...prev,
+                    shelfAllocations: prev.shelfAllocations.map(a => ({ ...a, quantity: '' })),
+                    batchNumber: '',
+                    expirationDate: '',
+                    description: ''
                 }));
+                if (onSuccess) {
+                    setTimeout(() => onSuccess(), 500);
+                }
             } else {
                 setError(data.message || 'Stok girişi sırasında hata oluştu');
             }
@@ -735,9 +729,9 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         const val = e.target.value;
         setWarehouseSearchBarcode(val);
         if (val.trim() === '') return;
-        
-        const found = warehouses.find(w => 
-            (w.barcode && w.barcode === val.trim()) || 
+
+        const found = warehouses.find(w =>
+            (w.barcode && w.barcode === val.trim()) ||
             (w.name && w.name.toLowerCase() === val.trim().toLowerCase())
         );
         if (found) {
@@ -751,7 +745,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         const val = e.target.value;
         setShelfSearchBarcode(val);
         if (val.trim() === '') return;
-        
+
         const found = shelves.find(s => s.toLowerCase() === val.trim().toLowerCase());
         if (found) {
             setFormData(prev => {
@@ -769,7 +763,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         }
     };
 
-    const handleCreateMaterial = () => {};
+    const handleCreateMaterial = () => { };
 
     // 5. Arayüz (UI) Çizimi ve Render Edilmesi
 
@@ -791,130 +785,130 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 {success && <div style={{ padding: '12px', backgroundColor: '#ecfdf5', color: '#10b981', borderRadius: '6px', marginBottom: '20px', border: '1px solid #a7f3d0' }}>Envanter girişi başarıyla kaydedildi!</div>}
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <ShelfBarcodeScanner onShelfFound={handleShelfFound} />
-                                    </div>
-                                </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Malzeme Adı *</label>
-                                        <input 
-                                            type="text"
-                                            name="materialName" 
-                                            value={formData.materialName} 
-                                            onChange={handleChange} 
-                                            required 
-                                            disabled={isAddStock || isEditProduct}
-                                            placeholder="Örn: Un, Şeker, Tuz..."
-                                            style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: (isAddStock || isEditProduct) ? '#f1f5f9' : 'white', fontSize: '15px' }}
-                                            list="material-suggestions"
-                                        />
-                                        {!isAddStock && !isEditProduct && (
-                                            <datalist id="material-suggestions">
-                                                {products.map(p => (
-                                                    <option key={p.Id} value={p.ProductName} />
-                                                ))}
-                                            </datalist>
-                                        )}
-                                    </div>
-                                    
-                                    {!isAddStock && (
-                                        <>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Marka (İsteğe Bağlı)</label>
-                                {!showNewBrandInput && (
-                                    <button type="button" onClick={() => setShowNewBrandInput(true)} title="Yeni Marka Ekle" style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>+</button>
-                                )}
-                            </div>
-                            {showNewBrandInput ? (
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input type="text" value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddBrand(); } }} placeholder="Yeni Marka Adı" style={{ flex: 1, padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                                    <button type="button" onClick={handleAddBrand} disabled={addingBrand} style={{ padding: '0 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>{addingBrand ? '...' : 'Ekle'}</button>
-                                    <button type="button" onClick={() => setShowNewBrandInput(false)} style={{ padding: '0 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>İptal</button>
-                                </div>
-                            ) : (
-                                <select name="brand" value={formData.brand} onChange={handleChange} style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}>
-                                    <option value="">Seçiniz...</option>
-                                    {Array.isArray(brandList) && brandList.map(b => (
-                                        <option key={b.id} value={b.name}>{b.name}</option>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <ShelfBarcodeScanner onShelfFound={handleShelfFound} />
+                        </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Malzeme Adı *</label>
+                            <input
+                                type="text"
+                                name="materialName"
+                                value={formData.materialName}
+                                onChange={handleChange}
+                                required
+                                disabled={isAddStock || isEditProduct}
+                                placeholder="Örn: Un, Şeker, Tuz..."
+                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: (isAddStock || isEditProduct) ? '#f1f5f9' : 'white', fontSize: '15px' }}
+                                list="material-suggestions"
+                            />
+                            {!isAddStock && !isEditProduct && (
+                                <datalist id="material-suggestions">
+                                    {products.map(p => (
+                                        <option key={p.Id} value={p.ProductName} />
                                     ))}
-                                </select>
+                                </datalist>
                             )}
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Barkodlar <span style={{color: '#94a3b8', fontWeight: 'normal'}}>(Okutun veya yazın)</span></label>
-                                <button type="button" onClick={addBarcodeField} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>+</button>
-                            </div>
-                            {barcodes.map((barcode, index) => (
-                                <div key={index} style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px' }}>
-                                    <div style={{ display: 'flex', position: 'relative', alignItems: 'center' }}>
-                                        <div 
-                                            style={{ position: 'absolute', left: '10px', color: '#94a3b8', display: 'flex', alignItems: 'center', cursor: 'pointer', zIndex: 10 }}
-                                            onClick={() => {
-                                                setCurrentScanningIndex(index);
-                                                setScannedBarcode('');
-                                                setIsBarcodeModalOpen(true);
-                                                setTimeout(() => document.getElementById('inventory-barcode-input')?.focus(), 100);
-                                            }}
-                                            title="Barkod okutmak için tıklayın"
-                                        >
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
-                                        </div>
-                                        <input 
-                                            type="text"
-                                            value={barcode} 
-                                            onChange={(e) => handleBarcodeChange(index, e.target.value)} 
-                                            placeholder={`Barkod ${index + 1} okutun veya yazın`}
-                                            style={{ flex: 1, padding: '12px 10px 12px 36px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
-                                        />
-                                        <button 
-                                            type="button" 
-                                            onClick={() => {
-                                                let newCode = '869'; // Türkiye GS1
-                                                for (let i = 0; i < 9; i++) {
-                                                    newCode += Math.floor(Math.random() * 10).toString();
-                                                }
-                                                let sum = 0;
-                                                for (let i = 0; i < 12; i++) {
-                                                    sum += parseInt(newCode[i]) * (i % 2 === 0 ? 1 : 3);
-                                                }
-                                                const checkSum = (10 - (sum % 10)) % 10;
-                                                handleBarcodeChange(index, newCode + checkSum);
-                                            }} 
-                                            style={{ marginLeft: '8px', padding: '0 12px', background: '#eef2ff', color: '#4f46e5', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '42px', fontWeight: '600', fontSize: '13px' }}
-                                        >
-                                            Oluştur
-                                        </button>
-                                        {barcodes.length > 1 && (
-                                            <button type="button" onClick={() => removeBarcodeField(index)} style={{ marginLeft: '8px', padding: '0 10px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '42px' }}>✕</button>
+                        {!isAddStock && (
+                            <>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Marka (İsteğe Bağlı)</label>
+                                        {!showNewBrandInput && (
+                                            <button type="button" onClick={() => setShowNewBrandInput(true)} title="Yeni Marka Ekle" style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>+</button>
                                         )}
                                     </div>
-                                    
-                                    {/* Eğer barkod varsa resmini göster */}
-                                    {barcode && barcode.trim().length > 0 && (
-                                        <div style={{ marginTop: '8px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px' }}>
-                                            <Barcode value={barcode} format={barcode.length === 13 ? "EAN13" : "CODE128"} width={1.8} height={50} fontSize={14} background="#ffffff" />
+                                    {showNewBrandInput ? (
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <input type="text" value={newBrandName} onChange={(e) => setNewBrandName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddBrand(); } }} placeholder="Yeni Marka Adı" style={{ flex: 1, padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                            <button type="button" onClick={handleAddBrand} disabled={addingBrand} style={{ padding: '0 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>{addingBrand ? '...' : 'Ekle'}</button>
+                                            <button type="button" onClick={() => setShowNewBrandInput(false)} style={{ padding: '0 12px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>İptal</button>
                                         </div>
+                                    ) : (
+                                        <select name="brand" value={formData.brand} onChange={handleChange} style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}>
+                                            <option value="">Seçiniz...</option>
+                                            {Array.isArray(brandList) && brandList.map(b => (
+                                                <option key={b.id} value={b.name}>{b.name}</option>
+                                            ))}
+                                        </select>
                                     )}
                                 </div>
-                            ))}
-                                </div>
-                                </>
-                            )}
-                        </div>
 
-                        {(() => {
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Barkodlar <span style={{ color: '#94a3b8', fontWeight: 'normal' }}>(Okutun veya yazın)</span></label>
+                                        <button type="button" onClick={addBarcodeField} style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}>+</button>
+                                    </div>
+                                    {barcodes.map((barcode, index) => (
+                                        <div key={index} style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px' }}>
+                                            <div style={{ display: 'flex', position: 'relative', alignItems: 'center' }}>
+                                                <div
+                                                    style={{ position: 'absolute', left: '10px', color: '#94a3b8', display: 'flex', alignItems: 'center', cursor: 'pointer', zIndex: 10 }}
+                                                    onClick={() => {
+                                                        setCurrentScanningIndex(index);
+                                                        setScannedBarcode('');
+                                                        setIsBarcodeModalOpen(true);
+                                                        setTimeout(() => document.getElementById('inventory-barcode-input')?.focus(), 100);
+                                                    }}
+                                                    title="Barkod okutmak için tıklayın"
+                                                >
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={barcode}
+                                                    onChange={(e) => handleBarcodeChange(index, e.target.value)}
+                                                    placeholder={`Barkod ${index + 1} okutun veya yazın`}
+                                                    style={{ flex: 1, padding: '12px 10px 12px 36px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        let newCode = '869'; // Türkiye GS1
+                                                        for (let i = 0; i < 9; i++) {
+                                                            newCode += Math.floor(Math.random() * 10).toString();
+                                                        }
+                                                        let sum = 0;
+                                                        for (let i = 0; i < 12; i++) {
+                                                            sum += parseInt(newCode[i]) * (i % 2 === 0 ? 1 : 3);
+                                                        }
+                                                        const checkSum = (10 - (sum % 10)) % 10;
+                                                        handleBarcodeChange(index, newCode + checkSum);
+                                                    }}
+                                                    style={{ marginLeft: '8px', padding: '0 12px', background: '#eef2ff', color: '#4f46e5', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '42px', fontWeight: '600', fontSize: '13px' }}
+                                                >
+                                                    Oluştur
+                                                </button>
+                                                {barcodes.length > 1 && (
+                                                    <button type="button" onClick={() => removeBarcodeField(index)} style={{ marginLeft: '8px', padding: '0 10px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '42px' }}>✕</button>
+                                                )}
+                                            </div>
+
+                                            {/* Eğer barkod varsa resmini göster */}
+                                            {barcode && barcode.trim().length > 0 && (
+                                                <div style={{ marginTop: '8px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px' }}>
+                                                    <Barcode value={barcode} format={barcode.length === 13 ? "EAN13" : "CODE128"} width={1.8} height={50} fontSize={14} background="#ffffff" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {(() => {
                         const existingProduct = products.find(p => p.ProductName && p.ProductName.toLowerCase() === formData.materialName.trim().toLowerCase());
                         const isNew = !existingProduct && formData.materialName.trim() !== '';
                         const needsDimensions = existingProduct && (!existingProduct.Width || existingProduct.Width == 0);
                         const isEditing = !!editItem;
-                        
+
                         if (!isNew && !needsDimensions && !isEditing) return null;
 
                         return (
@@ -923,25 +917,25 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                                     <h4 style={{ margin: '0', color: '#0F172A', fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         📦 {isNew ? 'Ambalaj & Fiziksel Ölçüler' : 'Ambalaj & Fiziksel Ölçüleri Tamamla'}
                                     </h4>
-                                    <div 
-                                        style={{ color: '#94A3B8', cursor: 'help' }} 
+                                    <div
+                                        style={{ color: '#94A3B8', cursor: 'help' }}
                                         title={isNew ? '3D stok ve raf hesabı için gereklidir' : 'Bu malzemenin sistemde fiziksel boyutları (hacmi) eksik. 3D raf algoritması için ölçüleri tamamlayınız.'}
                                     >
                                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                                     </div>
                                 </div>
-                            
+
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
                                     {/* Sol Sütun: Ambalaj Bilgisi */}
                                     <div>
                                         <h5 style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748B', fontWeight: 'bold', letterSpacing: '0.5px' }}>🔹 AMBALAJ BİLGİSİ</h5>
-                                        
+
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ambalaj Tipi</label>
                                                 <input type="text" name="package_name" value={formData.package_name} onChange={handleChange} placeholder="Örn: Varil, IBC Tank, Çuval, Koli" style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff' }} />
                                             </div>
-                                            
+
                                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ambalaj Kapasitesi & Birim</label>
                                                 <div style={{ display: 'flex' }}>
@@ -963,11 +957,11 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Sağ Sütun: Fiziksel Boyutlar */}
                                     <div>
                                         <h5 style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748B', fontWeight: 'bold', letterSpacing: '0.5px' }}>🔹 FİZİKSEL BOYUTLAR (1 KAP İÇİN)</h5>
-                                        
+
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                             <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', alignItems: 'center', gap: '12px' }}>
                                                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Genişlik (cm):</label>
@@ -985,13 +979,13 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                                                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Ağırlık (kg/gr):</label>
                                                 <input type="number" name="weight" value={formData.weight} onChange={handleChange} min="0" step="0.01" style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #CBD5E1', backgroundColor: '#fff' }} />
                                             </div>
-                                            
+
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '4px' }}>
                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#475569', cursor: 'pointer', fontWeight: '500' }}>
-                                                    <input type="checkbox" name="is_stackable" checked={formData.is_stackable} onChange={e => setFormData({...formData, is_stackable: e.target.checked})} style={{ width: '16px', height: '16px', accentColor: '#0284C7' }} />
+                                                    <input type="checkbox" name="is_stackable" checked={formData.is_stackable} onChange={e => setFormData({ ...formData, is_stackable: e.target.checked })} style={{ width: '16px', height: '16px', accentColor: '#0284C7' }} />
                                                     Üst Üste İstiflenebilir
                                                 </label>
-                                                
+
                                                 {formData.is_stackable && (
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                         <label style={{ fontSize: '12px', color: '#64748B' }}>Kat:</label>
@@ -1002,490 +996,487 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                                         </div>
                                     </div>
                                 </div>
-                        </div>
-                    );
-                })()}
-
-                {!isEditProduct && (
-                    <>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Depo Seçiniz *</label>
-                                                <button type="button" onClick={() => setScanningModal({ open: true, type: 'warehouse' })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', padding: 0 }} title="Barkod Okut">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#0284c7' }}>
-                                        <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-                                        <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-                                        <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-                                        <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                                        <rect width="10" height="10" x="7" y="7" rx="2" />
-                                    </svg>
-                                </button>
                             </div>
-                            <select 
-                                name="warehouseId" 
-                                value={formData.warehouseId} 
-                                onChange={handleChange} 
-                                required 
-                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
-                            >
-                                <option value="">-- Depo Seç --</option>
-                                {warehouses.map(w => (
-                                    <option key={w.id} value={w.id}>{w.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
+                        );
+                    })()}
 
-                    <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Raf Tahsisleri *</label>
-                            <button type="button" onClick={() => setScanningModal({ open: true, type: 'shelf' })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', padding: 0 }} title="Barkod Okut">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#0284c7' }}>
-                                    <path d="M3 7V5a2 2 0 0 1 2-2h2" />
-                                    <path d="M17 3h2a2 2 0 0 1 2 2v2" />
-                                    <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
-                                    <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
-                                    <rect width="10" height="10" x="7" y="7" rx="2" />
-                                </svg>
-                            </button>
-                        </div>
-                            {!editItem && (
-                                <button type="button" onClick={addAllocationField} disabled={!formData.warehouseId || shelves.length === 0} style={{ padding: '6px 12px', backgroundColor: '#e0f2fe', color: '#0284c7', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    + Yeni Raf Ekle
-                                </button>
-                            )}
-                        </div>
-
-                        {formData.shelfAllocations.map((allocation, index) => {
-                            const capData = shelfCapacities[allocation.shelfCode];
-
-                            return (
-                                <div key={index} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '16px', marginBottom: '16px', alignItems: 'flex-start' }}>
-                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                                        <select 
-                                            value={allocation.shelfCode} 
-                                            onChange={(e) => handleAllocationChange(index, 'shelfCode', e.target.value)} 
-                                            required 
-                                            disabled={!formData.warehouseId || shelves.length === 0}
-                                            style={{ width: '100%', maxWidth: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: formData.warehouseId ? 'white' : '#f1f5f9', fontSize: '15px' }}
-                                        >
-                                            <option value="">{shelves.length > 0 ? '-- Raf Seç --' : 'Önce Depo Seçiniz'}</option>
-                                            {(() => {
-                                                const otherSelectedShelves = formData.shelfAllocations.filter((_, i) => i !== index).map(a => a.shelfCode).filter(Boolean);
-                                                const sortedShelves = [...shelves].sort((a, b) => {
-                                                    const capA = allShelvesCapacity[a];
-                                                    const capB = allShelvesCapacity[b];
-                                                    const isFullA = capA && (capA.maxItems === 0 || !capA.physicallyFits);
-                                                    const isFullB = capB && (capB.maxItems === 0 || !capB.physicallyFits);
-                                                    
-                                                    const usedA = otherSelectedShelves.includes(a);
-                                                    const usedB = otherSelectedShelves.includes(b);
-                                                    if (usedA && !usedB) return 1;
-                                                    if (!usedA && usedB) return -1;
-
-                                                    if (isFullA && !isFullB) return 1;
-                                                    if (!isFullA && isFullB) return -1;
-                                                    
-                                                    const hasSameA = capA && capA.hasSameProduct;
-                                                    const hasSameB = capB && capB.hasSameProduct;
-                                                    if (hasSameA && !hasSameB) return -1;
-                                                    if (!hasSameA && hasSameB) return 1;
-                                                    
-                                                    const maxA = capA ? (capA.maxItems === Infinity ? 9999999 : capA.maxItems) : 0;
-                                                    const maxB = capB ? (capB.maxItems === Infinity ? 9999999 : capB.maxItems) : 0;
-                                                    if (maxA !== maxB) return maxB - maxA;
-
-                                                    const effA = capA ? capA.efficiency : 0;
-                                                    const effB = capB ? capB.efficiency : 0;
-                                                    return effB - effA;
-                                                });
-
-                                                return sortedShelves.map((s, idx) => {
-                                                    const cap = allShelvesCapacity[s];
-                                                    const isFull = cap && (cap.maxItems === 0 || !cap.physicallyFits);
-                                                    const isRecommended = !isFull && idx === 0 && cap;
-                                                    
-                                                    let text = s;
-                                                    if (isFull) {
-                                                        text += ' (Dolu / Sığmıyor)';
-                                                    } else if (isRecommended) {
-                                                        const tags = [];
-                                                        if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
-                                                        else if (!cap.hasSameCorridor) tags.push('Risk Dağıtımı (Farklı Koridor)');
-                                                        tags.push(`%${cap.efficiency} Verim`);
-                                                        text = `⭐ ${s} (Önerilen - Maks. ${cap.maxItems} ${formData.package_name || 'Kap'}, ${tags.join(', ')})`;
-                                                    } else if (cap) {
-                                                        const tags = [`%${cap.efficiency} Verim`];
-                                                        if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
-                                                        text += ` - Maks. ${cap.maxItems} ${formData.package_name || 'Kap'} (${tags.join(', ')})`;
-                                                    }
-
-                                                    return (
-                                                        <option key={idx} value={s} disabled={isFull} style={{ color: isFull ? '#94a3b8' : (isRecommended ? '#047857' : 'inherit'), fontWeight: isRecommended ? 'bold' : 'normal' }}>
-                                                            {text}
-                                                        </option>
-                                                    );
-                                                });
-                                            })()}
-                                        </select>
-                                        {capData ? (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#0369a1', fontWeight: '500' }}>
-                                                {(() => {
-                                                    const qty = capData.maxItems * (parseFloat(formData.package_capacity) || 1);
-                                                    const u = formData.unit_type || 'Adet';
-                                                    let formattedQty = `${qty} ${u}`;
-                                                    if ((u === 'gr' || u === 'ml') && qty >= 1000) {
-                                                        formattedQty = `${+(qty / 1000).toFixed(2)} ${u === 'gr' ? 'kg' : 'L'}`;
-                                                    }
-                                                    return (
-                                                        <>
-                                                            ℹ️ Doluluk: %{capData.fillPercentage} ({capData.currentFilled} / {capData.maxVolume} cm³)
-                                                            <br/>
-                                                            📦 Boş Hacim: {capData.emptyVolume} cm³ (Maks: {formattedQty} / {capData.maxItems} {formData.package_name || 'Kap'} sığar)
-                                                        </>
-                                                    );
-                                                })()}
-                                            </div>
-                                        ) : allocation.shelfCode ? (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>
-                                                ℹ️ Hacim bilgisi tanımlanmamış.
-                                            </div>
-                                        ) : null}
+                    {!isEditProduct && (
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Depo Seçiniz *</label>
+                                        <button type="button" onClick={() => setScanningModal({ open: true, type: 'warehouse' })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', padding: 0 }} title="Barkod Okut">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#0284c7' }}>
+                                                <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                                                <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                                                <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                                                <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                                                <rect width="10" height="10" x="7" y="7" rx="2" />
+                                            </svg>
+                                        </button>
                                     </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>{formData.package_name || 'Kutu/Koli/Tank vb.'} Adedi</div>
-                                            <input 
-                                                type="number" 
-                                                value={allocation.packageQuantity !== undefined ? allocation.packageQuantity : (allocation.quantity ? (parseFloat(allocation.quantity) / (parseFloat(formData.package_capacity) || 1)) : '')} 
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value);
-                                                    const total = val * (parseFloat(formData.package_capacity) || 1);
-                                                    const newAllocations = [...formData.shelfAllocations];
-                                                    newAllocations[index].packageQuantity = e.target.value;
-                                                    newAllocations[index].quantity = isNaN(total) ? '' : total;
-                                                    setFormData({ ...formData, shelfAllocations: newAllocations });
-                                                }} 
-                                                min="0" step="any"
-                                                placeholder="Adet"
-                                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }} 
-                                            />
-                                        </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Toplam {formData.unit_type} *</div>
-                                            <input 
-                                                type="number" 
-                                                value={allocation.quantity} 
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value);
-                                                    const packages = val / (parseFloat(formData.package_capacity) || 1);
-                                                    const newAllocations = [...formData.shelfAllocations];
-                                                    newAllocations[index].quantity = e.target.value;
-                                                    newAllocations[index].packageQuantity = isNaN(packages) ? '' : packages;
-                                                    setFormData({ ...formData, shelfAllocations: newAllocations });
-                                                }} 
-                                                required 
-                                                min="0.001" step="any"
-                                                placeholder="Toplam Miktar"
-                                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px', borderColor: capData && allocation.quantity && (parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(formData.package_capacity) || 1)) || !capData.physicallyFits) ? '#ef4444' : '#cbd5e1' }} 
-                                            />
-                                        </div>
+                                    <select
+                                        name="warehouseId"
+                                        value={formData.warehouseId}
+                                        onChange={handleChange}
+                                        required
+                                        style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
+                                    >
+                                        <option value="">-- Depo Seç --</option>
+                                        {warehouses.map(w => (
+                                            <option key={w.id} value={w.id}>{w.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style={{ backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569' }}>Raf Tahsisleri *</label>
+                                        <button type="button" onClick={() => setScanningModal({ open: true, type: 'shelf' })} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', padding: 0 }} title="Barkod Okut">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#0284c7' }}>
+                                                <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+                                                <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+                                                <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+                                                <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+                                                <rect width="10" height="10" x="7" y="7" rx="2" />
+                                            </svg>
+                                        </button>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', marginTop: '4px' }}>
-                                        {capData && !capData.physicallyFits && (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
-                                                ⚠️ Ürün bu rafa fiziksel olarak sığmıyor! (Boyut Uyuşmazlığı)
-                                            </div>
-                                        )}
-                                        {capData && capData.physicallyFits && allocation.quantity && parseFloat(allocation.quantity) > (capData.maxItems * (parseFloat(formData.package_capacity) || 1)) && (
-                                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
-                                                {capData.isStackable === false || (capData.isStackable && capData.maxStackLimit < 999) ? (
-                                                    `⚠️ Uyarı: Bu ürün ambalaj yapısı gereği üst üste en fazla ${capData.isStackable ? capData.maxStackLimit : 1} kat dizilebilir. Seçilen rafın alanına göre bu rafa maksimum ${capData.maxItems * (parseFloat(formData.package_capacity) || 1)} ${formData.unit_type} (${capData.maxItems} ${formData.package_name || 'Kap'}) koyabilirsiniz.`
-                                                ) : (
-                                                    `⚠️ Seçilen ürünün boyutlarına göre bu rafa en fazla ${capData.maxItems * (parseFloat(formData.package_capacity) || 1)} ${formData.unit_type} (${capData.maxItems} ${formData.package_name || 'Kap'}) sığabilir!`
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {!editItem && formData.shelfAllocations.length > 1 && (
-                                        <button type="button" onClick={() => removeAllocationField(index)} style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '47px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Rafı Kaldır">
-                                            ✕
+                                    {!editItem && (
+                                        <button type="button" onClick={addAllocationField} disabled={!formData.warehouseId || shelves.length === 0} style={{ padding: '6px 12px', backgroundColor: '#e0f2fe', color: '#0284c7', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            + Yeni Raf Ekle
                                         </button>
                                     )}
                                 </div>
-                            );
-                        })}
-                    </div>
-                    </>
-                )}
 
-                            {!isAddStock && (
-                                <>
-                                
-                        {/* MULTIPLE SUPPLIERS SECTION */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', backgroundColor: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '20px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#334155', margin: 0 }}>Tedarikçiler ve Sözleşmeler</h3>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setSuppliersData([...suppliersData, { supplier_id: '', unit_price: '', lead_time_days: '', contract_start_date: '', contract_end_date: '', localId: Math.random().toString() }])}
-                                    style={{ padding: '6px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                >
-                                    <span style={{ fontSize: '16px' }}>+</span> Tedarikçi Ekle
-                                </button>
+                                {formData.shelfAllocations.map((allocation, index) => {
+                                    const capData = shelfCapacities[allocation.shelfCode];
+
+                                    return (
+                                        <div key={index} style={{ marginBottom: '16px' }}>
+                                            {/* Kontroller: raf seç | kutu+toplam | sil — hepsi aynı hizada */}
+                                            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '12px', alignItems: 'center' }}>
+                                                <select
+                                                    value={allocation.shelfCode}
+                                                    onChange={(e) => handleAllocationChange(index, 'shelfCode', e.target.value)}
+                                                    required
+                                                    disabled={!formData.warehouseId || shelves.length === 0}
+                                                    style={{ width: '100%', maxWidth: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: formData.warehouseId ? 'white' : '#f1f5f9', fontSize: '15px' }}
+                                                >
+                                                    <option value="">{shelves.length > 0 ? '-- Raf Seç --' : 'Önce Depo Seçiniz'}</option>
+                                                    {(() => {
+                                                        const otherSelectedShelves = formData.shelfAllocations.filter((_, i) => i !== index).map(a => a.shelfCode).filter(Boolean);
+                                                        const sortedShelves = [...shelves].sort((a, b) => {
+                                                            const capA = allShelvesCapacity[a];
+                                                            const capB = allShelvesCapacity[b];
+                                                            const isFullA = capA && (capA.maxItems === 0 || !capA.physicallyFits);
+                                                            const isFullB = capB && (capB.maxItems === 0 || !capB.physicallyFits);
+
+                                                            const usedA = otherSelectedShelves.includes(a);
+                                                            const usedB = otherSelectedShelves.includes(b);
+                                                            if (usedA && !usedB) return 1;
+                                                            if (!usedA && usedB) return -1;
+
+                                                            if (isFullA && !isFullB) return 1;
+                                                            if (!isFullA && isFullB) return -1;
+
+                                                            const hasSameA = capA && capA.hasSameProduct;
+                                                            const hasSameB = capB && capB.hasSameProduct;
+                                                            if (hasSameA && !hasSameB) return -1;
+                                                            if (!hasSameA && hasSameB) return 1;
+
+                                                            const maxA = capA ? (capA.maxItems === Infinity ? 9999999 : capA.maxItems) : 0;
+                                                            const maxB = capB ? (capB.maxItems === Infinity ? 9999999 : capB.maxItems) : 0;
+                                                            if (maxA !== maxB) return maxB - maxA;
+
+                                                            const effA = capA ? capA.efficiency : 0;
+                                                            const effB = capB ? capB.efficiency : 0;
+                                                            return effB - effA;
+                                                        });
+
+                                                        return sortedShelves.map((s, idx) => {
+                                                            const cap = allShelvesCapacity[s];
+                                                            const isFull = cap && (cap.maxItems === 0 || !cap.physicallyFits);
+                                                            const isRecommended = !isFull && idx === 0 && cap;
+
+                                                            let text = s;
+                                                            if (isFull) {
+                                                                text += ' (Dolu / Sığmıyor)';
+                                                            } else if (isRecommended) {
+                                                                const tags = [];
+                                                                if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
+                                                                else if (!cap.hasSameCorridor) tags.push('Risk Dağıtımı (Farklı Koridor)');
+                                                                tags.push(`%${cap.efficiency} Verim`);
+                                                                text = `⭐ ${s} (Önerilen - Maks. ${cap.maxPackages} ${formData.package_name || 'Kap'}, ${tags.join(', ')})`;
+                                                            } else if (cap) {
+                                                                const tags = [`%${cap.efficiency} Verim`];
+                                                                if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
+                                                                text += ` - Maks. ${cap.maxPackages} ${formData.package_name || 'Kap'} (${tags.join(', ')})`;
+                                                            }
+
+                                                            return (
+                                                                <option key={idx} value={s} disabled={isFull} style={{ color: isFull ? '#94a3b8' : (isRecommended ? '#047857' : 'inherit'), fontWeight: isRecommended ? 'bold' : 'normal' }}>
+                                                                    {text}
+                                                                </option>
+                                                            );
+                                                        });
+                                                    })()}
+                                                </select>
+
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>{formData.package_name || 'Kutu/Koli/Tank vb.'} Adedi</div>
+                                                        <input
+                                                            type="number"
+                                                            value={allocation.packageQuantity !== undefined ? allocation.packageQuantity : (allocation.quantity ? (parseFloat(allocation.quantity) / (parseFloat(formData.package_capacity) || 1)) : '')}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                const total = val * (parseFloat(formData.package_capacity) || 1);
+                                                                const newAllocations = [...formData.shelfAllocations];
+                                                                newAllocations[index].packageQuantity = e.target.value;
+                                                                newAllocations[index].quantity = isNaN(total) ? '' : total;
+                                                                setFormData({ ...formData, shelfAllocations: newAllocations });
+                                                            }}
+                                                            min="0" step="any"
+                                                            placeholder="Adet"
+                                                            style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }}
+                                                        />
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '4px' }}>Toplam {formData.unit_type} *</div>
+                                                        <input
+                                                            type="number"
+                                                            value={allocation.quantity}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                const packages = val / (parseFloat(formData.package_capacity) || 1);
+                                                                const newAllocations = [...formData.shelfAllocations];
+                                                                newAllocations[index].quantity = e.target.value;
+                                                                newAllocations[index].packageQuantity = isNaN(packages) ? '' : packages;
+                                                                setFormData({ ...formData, shelfAllocations: newAllocations });
+                                                            }}
+                                                            required
+                                                            min="0.001" step="any"
+                                                            placeholder="Toplam Miktar"
+                                                            style={{ padding: '12px', borderRadius: '6px', border: `1px solid ${capData && allocation.quantity && (parseFloat(allocation.quantity) > capData.maxItems || !capData.physicallyFits) ? '#ef4444' : '#cbd5e1'}`, fontSize: '15px' }}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {!editItem && formData.shelfAllocations.length > 1 && (
+                                                    <button type="button" onClick={() => removeAllocationField(index)} style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '6px', cursor: 'pointer', height: '47px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Rafı Kaldır">
+                                                        ✕
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* Uyarı / Kapasite mesajları — grid dışında, kayma yok */}
+                                            {capData ? (
+                                                <div style={{ marginTop: '6px', fontSize: '12px', color: '#0369a1', fontWeight: '500' }}>
+                                                    {(() => {
+                                                        const qty = capData.maxItems;
+                                                        const u = formData.unit_type || 'Adet';
+                                                        let formattedQty = `${qty} ${u}`;
+                                                        if ((u === 'gr' || u === 'ml') && qty >= 1000) {
+                                                            formattedQty = `${+(qty / 1000).toFixed(2)} ${u === 'gr' ? 'kg' : 'L'}`;
+                                                        }
+                                                        return <>ℹ️ Doluluk: %{capData.fillPercentage} ({capData.currentFilled} / {capData.maxVolume} cm³) · 📦 Boş Hacim: {capData.emptyVolume} cm³ (Maks: {formattedQty} / {capData.maxPackages} {formData.package_name || 'Kap'} sığar)</>;
+                                                    })()}
+                                                </div>
+                                            ) : allocation.shelfCode ? (
+                                                <div style={{ marginTop: '6px', fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>
+                                                    ℹ️ Hacim bilgisi tanımlanmamış.
+                                                </div>
+                                            ) : null}
+                                            {capData && !capData.physicallyFits && (
+                                                <div style={{ marginTop: '6px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
+                                                    ⚠️ Ürün bu rafa fiziksel olarak sığmıyor! (Boyut Uyuşmazlığı)
+                                                </div>
+                                            )}
+                                            {capData && capData.physicallyFits && allocation.quantity && parseFloat(allocation.quantity) > capData.maxItems && (
+                                                <div style={{ marginTop: '6px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
+                                                    {capData.isStackable === false || (capData.isStackable && capData.maxStackLimit < 999) ? (
+                                                        `⚠️ Uyarı: Bu ürün ambalaj yapısı gereği üst üste en fazla ${capData.isStackable ? capData.maxStackLimit : 1} kat dizilebilir. Seçilen rafın alanına göre bu rafa maksimum ${capData.maxItems} ${formData.unit_type} (${capData.maxPackages} ${formData.package_name || 'Kap'}) koyabilirsiniz.`
+                                                    ) : (
+                                                        `⚠️ Seçilen ürünün boyutlarına göre bu rafa en fazla ${capData.maxItems} ${formData.unit_type} (${capData.maxPackages} ${formData.package_name || 'Kap'}) sığabilir!`
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
-                            
-                            {suppliersData.length === 0 && (
-                                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '14px', backgroundColor: 'white', borderRadius: '6px', border: '1px dashed #cbd5e1' }}>
-                                    Henüz tedarikçi eklenmedi. Yeni bir tedarikçi eklemek için yukarıdaki butonu kullanın.
-                                </div>
-                            )}
+                        </>
+                    )}
 
-                            {suppliersData.map((sup, index) => {
-                                const hasActiveContract = sup.contract_start_date && sup.contract_end_date && new Date(sup.contract_end_date) >= new Date();
-                                const hasExistingContract = sup.contract_file && !sup.remove_contract;
-                                
-                                return (
-                                    <div key={sup.localId} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '15px', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', position: 'relative' }}>
-                                        <button 
-                                            type="button"
-                                            onClick={() => setSuppliersData(suppliersData.filter(s => s.localId !== sup.localId))}
-                                            style={{ position: 'absolute', top: '10px', right: '10px', background: '#fee2e2', color: '#ef4444', border: 'none', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
-                                            title="Tedarikçiyi Sil"
-                                        >
-                                            ×
-                                        </button>
-                                        
-                                        <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '30px' }}>
-                                            <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Tedarikçi Seçimi *</label>
-                                            <select 
-                                                value={sup.supplier_id} 
-                                                onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, supplier_id: e.target.value } : s))}
-                                                required
-                                                disabled={hasActiveContract && !sup.isNew}
-                                                style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: (hasActiveContract && !sup.isNew) ? '#f1f5f9' : 'white', fontSize: '14px' }}
+                    {!isAddStock && (
+                        <>
+
+                            {/* MULTIPLE SUPPLIERS SECTION */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', backgroundColor: '#f8fafc', padding: '15px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '20px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#334155', margin: 0 }}>Tedarikçiler ve Sözleşmeler</h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSuppliersData([...suppliersData, { supplier_id: '', unit_price: '', lead_time_days: '', contract_start_date: '', contract_end_date: '', localId: Math.random().toString() }])}
+                                        style={{ padding: '6px 12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                    >
+                                        <span style={{ fontSize: '16px' }}>+</span> Tedarikçi Ekle
+                                    </button>
+                                </div>
+
+                                {suppliersData.length === 0 && (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '14px', backgroundColor: 'white', borderRadius: '6px', border: '1px dashed #cbd5e1' }}>
+                                        Henüz tedarikçi eklenmedi. Yeni bir tedarikçi eklemek için yukarıdaki butonu kullanın.
+                                    </div>
+                                )}
+
+                                {suppliersData.map((sup, index) => {
+                                    const hasActiveContract = sup.contract_start_date && sup.contract_end_date && new Date(sup.contract_end_date) >= new Date();
+                                    const hasExistingContract = sup.contract_file && !sup.remove_contract;
+
+                                    return (
+                                        <div key={sup.localId} style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '15px', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '8px', position: 'relative' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSuppliersData(suppliersData.filter(s => s.localId !== sup.localId))}
+                                                style={{ position: 'absolute', top: '10px', right: '10px', background: '#fee2e2', color: '#ef4444', border: 'none', width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                                                title="Tedarikçiyi Sil"
                                             >
-                                                <option value="">-- Tedarikçi Seç --</option>
-                                                {suppliers.map(s => (
-                                                    <option key={s.Id} value={s.Id}>{s.SupplierName}</option>
-                                                ))}
-                                            </select>
-                                        </div>
+                                                ×
+                                            </button>
 
-                                        <div style={{ display: 'grid', gridTemplateColumns: '120px 120px 1fr 1fr', gap: '15px' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Tedarik Süresi (Gün)</label>
-                                                <input type="number" step="1" value={sup.lead_time_days || ''} onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, lead_time_days: e.target.value } : s))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }} />
+                                            <div style={{ display: 'flex', flexDirection: 'column', paddingRight: '30px' }}>
+                                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Tedarikçi Seçimi *</label>
+                                                <select
+                                                    value={sup.supplier_id}
+                                                    onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, supplier_id: e.target.value } : s))}
+                                                    required
+                                                    disabled={hasActiveContract && !sup.isNew}
+                                                    style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: (hasActiveContract && !sup.isNew) ? '#f1f5f9' : 'white', fontSize: '14px' }}
+                                                >
+                                                    <option value="">-- Tedarikçi Seç --</option>
+                                                    {suppliers.map(s => (
+                                                        <option key={s.Id} value={s.Id}>{s.SupplierName}</option>
+                                                    ))}
+                                                </select>
                                             </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Birim Fiyat (TL)</label>
-                                                <input type="number" step="0.01" value={sup.unit_price || ''} onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, unit_price: e.target.value } : s))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }} />
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Başlangıç</label>
-                                                <input 
-                                                    type="date" 
-                                                    value={sup.contract_start_date}
-                                                    onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, contract_start_date: e.target.value } : s))}
-                                                    style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-                                                />
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Bitiş</label>
-                                                <input 
-                                                    type="date" 
-                                                    value={sup.contract_end_date}
-                                                    onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, contract_end_date: e.target.value } : s))}
-                                                    style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
-                                                />
-                                            </div>
-                                        </div>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                            <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Dosyası (İsteğe Bağlı PDF/Dosya)</label>
-                                            
-                                            <input 
-                                                type="file" 
-                                                onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, fileObject: e.target.files[0], remove_contract: false } : s))}
-                                                style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '13px' }} 
-                                            />
-                                            
-                                            {hasExistingContract && !sup.fileObject && (
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', marginTop: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <span style={{ fontSize: '14px' }}>📄</span>
-                                                        <a href={`http://localhost:3000${sup.contract_file}`} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none', fontWeight: '500', fontSize: '13px' }}>
-                                                            Mevcut Sözleşmeyi Görüntüle
-                                                        </a>
-                                                    </div>
-                                                    <button 
-                                                        type="button" 
-                                                        onClick={() => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, remove_contract: true } : s))}
-                                                        style={{ padding: '4px 8px', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}
-                                                    >
-                                                        Dosyayı Kaldır
-                                                    </button>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '120px 120px 1fr 1fr', gap: '15px' }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Tedarik Süresi (Gün)</label>
+                                                    <input type="number" step="1" value={sup.lead_time_days || ''} onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, lead_time_days: e.target.value } : s))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }} />
                                                 </div>
-                                            )}
-                                            
-                                            {sup.fileObject && (
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', marginTop: '8px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <span style={{ fontSize: '14px' }}>📁</span>
-                                                        <span style={{ color: '#1d4ed8', fontSize: '13px', fontWeight: '500' }}>
-                                                            {sup.fileObject.name}
-                                                        </span>
-                                                    </div>
-                                                    <button 
-                                                        type="button" 
-                                                        onClick={() => {
-                                                            setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, fileObject: null } : s));
-                                                        }}
-                                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
-                                                    >
-                                                        ×
-                                                    </button>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Birim Fiyat (TL)</label>
+                                                    <input type="number" step="0.01" value={sup.unit_price || ''} onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, unit_price: e.target.value } : s))} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }} />
                                                 </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        {/* END MULTIPLE SUPPLIERS SECTION */}
-                                </>
-                            )}
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Başlangıç</label>
+                                                    <input
+                                                        type="date"
+                                                        value={sup.contract_start_date}
+                                                        onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, contract_start_date: e.target.value } : s))}
+                                                        style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                                                    />
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Bitiş</label>
+                                                    <input
+                                                        type="date"
+                                                        value={sup.contract_end_date}
+                                                        onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, contract_end_date: e.target.value } : s))}
+                                                        style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px' }}
+                                                    />
+                                                </div>
+                                            </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '15px', marginBottom: '15px' }}>
-                            {!isEditProduct && (
-                                <>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Tedarikçi (Bu Parti İçin)</label>
-                                        <select 
-                                            name="supplierId" 
-                                            value={formData.supplierId} 
-                                            onChange={handleChange} 
-                                            style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
-                                        >
-                                            <option value="">-- Tedarikçi Seç --</option>
-                                            {suppliersData.filter(sup => sup.supplier_id).map(sup => {
-                                                const supplierInfo = suppliers.find(s => s.Id.toString() === sup.supplier_id.toString());
-                                                return supplierInfo ? (
-                                                    <option key={sup.localId} value={supplierInfo.Id}>{supplierInfo.SupplierName}</option>
-                                                ) : null;
-                                            })}
-                                        </select>
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Parti (Batch) Numarası</label>
-                                        <input 
-                                            type="text" 
-                                            name="batchNumber" 
-                                            value={formData.batchNumber} 
-                                            onChange={handleChange} 
-                                            placeholder="Örn: BATCH-2023-A"
-                                            style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }} 
-                                        />
-                                    </div>
-                                </>
-                            )}
-                            {!isAddStock && (
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <label style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Dosyası (İsteğe Bağlı PDF/Dosya)</label>
+
+                                                <input
+                                                    type="file"
+                                                    onChange={(e) => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, fileObject: e.target.files[0], remove_contract: false } : s))}
+                                                    style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: '13px' }}
+                                                />
+
+                                                {hasExistingContract && !sup.fileObject && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', marginTop: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{ fontSize: '14px' }}>📄</span>
+                                                            <a href={`http://localhost:3000${sup.contract_file}`} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none', fontWeight: '500', fontSize: '13px' }}>
+                                                                Mevcut Sözleşmeyi Görüntüle
+                                                            </a>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, remove_contract: true } : s))}
+                                                            style={{ padding: '4px 8px', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '500' }}
+                                                        >
+                                                            Dosyayı Kaldır
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {sup.fileObject && (
+                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', marginTop: '8px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <span style={{ fontSize: '14px' }}>📁</span>
+                                                            <span style={{ color: '#1d4ed8', fontSize: '13px', fontWeight: '500' }}>
+                                                                {sup.fileObject.name}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setSuppliersData(suppliersData.map(s => s.localId === sup.localId ? { ...s, fileObject: null } : s));
+                                                            }}
+                                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {/* END MULTIPLE SUPPLIERS SECTION */}
+                        </>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '15px', marginBottom: '15px' }}>
+                        {!isEditProduct && (
+                            <>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Raf Ömrü (Ay)</label>
-                                    <input 
-                                        type="number" 
-                                        name="shelf_life_months" 
-                                        value={formData.shelf_life_months} 
-                                        onChange={handleChange} 
-                                        step="1"
-                                        min="0"
-                                        placeholder="Örn: 6"
-                                        style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }} 
-                                    />
-                                </div>
-                            )}
-                            {!isAddStock && (
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Birim Türü</label>
-                                    <select 
-                                        name="unit_type" 
-                                        value={formData.unit_type} 
-                                        onChange={handleChange} 
+                                    <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Tedarikçi (Bu Parti İçin)</label>
+                                    <select
+                                        name="supplierId"
+                                        value={formData.supplierId}
+                                        onChange={handleChange}
                                         style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
                                     >
-                                        <option value="Adet">Adet</option>
-                                        <option value="Litre">Litre (L)</option>
-                                        <option value="Kg">Kg</option>
-                                        <option value="Gram">Gram</option>
-                                        <option value="Metre">Metre</option>
-                                        <option value="Koli">Koli</option>
-                                        <option value="Paket">Paket</option>
-                                        <option value="Çuval">Çuval</option>
-                                        <option value="Ton">Ton</option>
-                                        <option value="m²">m²</option>
-                                        <option value="m³">m³</option>
+                                        <option value="">-- Tedarikçi Seç --</option>
+                                        {suppliersData.filter(sup => sup.supplier_id).map(sup => {
+                                            const supplierInfo = suppliers.find(s => s.Id.toString() === sup.supplier_id.toString());
+                                            return supplierInfo ? (
+                                                <option key={sup.localId} value={supplierInfo.Id}>{supplierInfo.SupplierName}</option>
+                                            ) : null;
+                                        })}
                                     </select>
                                 </div>
-                            )}
-                            {!isAddStock && (
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Kritik Stok Seviyesi (Min Stok)</label>
-                                    <input 
-                                        type="number" 
-                                        name="critical_stock_level" 
-                                        value={formData.critical_stock_level} 
-                                        onChange={handleChange} 
-                                        min="0"
-                                        placeholder="Uyarı için minimum stok"
-                                        style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }} 
+                                    <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Parti (Batch) Numarası</label>
+                                    <input
+                                        type="text"
+                                        name="batchNumber"
+                                        value={formData.batchNumber}
+                                        onChange={handleChange}
+                                        placeholder="Örn: BATCH-2023-A"
+                                        style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }}
                                     />
                                 </div>
-                            )}
-                        </div>
+                            </>
+                        )}
+                        {!isAddStock && (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Raf Ömrü (Ay)</label>
+                                <input
+                                    type="number"
+                                    name="shelf_life_months"
+                                    value={formData.shelf_life_months}
+                                    onChange={handleChange}
+                                    step="1"
+                                    min="0"
+                                    placeholder="Örn: 6"
+                                    style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }}
+                                />
+                            </div>
+                        )}
+                        {!isAddStock && (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Birim Türü</label>
+                                <select
+                                    name="unit_type"
+                                    value={formData.unit_type}
+                                    onChange={handleChange}
+                                    style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', backgroundColor: 'white', fontSize: '15px' }}
+                                >
+                                    <option value="Adet">Adet</option>
+                                    <option value="Litre">Litre (L)</option>
+                                    <option value="Kg">Kg</option>
+                                    <option value="Gram">Gram</option>
+                                    <option value="Metre">Metre</option>
+                                    <option value="Koli">Koli</option>
+                                    <option value="Paket">Paket</option>
+                                    <option value="Çuval">Çuval</option>
+                                    <option value="Ton">Ton</option>
+                                    <option value="m²">m²</option>
+                                    <option value="m³">m³</option>
+                                </select>
+                            </div>
+                        )}
+                        {!isAddStock && (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Kritik Stok Seviyesi (Min Stok)</label>
+                                <input
+                                    type="number"
+                                    name="critical_stock_level"
+                                    value={formData.critical_stock_level}
+                                    onChange={handleChange}
+                                    min="0"
+                                    placeholder="Uyarı için minimum stok"
+                                    style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px' }}
+                                />
+                            </div>
+                        )}
+                    </div>
 
 
                     {!isAddStock && (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Açıklama / İrsaliye No (İsteğe Bağlı)</label>
-                            <textarea 
-                                name="description" 
-                                value={formData.description} 
-                                onChange={handleChange} 
-                                rows="3" 
-                                style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px', resize: 'vertical' }}
-                            ></textarea>
+                                <label style={{ fontSize: '14px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Açıklama / İrsaliye No (İsteğe Bağlı)</label>
+                                <textarea
+                                    name="description"
+                                    value={formData.description}
+                                    onChange={handleChange}
+                                    rows="3"
+                                    style={{ padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '15px', resize: 'vertical' }}
+                                ></textarea>
+                            </div>
                         </div>
-                    </div>
                     )}
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px', gap: '12px' }}>
                         {editItem && (
-                            <button type="button" onClick={onCancel} style={{ 
-                                padding: '12px 30px', 
-                                borderRadius: '6px', 
-                                backgroundColor: '#f1f5f9', 
-                                border: '1px solid #cbd5e1', 
-                                color: '#475569', 
-                                fontWeight: '600', 
+                            <button type="button" onClick={onCancel} style={{
+                                padding: '12px 30px',
+                                borderRadius: '6px',
+                                backgroundColor: '#f1f5f9',
+                                border: '1px solid #cbd5e1',
+                                color: '#475569',
+                                fontWeight: '600',
                                 fontSize: '15px',
                                 cursor: 'pointer'
                             }}>
                                 İptal
                             </button>
                         )}
-                        <button type="submit" disabled={loading} style={{ 
-                            padding: '12px 30px', 
-                            borderRadius: '6px', 
-                            backgroundColor: '#10b981', 
-                            border: 'none', 
-                            color: 'white', 
-                            fontWeight: '600', 
+                        <button type="submit" disabled={loading} style={{
+                            padding: '12px 30px',
+                            borderRadius: '6px',
+                            backgroundColor: '#10b981',
+                            border: 'none',
+                            color: 'white',
+                            fontWeight: '600',
                             fontSize: '15px',
-                            cursor: loading ? 'not-allowed' : 'pointer', 
-                            boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)' 
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 4px 6px -1px rgba(16, 185, 129, 0.3)'
                         }}>
                             {loading ? 'Kaydediliyor...' : (editItem ? 'Değişiklikleri Kaydet' : 'Envantere Ekle')}
                         </button>
@@ -1499,7 +1490,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px', animation: 'pulse 2s infinite' }}><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><line x1="8" y1="12" x2="16" y2="12"></line></svg>
                         <h3 style={{ margin: '0 0 8px 0', color: '#0f172a' }}>Lütfen Barkodu Okutun</h3>
                         <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Cihazınızla ürün barkodunu tarayın.</p>
-                        
+
                         <form onSubmit={(e) => {
                             e.preventDefault();
                             if (scannedBarcode.trim() && currentScanningIndex !== null) {
@@ -1507,9 +1498,9 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                             }
                             setIsBarcodeModalOpen(false);
                         }}>
-                            <input 
+                            <input
                                 id="inventory-barcode-input"
-                                type="text" 
+                                type="text"
                                 value={scannedBarcode}
                                 onChange={(e) => setScannedBarcode(e.target.value)}
                                 placeholder="Barkod bekleniyor..."
@@ -1549,3 +1540,4 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
 };
 
 export default InventoryEntry;
+

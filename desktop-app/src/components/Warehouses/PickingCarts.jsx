@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: PickingCarts
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Depo tanımları, raf krokileri ve fiziki lokasyon yönetim bileşeni.
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import BarcodePrintModal from '../Common/BarcodePrintModal';
@@ -663,3 +670,5 @@ const PickingCarts = ({ currentUser }) => {
 };
 
 export default PickingCarts;
+
+

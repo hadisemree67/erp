@@ -1,7 +1,10 @@
-/*
- * ÖZET:
- * Bu modül, uygulamanın gelir ve gider hesaplamalarını yönetir. Manüel eklenen 
- * harcamaları ve sistem tarafından otomatik hesaplanan maaş/tedarik giderlerini sunar.
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Bu modül, uygulamanın gelir ve gider (finans) hesaplamalarını yönetir. 
+ *   Manuel eklenen harcamaları, sistem tarafından otomatik hesaplanan 
+ *   maaşları ve tedarik/depo stok giderlerini konsolide ederek sunar.
+ * ============================================================================
  */
 
 const express = require('express');
@@ -17,7 +20,10 @@ const safeNum = (val, def = 0) => {
     return isNaN(n) ? def : n;
 };
 
-// GET /api/finance/accounts?tab=GİDER (veya GELİR)
+// ===========================
+// [GET] Finansal Özet ve Kalemleri Listeleme
+// Belirtilen periyoda (bu ay, son 3 ay vb.) göre gelir ve giderleri hesaplar; maaşlar, tedarik maliyetleri ve manuel işlemleri tek bir konsolide liste halinde getirir.
+// ===========================
 router.get('/accounts', authMiddleware, checkPermission('view_finance'), async (req, res) => {
     try {
         const tab = req.query.tab || 'GİDER';
@@ -280,7 +286,10 @@ router.get('/accounts', authMiddleware, checkPermission('view_finance'), async (
     }
 });
 
-// POST /api/finance/transactions - Yeni Manüel Gelir / Gider Ekle
+// ===========================
+// [POST] Manuel Gelir/Gider Kaydı Ekleme
+// Sisteme dışarıdan (manuel) yeni bir gelir veya gider kalemi girilmesini sağlar. (Örn: Fatura ödemesi, ofis gideri vb.)
+// ===========================
 router.post('/transactions', authMiddleware, checkPermission('finance_add_transaction'), async (req, res) => {
     try {
         const { type, category, amount, description, transaction_date } = req.body;
@@ -311,10 +320,15 @@ router.post('/transactions', authMiddleware, checkPermission('finance_add_transa
     }
 });
 
-// DELETE /api/finance/transactions/:id - Manüel İşlemi Sil
+// ===========================
+// [DELETE] Manuel Finansal Kaydı Silme
+// Yanlış girilen veya iptal edilen manuel bir gelir/gider kaydını sistemden kalıcı olarak siler ve loglar.
+// ===========================
 router.delete('/transactions/:id', authMiddleware, checkPermission('finance_add_transaction'), async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz İşlem ID.' });
+        
         const [rows] = await db.query("SELECT * FROM finance_transactions WHERE id = ?", [id]);
         const oldData = rows.length > 0 ? rows[0] : null;
 

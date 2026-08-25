@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: users
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, ERP sistemine giriş yapabilen kullanıcı hesaplarının yönetimi, rol atamaları, 
@@ -110,11 +117,17 @@ router.post('/', authMiddleware, checkRole(['admin']), async (req, res) => {
 
 // PUT: Personel güncelle
 router.put('/:id', authMiddleware, checkRole(['admin']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kullanıcı ID.' });
     const { username, name, email, role, permissions } = req.body; // Şifreyi almadık (sadece SQLden demiştik)
 
     if (!username || !name || !email) {
         return res.status(400).json({ success: false, message: 'Kullanıcı adı, isim ve e-posta zorunludur.' });
+    }
+
+    // GÜVENLİK: Admin kendi yöneticilik yetkisini yanlışlıkla kaldıramaz
+    if (String(req.user.id) === String(id) && role !== 'admin') {
+        return res.status(400).json({ success: false, message: 'Kendi admin yetkinizi kaldıramazsınız.' });
     }
 
     try {
@@ -163,7 +176,8 @@ router.put('/:id', authMiddleware, checkRole(['admin']), async (req, res) => {
 
 // DELETE: Personel sil
 router.delete('/:id', authMiddleware, checkRole(['admin']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kullanıcı ID.' });
     try {
         const [oldRows] = await db.query('SELECT * FROM users WHERE id = ?', [id]);
         const oldData = oldRows.length > 0 ? oldRows[0] : null;
@@ -186,11 +200,17 @@ router.delete('/:id', authMiddleware, checkRole(['admin']), async (req, res) => 
 
 // PUT: Personel Aktif/Pasif durumunu değiştir
 router.put('/:id/status', authMiddleware, checkRole(['admin']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kullanıcı ID.' });
     const { is_active } = req.body;
 
     if (is_active === undefined) {
         return res.status(400).json({ success: false, message: 'is_active durumu gönderilmedi.' });
+    }
+
+    // GÜVENLİK: Admin kendi hesabını pasifize edemez
+    if (String(req.user.id) === String(id) && !is_active) {
+        return res.status(400).json({ success: false, message: 'Kendi hesabınızı pasif yapamazsınız.' });
     }
 
     try {
@@ -215,3 +235,4 @@ router.put('/:id/status', authMiddleware, checkRole(['admin']), async (req, res)
 });
 
 module.exports = router;
+

@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: AccountInfo
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web uygulamasının (e-ticaret) alt bileşenidir. Ziyaretçilere kullanıcı dostu arayüz sunar.
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import { Check } from 'lucide-react';
 import styles from './AccountInfo.module.css';
@@ -293,3 +300,5 @@ const AccountInfo = () => {
 };
 
 export default AccountInfo;
+
+

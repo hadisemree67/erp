@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: WarehouseTransfer.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Depolar ve Raflar Arası Transfer
- * 
+ * BİLEŞEN ADI: WarehouseTransfer
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Bir depodan diğerine şubeler arası mal sevkiyatını (İrsaliyeli Transfer) veya aynı depo içinde bir raftan başka bir rafa hücre taşıma (Put-away / Replenishment) işlemlerini gerçekleştirir.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Kaynak ve Hedef Depo/Raf Seçimi, Miktar Doğrulama, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/wms/transfer` API rotasına istek atarak kaynak depodan stoğu düşer, hedef depoya/rafa ekler.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -258,3 +250,4 @@ const WarehouseTransfer = ({ currentUser }) => {
 };
 
 export default WarehouseTransfer;
+

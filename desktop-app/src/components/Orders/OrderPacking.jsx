@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: OrderPacking
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Müşteri siparişleri, paketleme, kargo ve iade işlemlerini kapsayan ekran.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (OrderPacking.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
@@ -249,3 +256,5 @@ const OrderPacking = () => {
 };
 
 export default OrderPacking;
+
+

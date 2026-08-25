@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ProductionDetail.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Üretim Modülü / Üretim Siparişi Detay ve Süreç Ekranı
- * 
+ * BİLEŞEN ADI: ProductionDetail
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Seçilen bir üretim siparişinin detaylı aşamalarını (kesim, montaj, kalite kontrol vb.), kullanılan hammaddeleri (reçete tüketimi) ve fire oranlarını gösteren, aşama tamamladıkça stoktan otomatik hammadde düşümünü tetikleyen detay ekranıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Adım Takip Göstergeleri (Stepper), Dinamik Stok Tüketim Hesaplama
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/production/orders/:id` rotası ile haberleşerek imalat sürecinin canlı takibini sağlar.
+ *   Üretim emirleri, makine takibi ve imalat operasyonlarını yöneten arayüz.
  * ============================================================================
  */
 
@@ -223,12 +215,12 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
 
     const handleStartStepClick = (step, idx) => {
         let formula = [];
-        try { if (order.product_formula) formula = JSON.parse(order.product_formula); } catch(e){}
+        try { if (order.product_formula) formula = JSON.parse(order.product_formula); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
         const stepFormula = formula[idx] || {};
         const reqMaterials = stepFormula.materials || [];
         
         let verified = [];
-        try { if (step.verified_materials) verified = JSON.parse(step.verified_materials); } catch(e){}
+        try { if (step.verified_materials) verified = JSON.parse(step.verified_materials); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
 
         if (reqMaterials.length > 0) {
             setActiveVerifyStep({
@@ -437,7 +429,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
                                 const isUsedInAnyStartedStep = steps.some(s => {
                                     if (s.status === 'Bekliyor') return false; // Sadece çalışıyor veya tamamlandı olan adımlar
                                     let v = [];
-                                    try { if (s.verified_materials) v = JSON.parse(s.verified_materials); } catch(e){}
+                                    try { if (s.verified_materials) v = JSON.parse(s.verified_materials); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                                     return v.includes(m.material_name);
                                 });
                                 return (
@@ -762,3 +754,4 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
 };
 
 export default ProductionDetail;
+

@@ -25,13 +25,45 @@
   gap: 4px;
 }
 
+.productGridContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .productGrid {
   display: flex;
+  flex-wrap: nowrap;
   gap: 16px;
+  width: 100%;
+}
+
+.nextBtn {
+  position: absolute;
+  right: -20px;
+  z-index: 10;
+  background-color: var(--white);
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dark);
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.nextBtn:hover {
+  background-color: var(--primary);
+  color: var(--white);
+  border-color: var(--primary);
 }
 
 .productCard {
-  flex: 1;
+  width: calc((100% - (16px * 4)) / 5);
   background-color: var(--white);
   border: 1px solid var(--border-color);
   border-radius: 10px;
@@ -154,4 +186,33 @@
 .addToCartBtn:hover {
   background-color: var(--primary);
   color: var(--white);
+}
+
+/* --- ÇOK SATANLAR ÖZEL GÖRÜNÜMÜ --- */
+.bestsellerCard {
+  border: 2px solid #10b981 !important; /* Canlı Yeşil */
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.15);
+  background: linear-gradient(to bottom, #ecfdf5, #fff); /* Çok uçuk yeşil arkaplan */
+}
+.bestsellerCard:hover {
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.3) !important;
+  border-color: #059669 !important; /* Biraz daha koyu yeşil hover */
+}
+.bestsellerBadge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #10b981 0%, #047857 100%); /* Yeşil gradient */
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  z-index: 10;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
 }

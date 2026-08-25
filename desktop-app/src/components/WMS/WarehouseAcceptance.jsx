@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: WarehouseAcceptance.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Gelişmiş Depo Kabul ve Kalite Kontrol
- * 
+ * BİLEŞEN ADI: WarehouseAcceptance
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Gelen sevkiyatların detaylı kabulünü, kalite kontrol (QC) süreçlerini, karantina alanına alımını ve onaylanan ürünlerin nihai depolama raflarına yerleştirme (put-away) akışını yöneten gelişmiş kabul ekranıdır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Adım Adım Kabul Akışı (Workflow), CSS Modülasyonu (WarehouseAcceptance.css)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/wms/acceptance` ve kalite kontrol API rotalarıyla tam entegreli çalışan lojistik kabul panelidir.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -609,3 +601,4 @@ const WarehouseAcceptance = ({ currentUser }) => {
 };
 
 export default WarehouseAcceptance;
+

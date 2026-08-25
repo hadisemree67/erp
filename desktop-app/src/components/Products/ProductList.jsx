@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ProductList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Ürün Katalog Modülü / Ürün Listesi ve Katalog Yönetimi
- * 
+ * BİLEŞEN ADI: ProductList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sistemde tanımlı tüm ürünleri (hammadde, mamul, ticari mal) tablo halinde sunar. Barkod, stok kodu, kategori veya marka bazlı gelişmiş arama ve filtreleme imkanı tanır; ürün ekleme, düzenleme ve toplu işlem modallarını kontrol eder.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Gelişmiş Filtreleme ve Arama, Sayfalama / Sonsuz Kaydırma, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Ürün yönetim modülünün ana ekranıdır; `/api/products` API'sinden çektiği verileri görselleştirir.
+ *   Sistemdeki ürünlerin, varyantların ve stok kartlarının yönetildiği modül.
  * ============================================================================
  */
 
@@ -50,8 +42,8 @@ const ProductList = ({ onNavigate, currentUser }) => {
 
   // 3. Backend API İstekleri (Veri Çekme)
 
-  const fetchProducts = async () => {
-    setLoading(true);
+  const fetchProducts = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const response = await apiFetch('http://localhost:3000/api/products');
       const data = await response.json();
@@ -59,12 +51,12 @@ const ProductList = ({ onNavigate, currentUser }) => {
         // Hammaddeleri state'e alıyoruz ama listede gizleyeceğiz
         setProducts(Array.isArray(data) ? data : []);
       } else {
-        setError(data.message || 'Ürünler getirilemedi.');
+        if (!isSilent) setError(data.message || 'Ürünler getirilemedi.');
       }
     } catch (err) {
-      setError('Sunucuya bağlanılamadı.');
+      if (!isSilent) setError('Sunucuya bağlanılamadı.');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
@@ -72,6 +64,10 @@ const ProductList = ({ onNavigate, currentUser }) => {
 
   useEffect(() => {
     fetchProducts();
+    const interval = setInterval(() => {
+        fetchProducts(true);
+    }, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleDelete = async (id) => {
@@ -211,10 +207,11 @@ const ProductList = ({ onNavigate, currentUser }) => {
           return JSON.stringify(field).toLowerCase().includes(search);
       };
 
-      return p.ProductName?.toLowerCase().includes(search) || 
-             p.Barcode?.toLowerCase().includes(search) ||
-             p.Category?.toLowerCase().includes(search) ||
-             p.Brand?.toLowerCase().includes(search) ||
+      return searchInField(p.ProductName) || 
+             searchInField(p.Barcode) ||
+             searchInField(p.ProductCode) ||
+             searchInField(p.Category) ||
+             searchInField(p.Brand) ||
              searchInField(p.web_categories) ||
              searchInField(p.web_subcategories) ||
              searchInField(p.web_subtitles);
@@ -342,6 +339,7 @@ const ProductList = ({ onNavigate, currentUser }) => {
                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Ürün Adı</th>
                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'left' }}>Kategori</th>
                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Toplam Stok</th>
+                <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center' }}>Kullanılabilir Stok</th>
                 {canSeeCosts && <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Br. Maliyet</th>}
                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Satış Fiyatı</th>
                 <th style={{ padding: '12px 24px', color: '#475569', fontWeight: '700', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}></th>
@@ -407,14 +405,14 @@ const ProductList = ({ onNavigate, currentUser }) => {
                     } else if (product.Category === 'Hammadde' || product.supply_type === 'PURCHASE' || product.supply_type === 'OUTSOURCED') {
                         unitCost = getPrice(product);
                     }
-                } catch (e) {}
+                } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
 
                 let webCat = '';
-                try { webCat = Array.isArray(product.web_categories) ? product.web_categories[0] : (typeof product.web_categories === 'string' ? JSON.parse(product.web_categories)[0] : ''); } catch(e) {}
+                try { webCat = Array.isArray(product.web_categories) ? product.web_categories[0] : (typeof product.web_categories === 'string' ? JSON.parse(product.web_categories)[0] : ''); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                 let webSub = '';
-                try { webSub = Array.isArray(product.web_subcategories) ? product.web_subcategories[0] : (typeof product.web_subcategories === 'string' ? JSON.parse(product.web_subcategories)[0] : ''); } catch(e) {}
+                try { webSub = Array.isArray(product.web_subcategories) ? product.web_subcategories[0] : (typeof product.web_subcategories === 'string' ? JSON.parse(product.web_subcategories)[0] : ''); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                 let webTitle = '';
-                try { webTitle = Array.isArray(product.web_subtitles) ? product.web_subtitles[0] : (typeof product.web_subtitles === 'string' ? JSON.parse(product.web_subtitles)[0] : ''); } catch(e) {}
+                try { webTitle = Array.isArray(product.web_subtitles) ? product.web_subtitles[0] : (typeof product.web_subtitles === 'string' ? JSON.parse(product.web_subtitles)[0] : ''); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
 
                 return (
                 <tr key={product.Id} className="hover-row" style={{ borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s', backgroundColor: selectedIds.includes(product.Id) ? '#f0f9ff' : 'transparent' }} onMouseOver={e => e.currentTarget.style.backgroundColor = selectedIds.includes(product.Id) ? '#f0f9ff' : '#f8fafc'} onMouseOut={e => e.currentTarget.style.backgroundColor = selectedIds.includes(product.Id) ? '#f0f9ff' : 'transparent'}>
@@ -498,6 +496,15 @@ const ProductList = ({ onNavigate, currentUser }) => {
                       {product.StockQuantity} Adet
                     </span>
                   </td>
+                  <td style={{ padding: '12px 24px', textAlign: 'center' }}>
+                    <span style={{ 
+                      padding: '4px 10px', borderRadius: '12px', fontSize: '13px', fontWeight: '600',
+                      backgroundColor: product.AvailableStock > 10 ? '#f0fdf4' : (product.AvailableStock > 0 ? '#fef08a' : '#fee2e2'),
+                      color: product.AvailableStock > 10 ? '#166534' : (product.AvailableStock > 0 ? '#a16207' : '#dc2626')
+                    }} title="Sepetlerde bekleyen stoğu düşülmüş net rakam">
+                      {product.AvailableStock} Adet
+                    </span>
+                  </td>
                   {canSeeCosts && (
                     <td style={{ padding: '12px 24px', color: '#0f172a', fontWeight: '600', fontSize: '14px', textAlign: 'right' }}>
                       <span style={{ fontWeight: '400', marginRight: '4px', color: '#64748b' }}>₺</span>
@@ -553,3 +560,4 @@ const ProductList = ({ onNavigate, currentUser }) => {
 };
 
 export default ProductList;
+

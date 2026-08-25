@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: boxes
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * Bu modül, sistemde kullanılan kargo/ambalaj kutularının tanımlanması, 
  * çoklu tedarikçi bilgileri ve stok ekleme/düşme işlemlerini yöneten API rotalarıdır.
@@ -133,7 +140,9 @@ const saveBoxSuppliers = async (boxId, suppliersRaw, files) => {
 
 // POST /api/boxes/:id/barcodes - Kutuya yeni barkod ekle
 router.post('/:id/barcodes', authMiddleware, checkPermission('box_manage'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kutu ID.' });
+
     const { barcode } = req.body;
     
     if (!barcode) {
@@ -154,7 +163,9 @@ router.post('/:id/barcodes', authMiddleware, checkPermission('box_manage'), asyn
 
 // DELETE /api/boxes/:id/barcodes/:barcodeId - Kutudan barkod sil
 router.delete('/:id/barcodes/:barcodeId', authMiddleware, checkPermission('box_manage'), async (req, res) => {
-    const { id, barcodeId } = req.params;
+    const id = parseInt(req.params.id, 10);
+    const barcodeId = parseInt(req.params.barcodeId, 10);
+    if (isNaN(id) || isNaN(barcodeId)) return res.status(400).json({ success: false, message: 'Geçersiz ID.' });
     
     try {
         await db.query('DELETE FROM box_barcodes WHERE id = ? AND box_id = ?', [barcodeId, id]);
@@ -192,7 +203,8 @@ router.post('/', authMiddleware, checkPermission('box_manage'), upload.any(), as
 // PUT /api/boxes/:id - Kutu güncelle
 router.put('/:id', authMiddleware, checkPermission('box_manage'), upload.any(), async (req, res) => {
     const { BoxName, Width, Height, Depth, EmptyWeight, MaxWeightCapacity, Cost, IsActive, MinStockLevel, suppliers } = req.body;
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kutu ID.' });
 
     try {
         const [result] = await db.query(`
@@ -217,7 +229,8 @@ router.put('/:id', authMiddleware, checkPermission('box_manage'), upload.any(), 
 
 // DELETE /api/boxes/:id - Kutu sil (Pasife al)
 router.delete('/:id', authMiddleware, checkPermission('box_manage'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kutu ID.' });
     try {
         const [result] = await db.query('UPDATE packaging_boxes SET IsActive = 0 WHERE Id = ?', [id]);
         if (result.affectedRows === 0) {
@@ -233,7 +246,9 @@ router.delete('/:id', authMiddleware, checkPermission('box_manage'), async (req,
 
 // POST /api/boxes/:id/add-stock - Kutu stok ekle (veya eksilt)
 router.post('/:id/add-stock', authMiddleware, checkPermission('box_manage'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kutu ID.' });
+
     const { Quantity, SupplierId } = req.body;
 
     if (!Quantity || isNaN(Quantity)) {
@@ -311,3 +326,4 @@ router.post('/:id/add-stock', authMiddleware, checkPermission('box_manage'), asy
 });
 
 module.exports = router;
+

@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: data_export
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
@@ -273,3 +280,4 @@ router.get('/', authMiddleware, checkPermission('view_reports'), async (req, res
 });
 
 module.exports = router;
+

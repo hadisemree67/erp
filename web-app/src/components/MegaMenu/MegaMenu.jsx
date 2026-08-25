@@ -1,8 +1,16 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: MegaMenu
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Geniş Açılır Menü (Mega Menu)
 // Açıklama: Tüm ana ve alt kategorilerin detaylı olarak sergilendiği, görsel destekli geniş açılır menüdür.
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { ChevronRight, ArrowRight, Box } from 'lucide-react';
 import styles from './MegaMenu.module.css';
 import { categoriesList as staticCategories, megaMenuData as staticMenuData } from './megaMenuData';
@@ -29,7 +37,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-const MegaMenuContent = ({ isOpen }) => {
+const MegaMenuContent = ({ isOpen, onClose }) => {
   // 1. State Tanımlamaları (Durum Yönetimi)
   const [activeCategory, setActiveCategory] = useState('cilt');
   const [categoriesList, setCategoriesList] = useState(staticCategories);
@@ -51,20 +59,20 @@ const MegaMenuContent = ({ isOpen }) => {
               id: cat.slug,
               name: cat.name,
               icon: <Box size={18} strokeWidth={1.5} />,
-              url: `/kategori/${cat.slug}`
+              url: `/category/${encodeURIComponent(cat.name)}`
             });
             
             newMenuData[cat.slug] = {
               mainTitle: cat.name,
               description: `${cat.name} kategorisi ürünleri.`,
-              url: `/kategori/${cat.slug}`,
+              url: `/category/${encodeURIComponent(cat.name)}`,
               columns: (cat.subcategories || []).map(sub => ({
                 title: sub.name,
                 icon: Box,
-                url: `/kategori/${cat.slug}/${sub.slug}`,
+                url: `/category/${encodeURIComponent(cat.name)}/${encodeURIComponent(sub.name)}`,
                 links: (sub.subtitles || []).map(title => ({
                   name: title.name,
-                  url: `/kategori/${cat.slug}/${sub.slug}/${title.slug}`
+                  url: `/category/${encodeURIComponent(cat.name)}/${encodeURIComponent(sub.name)}/${encodeURIComponent(title.name)}`
                 }))
               }))
             };
@@ -80,10 +88,10 @@ const MegaMenuContent = ({ isOpen }) => {
                   newCols.push({
                     title: sub.name,
                     icon: Box,
-                    url: `/kategori/${cat.slug}/${sub.slug}`,
+                    url: `/category/${encodeURIComponent(cat.name)}/${encodeURIComponent(sub.name)}`,
                     links: (sub.subtitles || []).map(title => ({
                       name: title.name,
-                      url: `/kategori/${cat.slug}/${sub.slug}/${title.slug}`
+                      url: `/category/${encodeURIComponent(cat.name)}/${encodeURIComponent(sub.name)}/${encodeURIComponent(title.name)}`
                     }))
                   });
                 } else {
@@ -92,7 +100,7 @@ const MegaMenuContent = ({ isOpen }) => {
                     if (!existingLink) {
                       existingCol.links.push({
                         name: title.name,
-                        url: `/kategori/${cat.slug}/${sub.slug}/${title.slug}`
+                        url: `/category/${encodeURIComponent(cat.name)}/${encodeURIComponent(sub.name)}/${encodeURIComponent(title.name)}`
                       });
                     }
                   });
@@ -123,25 +131,26 @@ const MegaMenuContent = ({ isOpen }) => {
     <div className={styles.megaMenuWrapper}>
       <div className={styles.mainCategories}>
         {categoriesList.map((cat) => (
-          <a
-            href={cat.url || '#'}
+          <Link
+            to={`/category/${encodeURIComponent(cat.name)}`}
             key={cat.id}
             className={`${styles.categoryItem} ${activeCategory === cat.id ? styles.active : ''}`}
             onMouseEnter={() => setActiveCategory(cat.id)}
+            onClick={onClose}
           >
             <div className={styles.categoryItemLeft}>
               <span className={styles.iconWrapper}>{cat.icon || <Box size={18} strokeWidth={1.5} />}</span>
               <span>{cat.name}</span>
             </div>
             <ChevronRight size={14} color="var(--text-light)" />
-          </a>
+          </Link>
         ))}
       </div>
 
       <div className={styles.subMenuContainer} key={activeCategory}>
         <div className={styles.mainContentArea}>
           <div className={styles.headerArea}>
-            <a href={currentData.url || '#'} className={styles.sectionMainTitle}>{currentData.mainTitle || ''}</a>
+            <Link to={`/category/${encodeURIComponent(currentData.mainTitle)}`} className={styles.sectionMainTitle} onClick={onClose}>{currentData.mainTitle || ''}</Link>
             <p className={styles.sectionDescription}>{currentData.description || ''}</p>
           </div>
 
@@ -150,36 +159,26 @@ const MegaMenuContent = ({ isOpen }) => {
               if (!col) return null;
               const Icon = col.icon;
               
-              let colUrl = col.url;
-              if (!colUrl) {
-                if (col.bottomLink) {
-                  colUrl = col.bottomLink.url;
-                } else if (Array.isArray(col.links) && col.links[0] && col.links[0].url) {
-                  const parts = col.links[0].url.split('/');
-                  parts.pop();
-                  colUrl = parts.join('/');
-                } else {
-                  colUrl = '#';
-                }
-              }
+              // Her zaman isme göre dinamik url oluştur
+              let colUrl = `/category/${encodeURIComponent(currentData.mainTitle)}/${encodeURIComponent(col.title)}`;
 
               return (
                 <div key={index} className={styles.column}>
-                  <a href={colUrl} className={styles.columnTitle}>
+                  <Link to={colUrl} className={styles.columnTitle} onClick={onClose}>
                     {Icon && (typeof Icon === 'function' || typeof Icon === 'object') && !React.isValidElement(Icon) && (
                       <Icon size={16} strokeWidth={1.5} className={styles.columnTitleIcon} />
                     )}
                     {col.title || ''}
-                  </a>
+                  </Link>
                   <div className={styles.linksContainer}>
                     {Array.isArray(col.links) && col.links.map((link, idx) => (
-                      link && <a href={link.url || '#'} key={idx} className={styles.subLink}>{link.name || ''}</a>
+                      link && <Link to={`${colUrl}/${encodeURIComponent(link.name)}`} key={idx} className={styles.subLink} onClick={onClose}>{link.name || ''}</Link>
                     ))}
                   </div>
                   {col.bottomLink && (
-                    <a href={col.bottomLink.url || '#'} className={styles.bottomLink}>
+                    <Link to={col.bottomLink.url || '#'} className={styles.bottomLink} onClick={onClose}>
                       {col.bottomLink.text || ''} <ArrowRight size={12} strokeWidth={2} />
-                    </a>
+                    </Link>
                   )}
                 </div>
               );
@@ -191,7 +190,7 @@ const MegaMenuContent = ({ isOpen }) => {
               <span className={styles.popularTitle}>Popüler Aramalar</span>
               <div className={styles.pillsContainer}>
                 {currentData.popularSearches.map((search, idx) => (
-                  <a href={search.url} key={idx} className={styles.pill}>{search.name}</a>
+                  <Link to={search.url} key={idx} className={styles.pill} onClick={onClose}>{search.name}</Link>
                 ))}
               </div>
             </div>
@@ -203,9 +202,9 @@ const MegaMenuContent = ({ isOpen }) => {
             <span className={styles.adTag}>{currentData.adBanner.tag}</span>
             <div className={styles.adTitle}>{currentData.adBanner.title}</div>
             <div className={styles.adText}>{currentData.adBanner.text}</div>
-            <a href={currentData.adBanner.url} className={styles.adButton}>
+            <Link to={currentData.adBanner.url} className={styles.adButton} onClick={onClose}>
               {currentData.adBanner.buttonText} <ArrowRight size={14} />
-            </a>
+            </Link>
             <div className={styles.adImageWrapper}>
               <img
                 src={currentData.adBanner.image}
@@ -227,3 +226,5 @@ const MegaMenu = (props) => (
 );
 
 export default MegaMenu;
+
+

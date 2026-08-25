@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: activities
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, sistemde gerçekleştirilen kullanıcı hareketlerini, log kayıtlarını 
@@ -23,7 +30,8 @@ const formatDatesForMySQL = (data) => {
 };
 
 // GET: Son 100 hareketi getir
-router.get('/', authMiddleware, checkPermission('view_activity_log'),  checkPermission('view_activity_log'), async (req, res) => {
+// GÜVENLİK İYİLEŞTİRMESİ: Tekrarlayan checkPermission kaldırıldı.
+router.get('/', authMiddleware, checkPermission('view_activity_log'), async (req, res) => {
     try {
         const [rows] = await db.query(`
             SELECT a.id, a.user_id, a.action_type, a.target_table, a.target_id, a.description, a.created_at, a.is_undone, u.name as user_name
@@ -46,8 +54,14 @@ const ALLOWED_TABLES = [
 ];
 
 // POST: Geri Al (Undo)
-router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'),  checkPermission('view_activity_log'), async (req, res) => {
-    const logId = req.params.id;
+// GÜVENLİK İYİLEŞTİRMESİ: Tekrarlayan checkPermission kaldırıldı.
+router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'), async (req, res) => {
+    const logId = parseInt(req.params.id, 10);
+
+    // GÜVENLİK DÜZELTMESİ: logId numerik olmalı
+    if (isNaN(logId)) {
+        return res.status(400).json({ success: false, message: 'Geçersiz Log ID.' });
+    }
 
     // GÜVENLİK DÜZELTMESİ: Header fallback'i kaldırıldı. Yalnızca doğrulanmış JWT user ID kabul edilir.
     const adminUserId = req.user?.id;
@@ -148,7 +162,8 @@ router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'),  
             const keys = Object.keys(data).filter(k => k.toLowerCase() !== 'id');
             const values = keys.map(k => (typeof data[k] === 'object' && data[k] !== null && !(data[k] instanceof Date) ? JSON.stringify(data[k]) : data[k]));
 
-            const setClause = keys.map(k => `\`${k}\` = ?`).join(', ');
+            // GÜVENLİK İYİLEŞTİRMESİ: Sütun isimlerindeki backtick'ler temizlenerek SQL Injection engellendi
+            const setClause = keys.map(k => `\`${k.replace(/`/g, '')}\` = ?`).join(', ');
             const idValue = data.Id || data.id || log.target_id;
 
             await connection.query(`UPDATE ?? SET ${setClause} WHERE id = ?`, [log.target_table, ...values, idValue]);
@@ -178,3 +193,4 @@ router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'),  
 });
 
 module.exports = router;
+

@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: CustomerOrders
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Müşteri siparişleri, paketleme, kargo ve iade işlemlerini kapsayan ekran.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (CustomerOrders.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
@@ -7,7 +14,6 @@ import React, { useState, useEffect } from 'react';
 import Barcode from 'react-barcode';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiFetch } from '../../utils/api';
-import * as XLSX from 'xlsx';
 
 const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', customerId = null }) => {
     const hasPerm = (key) => currentUser?.role === 'admin' || (currentUser?.permissions || []).includes(key);
@@ -40,6 +46,10 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
     ]);
     const [orderDescription, setOrderDescription] = useState('');
     const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        setActiveTab(statusFilter === 'tumu' ? 'Tümü' : statusFilter);
+    }, [statusFilter]);
 
     // Pack Modal state (Removed, using inline selection now)
     const [packing, setPacking] = useState(false);
@@ -254,7 +264,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                             if (Array.isArray(c.target_product_ids)) ids = c.target_product_ids;
                             else if (typeof c.target_product_ids === 'string') ids = JSON.parse(c.target_product_ids);
                             else if (c.target_product_id) ids = [c.target_product_id];
-                        } catch(e) {}
+                        } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                         
                         return ids.map(id => String(id)).includes(String(productId));
                     });
@@ -664,13 +674,14 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         switch (status) {
             case 'Beklemede': return { bg: '#f1f5f9', color: '#475569', label: 'Beklemede' };
             case 'Onaylandı': return { bg: '#e2e8f0', color: '#334155', label: 'Onaylandı' };
-            case 'Hazırlanıyor': return { bg: '#f1f5f9', color: '#475569', label: 'Hazırlanıyor' };
-            case 'Hazır': return { bg: '#dcfce3', color: '#16a34a', label: 'Toplandı (Hazır)' };
-              case 'Paketleniyor': return { bg: '#fef3c7', color: '#d97706', label: 'Paketleniyor' };
+            case 'Toplanıyor': return { bg: '#fef3c7', color: '#b45309', label: 'Toplanıyor' };
+            case 'Toplandı': return { bg: '#ecfccb', color: '#4d7c0f', label: 'Toplandı' };
+            case 'Paketleniyor': return { bg: '#fef3c7', color: '#d97706', label: 'Paketleniyor' };
             case 'Paketlendi': return { bg: '#e2e8f0', color: '#334155', label: 'Paketlendi' };
             case 'Kargoya Verildi': return { bg: '#f1f5f9', color: '#475569', label: 'Kargoya Verildi' };
             case 'Teslim Edildi': return { bg: '#dcfce3', color: '#166534', label: 'Teslim Edildi' };
             case 'İptal Edildi': return { bg: '#fee2e2', color: '#991b1b', label: 'İptal Edildi' };
+            case 'İptal Bekliyor': return { bg: '#fef2f2', color: '#dc2626', label: 'İptal Bekliyor' };
             default: return { bg: '#f1f5f9', color: '#64748b', label: status || 'Belirsiz' };
         }
     };
@@ -752,8 +763,8 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                         { id: 'Tümü', label: 'Tümü' },
                         { id: 'Beklemede', label: 'Beklemede (Yeni)' },
                         { id: 'Onaylandı', label: 'Onaylandı' },
-                        { id: 'Hazırlanıyor', label: 'Hazırlanıyor' },
-                        { id: 'Hazır', label: 'Toplandı (Hazır)' },
+                        { id: 'Toplanıyor', label: 'Toplanıyor' },
+                        { id: 'Toplandı', label: 'Toplandı' },
                         { id: 'Paketleniyor', label: 'Paketleniyor' },
                         { id: 'Paketlendi', label: 'Paketlendi' },
                         { id: 'Kargoya Verildi', label: 'Kargoya Verildi' },
@@ -800,17 +811,17 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                         <p style={{ margin: '6px 0 0 0', fontSize: '13px' }}>"Manuel Sipariş Ekle" butonuna basarak yeni sipariş oluşturabilirsiniz.</p>
                     </div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
                         <thead>
                             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '12%' }}>Sipariş No & Tarih</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '18%' }}>Müşteri Bilgisi</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '35%' }}>Sipariş Kalemleri (Ürünler)</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '15%' }}>Sevkiyat Adresi</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '10%' }}>Kargo Şirketi</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'right', width: '10%' }}>Toplam Tutar</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'center', width: '10%' }}>Durum</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'right' }}>İşlemler</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '10%' }}>Sipariş No & Tarih</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '12%' }}>Müşteri Bilgisi</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '20%' }}>Sipariş Kalemleri (Ürünler)</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '20%' }}>Sevkiyat Adresi</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '8%' }}>Kargo Şirketi</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'right', width: '8%' }}>Toplam Tutar</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'center', width: '8%' }}>Durum</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'center', width: '14%' }}>İşlemler</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -852,11 +863,11 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                         const q = parseInt(item.Quantity) || 1;
                                                         const p = parseFloat(item.UnitPrice) || 0;
                                                         return (
-                                                            <div key={idx} style={{ fontSize: '13px', color: '#334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', gap: '8px' }}>
-                                                                <span style={{ flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }} title={item.ProductName || `Ürün #${item.ProductId}`}>
+                                                            <div key={idx} style={{ fontSize: '13px', color: '#334155', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', backgroundColor: '#f8fafc', padding: '8px 10px', borderRadius: '6px', border: '1px solid #e2e8f0', gap: '4px' }}>
+                                                                <span style={{ wordBreak: 'break-word', lineHeight: '1.4' }}>
                                                                     <strong>{q}x {item.ProductName || `Ürün #${item.ProductId}`}</strong>
                                                                 </span>
-                                                                <span style={{ color: '#64748b', whiteSpace: 'nowrap', flexShrink: 0, fontSize: '12px' }}>
+                                                                <span style={{ color: '#64748b', fontSize: '12px', alignSelf: 'flex-end', marginTop: '2px' }}>
                                                                     ({p.toLocaleString('tr-TR')} TL / {item.Unit || 'adet'}) = <strong style={{color:'#1e293b'}}>{(p*q).toLocaleString('tr-TR')} TL</strong>
                                                                 </span>
                                                             </div>
@@ -867,7 +878,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                 )}
                                             </div>
                                         </td>
-                                        <td style={{ padding: '16px', fontSize: '13px', color: '#475569', wordBreak: 'break-word' }}>
+                                        <td style={{ padding: '16px', fontSize: '13px', color: '#475569', wordBreak: 'break-word', whiteSpace: 'pre-line' }}>
                                             {order.ShippingAddress || '-'}
                                         </td>
                                         <td style={{ padding: '16px', fontSize: '13px', color: '#0f172a', fontWeight: '600' }}>
@@ -895,14 +906,14 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                     <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.8 }}>{order.CargoStatus}</div>
                                                 )}
                                             </span>
-                                            {order.CartInfo && (
+                                            {order.CartInfo && ['Toplanıyor', 'Toplandı', 'Paketleniyor'].includes(order.OrderStatus) && (
                                                 <div style={{ fontSize: '11px', color: '#64748b', marginTop: '8px', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                                                     🛒 {order.CartInfo}
                                                 </div>
                                             )}
                                         </td>
-                                        <td style={{ padding: '16px', textAlign: 'right' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', alignItems: 'center' }}>
+                                        <td style={{ padding: '16px', textAlign: 'center' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                 {order.OrderStatus === 'Beklemede' && hasPerm('order_approve') && (
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleApproveOrder(order.Id); }} 
@@ -951,13 +962,6 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                             title="Siparişi kargoya ver"
                                                         >
                                                             Kargoya Ver
-                                                        </button>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'Teslim Edildi'); }} 
-                                                            style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
-                                                            title="Siparişi kargoya vermeden elden teslim et"
-                                                        >
-                                                            Elden Teslim
                                                         </button>
                                                     </>
                                                 )}
@@ -1149,7 +1153,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                                                 let barcodes = [];
                                                                                 try {
                                                                                     if (p.Barcode) barcodes = typeof p.Barcode === 'string' ? JSON.parse(p.Barcode) : p.Barcode;
-                                                                                } catch (err) {}
+                                                                                } catch (err) { console.warn("Sessiz Hata Yakalandı:", err.message); }
                                                                                 return (barcodes && barcodes.includes(barcode)) || 
                                                                                        p.ProductCode === barcode || 
                                                                                        p.code === barcode;
@@ -1812,3 +1816,5 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
 };
 
 export default CustomerOrders;
+
+

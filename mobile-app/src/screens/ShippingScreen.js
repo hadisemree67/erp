@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: ShippingScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file ShippingScreen.js
  * @description Sevkiyat (Kargo) ekranı. Kamera ile kargo barkodunu okutarak
  * veya manuel barkod girerek siparişlerin sevkiyat (kargoya verilme) işlemini gerçekleştirir.
@@ -226,3 +233,5 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     }
 });
+
+

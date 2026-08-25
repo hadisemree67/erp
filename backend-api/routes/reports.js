@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: reports
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, depo doluluk oranları, kategori bazlı stok dağılımları, kritik seviye uyarıları 
@@ -205,3 +212,4 @@ router.get('/top-selling', authMiddleware, checkPermission('view_reports'), asyn
 });
 
 module.exports = router;
+

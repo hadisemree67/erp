@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: Settings
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Sistemin genel ayarları ve yapılandırmalarını barındıran panel.
+ * ============================================================================
+ */
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
@@ -120,3 +127,5 @@ const Settings = ({ currentUser }) => {
 };
 
 export default Settings;
+
+

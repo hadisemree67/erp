@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: OvertimeManagement
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Personel, İK, maaş, izin ve işten ayrılış işlemlerini barındıran bileşen.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (OvertimeManagement.jsx), Personel listesi, mesai (overtime) ve izin (leave) yönetim arayüzlerini içerir.
@@ -277,3 +284,5 @@ const OvertimeManagement = ({ currentUser }) => {
 };
 
 export default OvertimeManagement;
+
+

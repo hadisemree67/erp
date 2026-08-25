@@ -1,6 +1,42 @@
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   E-ticaret web sitesinin kategori ağacını (Ana kategori > Alt kategori > Alt başlık)
+ *   ve bu kategorilere ait görselleri (banner, ikon vb.) yönetir. 
+ *   Veritabanı işlemleri ve dosya yükleme (multer) fonksiyonlarını barındırır.
+ * ============================================================================
+ */
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'category-' + uniqueSuffix + path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, ''));
+    }
+});
+
+const fileFilter = (req, file, cb) => {
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+        cb(null, true);
+    } else {
+        cb(new Error('Desteklenmeyen dosya formatı.'), false);
+    }
+};
+
+const upload = multer({ 
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 // ===========================
 // Yardımcı: Tabloları oluştur
@@ -37,6 +73,20 @@ async function createTablesIfNotExist() {
             is_active TINYINT(1) DEFAULT 1,
             UNIQUE KEY uq_sub_slug (subcategory_id, slug),
             FOREIGN KEY (subcategory_id) REFERENCES web_subcategories(id) ON DELETE CASCADE
+        )
+    `);
+    // Banner tablosu: her kategoride 3 slot, her slota isteğe bağlı marka bağlanabilir
+    await db.query(`
+        CREATE TABLE IF NOT EXISTS category_banners (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            category_id INT NOT NULL,
+            slot TINYINT NOT NULL DEFAULT 1,
+            image_url VARCHAR(255) NULL,
+            brand_id INT NULL,
+            brand_name VARCHAR(100) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_category_slot (category_id, slot)
         )
     `);
 }
@@ -179,7 +229,9 @@ async function seedIfEmpty() {
 })();
 
 // ===========================
-// GET /api/web-categories/tree  → Tüm ağaç
+// [GET] Tüm Kategori Ağacını Listeleme
+// Web sitesindeki açılır menüler için ana kategorileri, alt kategorileri ve başlıkları 
+// iç içe geçmiş (tree) JSON yapısında istemciye sunar.
 // ===========================
 router.get('/tree', async (req, res) => {
     try {
@@ -205,7 +257,8 @@ router.get('/tree', async (req, res) => {
 });
 
 // ===========================
-// GET /api/web-categories  → Sadece ana kategoriler
+// [GET] Sadece Ana Kategorileri Listeleme
+// Sistemdeki aktif olan en üst seviye (ana) kategorileri düz bir liste olarak getirir.
 // ===========================
 router.get('/', async (req, res) => {
     try {
@@ -217,7 +270,8 @@ router.get('/', async (req, res) => {
 });
 
 // ===========================
-// POST /api/web-categories  → Yeni ana kategori ekle
+// [POST] Yeni Ana Kategori Ekleme
+// Gelen isimden SEO uyumlu bir bağlantı adresi (slug) türetir ve yeni bir ana kategori olarak kaydeder.
 // ===========================
 router.post('/', async (req, res) => {
     try {
@@ -236,7 +290,8 @@ router.post('/', async (req, res) => {
 });
 
 // ===========================
-// GET /api/web-categories/subcategories?category_id=X
+// [GET] Alt Kategorileri Listeleme
+// Belirtilen bir ana kategoriye (category_id) ait olan tüm alt kategorileri getirir.
 // ===========================
 router.get('/subcategories', async (req, res) => {
     try {
@@ -253,7 +308,8 @@ router.get('/subcategories', async (req, res) => {
 });
 
 // ===========================
-// POST /api/web-categories/subcategories
+// [POST] Yeni Alt Kategori Ekleme
+// Belirtilen ana kategoriye bağlı yeni bir alt kategori oluşturur ve veritabanına kaydeder.
 // ===========================
 router.post('/subcategories', async (req, res) => {
     try {
@@ -272,7 +328,8 @@ router.post('/subcategories', async (req, res) => {
 });
 
 // ===========================
-// GET /api/web-categories/subtitles?subcategory_id=X
+// [GET] Alt Başlıkları Listeleme
+// Belirtilen bir alt kategoriye (subcategory_id) ait olan en alt seviye başlıkları getirir.
 // ===========================
 router.get('/subtitles', async (req, res) => {
     try {
@@ -289,7 +346,8 @@ router.get('/subtitles', async (req, res) => {
 });
 
 // ===========================
-// POST /api/web-categories/subtitles
+// [POST] Yeni Alt Başlık Ekleme
+// Belirtilen alt kategoriye bağlı en alt seviye yeni bir başlık oluşturur.
 // ===========================
 router.post('/subtitles', async (req, res) => {
     try {
@@ -304,6 +362,153 @@ router.post('/subtitles', async (req, res) => {
         res.json({ success: true, data: rows[0] });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// ===========================
+// [PUT] Ana Kategori Görseli Yükleme / Güncelleme
+// İlgili kategori ID'sine yüklenen resmi diskte (uploads klasörü) saklar ve veritabanını günceller.
+// ===========================
+router.put('/main/:id/image', upload.single('image'), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz ID' });
+    try {
+        if (!req.file) return res.status(400).json({ success: false, message: 'Resim bulunamadı' });
+        const imageUrl = `/uploads/${req.file.filename}`;
+        await db.query('UPDATE web_categories SET image_url = ? WHERE id = ?', [imageUrl, id]);
+        res.json({ success: true, image_url: imageUrl });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+router.put('/sub/:id/image', upload.single('image'), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz ID' });
+    try {
+        if (!req.file) return res.status(400).json({ success: false, message: 'Resim bulunamadı' });
+        const imageUrl = `/uploads/${req.file.filename}`;
+        await db.query('UPDATE web_subcategories SET image_url = ? WHERE id = ?', [imageUrl, id]);
+        res.json({ success: true, image_url: imageUrl });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+router.put('/title/:id/image', upload.single('image'), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz ID' });
+    try {
+        if (!req.file) return res.status(400).json({ success: false, message: 'Resim bulunamadı' });
+        const imageUrl = `/uploads/${req.file.filename}`;
+        await db.query('UPDATE web_subtitles SET image_url = ? WHERE id = ?', [imageUrl, id]);
+        res.json({ success: true, image_url: imageUrl });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
+
+// ===========================
+// BANNER ENDPOINTLERİ
+// ===========================
+
+// GET /api/web-categories/banners?category_id=X → Bir kategorinin 3 bannerını döner
+router.get('/banners', async (req, res) => {
+    try {
+        const { category_id } = req.query;
+        if (!category_id) return res.status(400).json({ error: 'category_id gerekli' });
+        const [rows] = await db.query(
+            'SELECT * FROM category_banners WHERE category_id = ? ORDER BY slot ASC',
+            [parseInt(category_id)]
+        );
+        // 3 slot her zaman dönsün (boş slotlar da)
+        const slots = [1, 2, 3].map(slot => {
+            const found = rows.find(r => r.slot === slot);
+            return found || { id: null, category_id: parseInt(category_id), slot, image_url: null, brand_id: null, brand_name: null };
+        });
+        res.json(slots);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ===========================
+// [GET] Tüm Bannerları Getirme (Admin Paneli İçin)
+// Sistemdeki tüm kategorilerin (banner eklenmiş olan) banner görsellerini liste halinde döndürür.
+// ===========================
+router.get('/banners/all', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT cb.*, wc.name as category_name, wc.slug as category_slug
+             FROM category_banners cb
+             JOIN web_categories wc ON cb.category_id = wc.id
+             WHERE cb.image_url IS NOT NULL
+             ORDER BY cb.category_id, cb.slot ASC`
+        );
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ===========================
+// [PUT] Kategori Banner'ı Yükleme / Güncelleme
+// İlgili kategorinin belirtilen sırasına (1, 2 veya 3. slot) yeni bir banner görseli veya marka bağlantısı ekler.
+// ===========================
+router.put('/banners/:category_id/:slot', upload.single('image'), async (req, res) => {
+    try {
+        const catIdNum = parseInt(req.params.category_id, 10);
+        const slotNum = parseInt(req.params.slot, 10);
+        if (isNaN(catIdNum) || isNaN(slotNum)) return res.status(400).json({ error: 'Geçersiz Kategori veya Slot ID' });
+        const { brand_id, brand_name } = req.body;
+
+        if (![1, 2, 3].includes(slotNum)) return res.status(400).json({ error: 'Geçersiz slot (1-3 arası olmalı)' });
+
+        let imageUrl = null;
+        if (req.file) {
+            imageUrl = `/uploads/${req.file.filename}`;
+        } else {
+            // Sadece marka güncellemesi yapılıyor olabilir
+            const [existing] = await db.query(
+                'SELECT image_url FROM category_banners WHERE category_id = ? AND slot = ?',
+                [catIdNum, slotNum]
+            );
+            if (existing.length > 0) imageUrl = existing[0].image_url;
+        }
+
+        await db.query(
+            `INSERT INTO category_banners (category_id, slot, image_url, brand_id, brand_name)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE image_url = COALESCE(VALUES(image_url), image_url), brand_id = VALUES(brand_id), brand_name = VALUES(brand_name)`,
+            [catIdNum, slotNum, imageUrl, brand_id || null, brand_name || null]
+        );
+
+        const [updated] = await db.query(
+            'SELECT * FROM category_banners WHERE category_id = ? AND slot = ?',
+            [catIdNum, slotNum]
+        );
+        res.json({ success: true, banner: updated[0] });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ===========================
+// [DELETE] Banner Silme (Kaldırma) İşlemi
+// İlgili kategorinin belirtilen sırasındaki (slot) banner'ını yayından kaldırır (Görseli null yapar).
+// ===========================
+router.delete('/banners/:category_id/:slot', async (req, res) => {
+    try {
+        const catIdNum = parseInt(req.params.category_id, 10);
+        const slotNum = parseInt(req.params.slot, 10);
+        if (isNaN(catIdNum) || isNaN(slotNum)) return res.status(400).json({ error: 'Geçersiz Kategori veya Slot ID' });
+        await db.query(
+            'UPDATE category_banners SET image_url = NULL WHERE category_id = ? AND slot = ?',
+            [catIdNum, slotNum]
+        );
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 

@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: PackagingScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file PackagingScreen.js
  * @description Siparişte toplanan ürünlerin barkodlarının okutularak kutuya (pakete) konulması işlemi.
  * Tüm ürünler paketlendiğinde kargo etiketi oluşturulur ve sipariş tamamlanır.
@@ -612,3 +619,5 @@ const styles = StyleSheet.create({
     boxChipText: { fontSize: 14, fontWeight: '600', color: '#64748b' },
     boxChipTextSelected: { color: '#ffffff' }
 });
+
+

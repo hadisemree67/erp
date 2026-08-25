@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: stockNotifier
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, stok seviyesi kritik sınırın altına düşen ürünleri tespit edip 
@@ -7,7 +14,13 @@
 const db = require('../db');
 const { sendLowStockEmail } = require('../services/emailService');
 
-// Kritik stok seviyesinin altına düşen ürünleri yakalayıp sipariş oluşturur
+/**
+ * Kritik stok seviyesinin altına düşen ürünleri tespit eder ve stok tedariki için:
+ * 1. Üretim talebi (Production Request) açar (Fason/Dahili üretim ise), VEYA
+ * 2. Satın alma talebi (Purchase Request) açıp tedarikçilere otomatik e-posta atar.
+ * @param {number|string} productId - Kontrol edilecek ürünün ID'si
+ * @returns {Promise<void>}
+ */
 const checkAndNotifyLowStock = async (productId) => {
     try {
         // Ürünün depodaki güncel toplam miktarını çekiyoruz
@@ -228,3 +241,4 @@ const checkAndNotifyLowStock = async (productId) => {
 module.exports = {
     checkAndNotifyLowStock
 };
+

@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: purchasing
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, satınalma talepleri, tedarikçi siparişleri, sipariş onay süreçleri 
@@ -54,7 +61,8 @@ router.post('/requests', authMiddleware, checkPermission('procurement_request'),
 
 // PUT /api/purchasing/requests/:id/status - Talep durumunu güncelle
 router.put('/requests/:id/status', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Talep ID.' });
     const { status } = req.body; // 'Bekliyor', 'Onaylandı', 'Reddedildi'
 
     if (!['Bekliyor', 'Onaylandı', 'Reddedildi'].includes(status)) {
@@ -82,7 +90,8 @@ router.put('/requests/:id/status', authMiddleware, checkPermission('procurement_
 
 // POST /api/purchasing/requests/:id/send-order - E-posta gönder ve satın alma siparişi oluştur
 router.post('/requests/:id/send-order', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Talep ID.' });
     const { quantity, description, supplier_id, supplier_email, product_name } = req.body;
 
     if (!quantity || !supplier_id || !supplier_email) {
@@ -247,7 +256,8 @@ router.get('/orders', authMiddleware, checkPermission('view_procurement'), async
 
 // PUT /api/purchasing/orders/:id/status - Sipariş durumunu güncelle
 router.put('/orders/:id/status', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const { status } = req.body;
 
     if (!['Bekliyor', 'Onaylandı', 'Hazırlanıyor', 'Hazırlandı', 'Kargoya Verildi', 'Depo Kabul Bekliyor', 'Depoya Alındı', 'İptal', 'Teslim Edildi'].includes(status)) {
@@ -275,7 +285,8 @@ router.put('/orders/:id/status', authMiddleware, checkPermission('procurement_re
 
 // POST /api/purchasing/orders/:id/receive - Depoya mal kabul işlemini gerçekleştir
 router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const { quantity, shelfAllocations, location_id, warehouse_id, shelf_code, batch_number, expiration_date, user_id } = req.body;
 
     const allocs = (shelfAllocations && Array.isArray(shelfAllocations) && shelfAllocations.length > 0)
@@ -428,3 +439,4 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
 });
 
 module.exports = router;
+

@@ -1,8 +1,16 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: BrandsList
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Marka Listesi
 // Açıklama: Ana sayfada veya markalar bölümünde popüler markaları ve logolarını listeler.
 // -----------------------------------------------------------------------------
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronRight } from 'lucide-react';
 import styles from './BrandsList.module.css';
 
@@ -57,7 +65,9 @@ const BrandsList = () => {
               const imgSrc = `http://localhost:3000${brand.logo_url}`;
               const altText = brand.name;
               return (
-                <img key={idx} src={imgSrc} alt={altText} title={altText} className={styles.brandLogo} />
+                <Link key={idx} to={`/brand/${encodeURIComponent(brand.name)}`} style={{ textDecoration: 'none' }}>
+                  <img src={imgSrc} alt={altText} title={altText} className={styles.brandLogo} />
+                </Link>
               );
             })
           ) : (
@@ -99,3 +109,5 @@ const BrandsList = () => {
 };
 
 export default BrandsList;
+
+

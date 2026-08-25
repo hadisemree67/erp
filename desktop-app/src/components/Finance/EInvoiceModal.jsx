@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: EInvoiceModal
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Finansal işlemler, gelir-gider takibi ve cari hesap yönetimi ekranı.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (EInvoiceModal.jsx), Finansal hesaplar, e-fatura modalları ve genel bütçe göstergelerini içerir.
@@ -454,3 +461,5 @@ const EInvoiceModal = ({ isOpen, onClose, invoiceData }) => {
 };
 
 export default EInvoiceModal;
+
+

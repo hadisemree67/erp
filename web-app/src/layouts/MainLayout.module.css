@@ -1,0 +1,16 @@
+.stickyWrapper {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: var(--bg-color); /* Veya headerın kendi arka planı varsa şeffaf olmasın */
+}
+
+.stickyHidden {
+  transform: translateY(-100%);
+}
+
+.stickyVisible {
+  transform: translateY(0);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}

@@ -24,6 +24,7 @@
   width: 780px;
   max-width: 95vw;
   height: 550px;
+  max-height: 90vh;
   display: flex;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   overflow: hidden;
@@ -279,10 +280,22 @@
   height: 40px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 0 14px 0 38px;
+  padding: 0 44px 0 38px; /* sağ: göz butonu için yer */
   font-size: 13px;
   color: var(--text-dark);
   transition: all 0.2s;
+}
+
+/* Tarayıcının native parola gösterme ikonunu gizle (Edge/Chrome/Safari) */
+.input[type='password']::-ms-reveal,
+.input[type='password']::-ms-clear {
+  display: none;
+}
+.input[type='password']::-webkit-credentials-auto-fill-button,
+.input[type='password']::-webkit-textfield-decoration-container {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .input:focus {

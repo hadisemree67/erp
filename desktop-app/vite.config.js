@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: vite.config
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * vite.config.js
  * Projenin çalışması için gereken kodları barındırıyor.
@@ -16,3 +23,4 @@ export default defineConfig({
     strictPort: true,
   }
 })
+

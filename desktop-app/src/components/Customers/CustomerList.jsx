@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: CustomerList
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Müşteri kayıtları, b2b/b2c cari takibi ve müşteri ilişkileri arayüzü.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (CustomerList.jsx), Müşteri kayıtlarını, B2B/B2C ayrımını ve müşteri detaylarını yöneten bileşenleri içerir.
@@ -189,3 +196,5 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
 };
 
 export default CustomerList;
+
+

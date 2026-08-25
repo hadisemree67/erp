@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: SupplierList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Tedarikçi Modülü / Tedarikçi Firmalar ve Rehber
- * 
+ * BİLEŞEN ADI: SupplierList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Mal ve hizmet satın alınan dış tedarikçi firmaların iletişim bilgilerini, vergi numaralarını, adreslerini ve genel ticari ilişkilerini listeler; yeni tedarikçi ekleme veya mevcut firma bilgilerini düzenleme imkanı sunar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Firma Rehberi Yönetimi, Lucide İkonları, Arama Filtreleri
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/suppliers` rotası ile çalışarak satınalma ve depo kabul modüllerinin tedarikçi altyapısını sağlar.
+ *   Tedarikçi firmaların ve hammadde alım anlaşmalarının yönetildiği ekran.
  * ============================================================================
  */
 
@@ -320,3 +312,4 @@ const SupplierList = ({ currentUser }) => {
 };
 
 export default SupplierList;
+

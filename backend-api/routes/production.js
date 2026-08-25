@@ -1,7 +1,10 @@
-/*
- * ÖZET:
- * Bu modül, sistemdeki üretim ve imalat işlemlerini yönetir. Reçeteler, makine durumları, 
- * üretim siparişleri, üretim adımları ve makinelerin bakım takibi burada yapılır.
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Bu modül, üretim ve imalat işlemlerini yönetir. Reçetelerin (formüllerin)
+ *   okunması, stok kontrolleri (yeterli hammadde var mı?), makine kapasiteleri 
+ *   üzerinden eşleştirme ve üretim aşamalarının takibi burada yapılır.
+ * ============================================================================
  */
 
 const express = require('express');
@@ -17,7 +20,10 @@ const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 // MAKİNE YÖNETİMİ
 // =======================
 
-// Tüm makineleri getir
+// ===========================
+// [GET] Tüm Makineleri ve Durumlarını Listeleme
+// Üretim alanındaki tüm kazan/makineleri, kapasitelerini ve anlık doluluk/boşluk durumlarını getirir.
+// ===========================
 router.get('/machines', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         // Update status if busy_until has passed
@@ -50,7 +56,10 @@ router.get('/machines', authMiddleware, checkPermission('view_production'), asyn
     }
 });
 
-// Add a machine
+// ===========================
+// [POST] Yeni Makine Ekleme
+// Üretim bandına kapasite ve üretim kategorisi bazlı yeni bir makine/kazan kaydeder.
+// ===========================
 router.post('/machines', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { name, last_maintenance, machine_code, max_capacity, min_capacity, allowed_categories, prep_time_minutes, alternative_machine_id, supplier_name, supplier_email, supplier_phone, maintenance_period_months } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Makine adı zorunludur.' });
@@ -92,11 +101,16 @@ router.post('/machines', authMiddleware, checkPermission('production_manage'),  
     }
 });
 
-// Update machine status manually (optional)
+// ===========================
+// [PUT] Makine Durumunu Manuel Güncelleme
+// Makineyi manuel olarak "Dolu", "Boş" veya "Arızalı" durumuna alır.
+// ===========================
 router.put('/machines/:id/status', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Makine ID.' });
     const { status } = req.body;
     try {
-        const [result] = await db.query('UPDATE production_machines SET status = ? WHERE id = ?', [status, req.params.id]);
+        const [result] = await db.query('UPDATE production_machines SET status = ? WHERE id = ?', [status, id]);
         if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Makine bulunamadı.' });
         await logActivity(req.user?.id, 'UPDATE', 'production_machines', req.params.id, `Makine durumu "${status}" olarak güncellendi.`);
         res.json({ success: true, message: 'Makine durumu güncellendi.' });
@@ -105,9 +119,13 @@ router.put('/machines/:id/status', authMiddleware, checkPermission('production_m
     }
 });
 
-// Edit a machine
+// ===========================
+// [PUT] Makine Bilgilerini Güncelleme
+// Makinenin kapasite sınırlarını, izin verilen ürün kategorilerini ve bakım tarihlerini düzenler.
+// ===========================
 router.put('/machines/:id', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Makine ID.' });
     const { name, last_maintenance, machine_code, max_capacity, min_capacity, allowed_categories, prep_time_minutes, alternative_machine_id, supplier_name, supplier_email, supplier_phone, maintenance_period_months } = req.body;
     if (!name) return res.status(400).json({ success: false, message: 'Makine adı zorunludur.' });
 
@@ -151,9 +169,13 @@ router.put('/machines/:id', authMiddleware, checkPermission('production_manage')
     }
 });
 
-// Report machine issue / breakdown
+// ===========================
+// [POST] Makine Arıza Bildirimi (Otomatik Mail)
+// Makineyi "Arızalı" duruma çeker ve ilgili yetkiliye/tedarikçiye sistem üzerinden otomatik arıza maili gönderir.
+// ===========================
 router.post('/machines/:id/report-issue', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Makine ID.' });
     const { issue_description, reporter_name } = req.body;
     try {
         const [rows] = await db.query('SELECT * FROM production_machines WHERE id = ?', [id]);
@@ -183,9 +205,13 @@ router.post('/machines/:id/report-issue', authMiddleware, checkPermission('produ
     }
 });
 
-// Delete a machine
+// ===========================
+// [DELETE] Makine Silme
+// Sistemden makine kaydını kalıcı olarak siler.
+// ===========================
 router.delete('/machines/:id', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Makine ID.' });
     try {
         const [result] = await db.query('DELETE FROM production_machines WHERE id = ?', [id]);
         if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Makine bulunamadı.' });
@@ -202,7 +228,10 @@ router.delete('/machines/:id', authMiddleware, checkPermission('production_manag
 // ÜRETİM SİPARİŞLERİ
 // =======================
 
-// Uygun makineleri bul
+// ===========================
+// [POST] Uygun Makine/Kazan Eşleştirme (Algoritma)
+// Üretilecek ürünün reçetesine (kategori) ve toplam hacmine göre boştaki en uygun makineyi seçer.
+// ===========================
 router.post('/orders/match', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { product_id, planned_quantity } = req.body;
     if (!product_id || !planned_quantity) return res.status(400).json({ success: false, message: 'Ürün ve miktar gerekli.' });
@@ -284,7 +313,10 @@ router.post('/orders/match', authMiddleware, checkPermission('production_manage'
     }
 });
 
-// Yeni bir üretim siparişi oluştur
+// ===========================
+// [POST] Yeni Üretim Siparişi (İş Emri) Oluşturma
+// Reçeteyi okur, gereken hammadde stoklarını kontrol eder. Stok yetersizse uyarır, yeterliyse iş emri oluşturur.
+// ===========================
 router.post('/orders', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const { product_id, planned_quantity, machine_id, assigned_user_id } = req.body;
 
@@ -462,7 +494,10 @@ router.post('/orders', authMiddleware, checkPermission('production_manage'),  ch
     }
 });
 
-// Tüm üretim siparişlerini getir
+// ===========================
+// [GET] Tüm Üretim Siparişleri (Aktif)
+// Arşivlenmemiş tüm üretim (imalat) siparişlerini listeler.
+// ===========================
 router.get('/orders', authMiddleware, checkPermission('view_production'), async (req, res) => {
     try {
         const [rows] = await db.query(`
@@ -481,10 +516,14 @@ router.get('/orders', authMiddleware, checkPermission('view_production'), async 
     }
 });
 
-// Siparişi sil
+// ===========================
+// [DELETE] Üretim Siparişini İptal Etme
+// Üretim adımları başlamamış bir siparişi iptal eder ve siler.
+// ===========================
 router.delete('/orders/:id', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir ID.' });
         const [rows] = await db.query('SELECT status FROM production_orders WHERE id = ?', [id]);
 
         if (rows.length === 0) {
@@ -504,7 +543,10 @@ router.delete('/orders/:id', authMiddleware, checkPermission('production_manage'
     }
 });
 
-// Siparişi arşivle
+// ===========================
+// [POST] Siparişi Arşivleme ve Tamamlama
+// Tamamlanmış veya depoya teslim edilmiş üretimi aktif ekrandan kaldırıp geçmişe (arşive) yollar.
+// ===========================
 router.post('/orders/:id/archive', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
     const connection = await db.getConnection();
     try {
@@ -556,8 +598,13 @@ router.post('/orders/:id/archive', authMiddleware, checkPermission('production_m
     }
 });
 
-// Sipariş detaylarını getir (toplanacak malzemeler dahil)
+// ===========================
+// [GET] Üretim Siparişi Detayı (İş Kartı)
+// Siparişin tüm bilgilerini, kullanılması gereken hammaddeleri ve üretim adımlarını (reçete aşamalarını) çeker.
+// ===========================
 router.get('/orders/:id', authMiddleware, checkPermission('view_production'), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir ID.' });
     try {
         const [orderRows] = await db.query(`
             SELECT po.*, p.ProductName as product_name, m.name as machine_name, u.name as user_name, p.Formula as product_formula
@@ -595,8 +642,13 @@ router.get('/orders/:id', authMiddleware, checkPermission('view_production'), as
     }
 });
 
-// Malzemeyi toplandı olarak işaretle
+// ===========================
+// [POST] Hammadde Toplama (Pick) İşlemi
+// Depodan ilgili hammaddenin üretime alındığını onaylar (Toplandı işareti koyar).
+// ===========================
 router.post('/orders/:id/pick', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir ID.' });
     const { material_id, actual_quantity } = req.body;
     try {
         let actQty = null;
@@ -622,8 +674,13 @@ router.post('/orders/:id/pick', authMiddleware, checkPermission('production_mana
     }
 });
 
-// Üretimi başlat
+// ===========================
+// [POST] Üretimi (İş Emrini) Başlatma
+// Malzemeleri depodan toplanan iş emrinin durumunu "Üretimde" olarak günceller ve makine adımlarına izin verir.
+// ===========================
 router.post('/orders/:id/start', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir ID.' });
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -663,9 +720,14 @@ router.post('/orders/:id/start', authMiddleware, checkPermission('production_man
     }
 });
 
-// Belirli bir üretim adımını başlat
+// ===========================
+// [POST] Üretim Adımını Başlatma (Makineyi Kilitleme)
+// Belirli bir reçete adımını başlatır ve kullanılacak makineyi/kazanı işlemin süresi boyunca "Dolu" (kilitli) yapar.
+// ===========================
 router.post('/orders/:id/steps/:step_id/start', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
-    const { id, step_id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    const step_id = parseInt(req.params.step_id, 10);
+    if (isNaN(id) || isNaN(step_id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir veya Adım ID.' });
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -729,8 +791,14 @@ router.post('/orders/:id/steps/:step_id/start', authMiddleware, checkPermission(
     }
 });
 
-// Bir adım için malzemeyi doğrula
+// ===========================
+// [POST] Malzeme Doğrulama (Barkod/Kontrol)
+// Karışım esnasında personelin doğru hammaddeleri makineye kattığını teyit eder.
+// ===========================
 router.post('/orders/:id/steps/:step_id/verify-material', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const step_id = parseInt(req.params.step_id, 10);
+    if (isNaN(id) || isNaN(step_id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir veya Adım ID.' });
     const { material_name } = req.body;
     try {
         const [rows] = await db.query('SELECT verified_materials FROM production_order_steps WHERE id = ? AND production_order_id = ?', [req.params.step_id, req.params.id]);
@@ -763,7 +831,9 @@ router.post('/orders/:id/steps/:step_id/verify-material', authMiddleware, checkP
 
 // Belirli bir üretim adımını tamamla
 router.post('/orders/:id/steps/:step_id/complete', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
-    const { id, step_id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    const step_id = parseInt(req.params.step_id, 10);
+    if (isNaN(id) || isNaN(step_id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir veya Adım ID.' });
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -807,6 +877,8 @@ router.post('/orders/:id/steps/:step_id/complete', authMiddleware, checkPermissi
 
 // Üretimi tamamla
 router.post('/orders/:id/complete', authMiddleware, checkPermission('production_manage'),  checkRole(['Üretim']), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Emir ID.' });
     const { actual_quantity, waste_reason, manager_explanation, is_manager_approval, delivered_to_user_id } = req.body;
     const connection = await db.getConnection();
     try {

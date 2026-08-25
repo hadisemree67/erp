@@ -1,6 +1,10 @@
-/*
- * Bu modül, şirket çalışanlarının özlük bilgileri, maaş bilgileri, departman atamaları, 
- * izin talepleri ve işten ayrılma süreçlerini yöneten API rotalarını tanımlar.
+/**
+ * ============================================================================
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Bu modül, İnsan Kaynakları (İK) süreçlerini yönetir. Çalışanların özlük 
+ *   bilgileri, maaş ve mesai hesaplamaları, departman atamaları, yıllık 
+ *   izin/rapor takibi ve işten çıkış (offboarding) süreçlerini kapsar.
+ * ============================================================================
  */
 
 const express = require('express');
@@ -198,7 +202,8 @@ ensureEmployeeTables();
 
 // GET: Belirli personelin dosyalarını getir
 router.get('/:id/documents', authMiddleware, checkPermission('view_employees'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     try {
         const [rows] = await db.query('SELECT * FROM employee_documents WHERE employee_id = ? ORDER BY uploaded_at DESC', [id]);
         res.json({ success: true, documents: rows });
@@ -210,7 +215,8 @@ router.get('/:id/documents', authMiddleware, checkPermission('view_employees'), 
 
 // DELETE: Personel belgesini sil
 router.delete('/documents/:docId', authMiddleware, checkPermission('employee_edit'), async (req, res) => {
-    const { docId } = req.params;
+    const docId = parseInt(req.params.docId, 10);
+    if (isNaN(docId)) return res.status(400).json({ success: false, message: 'Geçersiz Belge ID.' });
     try {
         const [rows] = await db.query('SELECT * FROM employee_documents WHERE id = ?', [docId]);
         if (rows.length === 0) {
@@ -228,7 +234,10 @@ router.delete('/documents/:docId', authMiddleware, checkPermission('employee_edi
     }
 });
 
-// GET: Tüm personelleri getir
+// ===========================
+// [GET] Tüm Personel Listesi
+// Sistemdeki tüm personeli detayları ve aktif izin/rapor durumlarıyla birlikte listeler.
+// ===========================
 router.get('/', authMiddleware, checkPermission('view_employees'), async (req, res) => {
     try {
         const { search } = req.query;
@@ -295,7 +304,10 @@ router.get('/', authMiddleware, checkPermission('view_employees'), async (req, r
     }
 });
 
-// POST: Yeni personel ekle
+// ===========================
+// [POST] Yeni Personel Kaydı Ekleme
+// Sisteme yeni bir çalışan ekler, fotoğrafını ve özlük belgelerini (sözleşme, CV) yükler.
+// ===========================
 router.post('/', authMiddleware, checkPermission('employee_add'), uploadMiddleware, async (req, res) => {
     const { full_name, department, position, phone, email, start_date, salary, tckn, address, blood_type, emergency_contact, work_status } = req.body;
     const photo_path = req.files && req.files.photo ? `/uploads/${req.files.photo[0].filename}` : null;
@@ -332,7 +344,10 @@ router.post('/', authMiddleware, checkPermission('employee_add'), uploadMiddlewa
     }
 });
 
-// PUT: Seçili personelleri toplu düzenle
+// ===========================
+// [PUT] Toplu Maaş ve Departman Güncelleme
+// Seçilen birden fazla personelin maaşına oransal/sabit zam veya departman/görev değişikliğini aynı anda uygular.
+// ===========================
 router.put('/bulk-edit', authMiddleware, checkPermission('employee_edit'), async (req, res) => {
     const { ids, updates } = req.body;
 
@@ -344,6 +359,13 @@ router.put('/bulk-edit', authMiddleware, checkPermission('employee_edit'), async
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'Personel seçilmedi.' });
     }
+    
+    // GÜVENLİK: SQL Injection'a karşı ID'leri tam sayıya çevir ve temizle
+    const validIds = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    if (validIds.length === 0) {
+        return res.status(400).json({ success: false, message: 'Geçerli personel seçilmedi.' });
+    }
+
     if (!finalUpdates || !Array.isArray(finalUpdates) || finalUpdates.length === 0) {
         return res.status(400).json({ success: false, message: 'Değişiklik bulunamadı.' });
     }
@@ -353,7 +375,7 @@ router.put('/bulk-edit', authMiddleware, checkPermission('employee_edit'), async
         conn = await db.getConnection();
         await conn.beginTransaction();
 
-        for (const id of ids) {
+        for (const id of validIds) {
             const [oldRows] = await conn.query('SELECT * FROM employees WHERE id = ?', [id]);
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
@@ -408,11 +430,20 @@ router.put('/bulk-edit', authMiddleware, checkPermission('employee_edit'), async
     }
 });
 
-// DELETE: Seçili personelleri toplu sil
+// ===========================
+// [DELETE] Personelleri Toplu Silme
+// Seçilen personelleri sistemden kalıcı olarak siler ve log kaydı oluşturur.
+// ===========================
 router.delete('/bulk', authMiddleware, checkPermission('employee_delete'), async (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ success: false, message: 'Silinecek personel seçilmedi.' });
+    }
+
+    // GÜVENLİK: SQL Injection'a karşı ID'leri tam sayıya çevir
+    const validIds = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    if (validIds.length === 0) {
+        return res.status(400).json({ success: false, message: 'Geçerli personel seçilmedi.' });
     }
 
     let conn;
@@ -420,7 +451,7 @@ router.delete('/bulk', authMiddleware, checkPermission('employee_delete'), async
         conn = await db.getConnection();
         await conn.beginTransaction();
 
-        for (const id of ids) {
+        for (const id of validIds) {
             const [oldRows] = await conn.query('SELECT * FROM employees WHERE id = ?', [id]);
             if (oldRows.length === 0) continue;
             const oldData = oldRows[0];
@@ -440,9 +471,13 @@ router.delete('/bulk', authMiddleware, checkPermission('employee_delete'), async
     }
 });
 
-// PUT: Personel güncelle
+// ===========================
+// [PUT] Personel Bilgilerini Güncelleme
+// Mevcut personelin departman, maaş veya demografik bilgilerini düzenler. Yeni dosya eklemelerini destekler.
+// ===========================
 router.put('/:id', authMiddleware, checkPermission('employee_edit'), uploadMiddleware, async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     const { full_name, department, position, phone, email, start_date, salary, tckn, address, blood_type, emergency_contact, work_status } = req.body;
 
     const requiredFields = [full_name, department, position, phone, email, start_date, tckn, address, blood_type, emergency_contact];
@@ -489,9 +524,13 @@ router.put('/:id', authMiddleware, checkPermission('employee_edit'), uploadMiddl
     }
 });
 
-// POST: Çıkış Talebi Başlat (Offboard Request)
+// ===========================
+// [POST] İşten Çıkış Talebi (Offboarding) Başlatma
+// Personel için işten ayrılış (SGK kodu, sebep) sürecini başlatır ve ilgili birimlerin onayına sunar.
+// ===========================
 router.post('/:id/offboard-request', authMiddleware, checkPermission('view_offboarding'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     const { sgk_code, end_date, exit_reason, severance_pay } = req.body;
 
     if (!end_date || !exit_reason || !sgk_code) {
@@ -529,7 +568,8 @@ router.post('/:id/offboard-request', authMiddleware, checkPermission('view_offbo
 
 // PUT: Departman Onayı Ver (Offboard Approve)
 router.put('/:id/offboard-approve', authMiddleware, async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     const { department, status } = req.body; // department: 'it', 'idari', 'finans', 'hukuk'
 
     // GÜVENLİK: Body'den gelen department bilgisine göre dinamik yetki kontrolü
@@ -564,9 +604,13 @@ router.put('/:id/offboard-approve', authMiddleware, async (req, res) => {
     }
 });
 
-// PUT: Personel çıkışını kesinleştir (Offboard Finalize)
+// ===========================
+// [PUT] İşten Çıkışı Kesinleştirme (Offboard Finalize)
+// Tüm onayları tamamlanmış personelin sistemden çıkışını kesinleştirir ve durumunu "İşten Ayrıldı" olarak pasife çeker.
+// ===========================
 router.put('/:id/offboard', authMiddleware, checkPermission('employee_edit'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
 
     try {
         const [rows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
@@ -599,7 +643,8 @@ router.put('/:id/offboard', authMiddleware, checkPermission('employee_edit'), as
 
 // DELETE: Personel sil
 router.delete('/:id', authMiddleware, checkPermission('employee_delete'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     try {
         const [oldRows] = await db.query('SELECT * FROM employees WHERE id = ?', [id]);
         const oldData = oldRows.length > 0 ? oldRows[0] : null;
@@ -648,9 +693,13 @@ function calculateTotalLeaveEntitlement(startDateStr) {
     return totalDays;
 }
 
-// GET: İzin bakiyesini getir (hem leave-balance hem leave-summary uyumluluğu)
+// ===========================
+// [GET] Personel Yıllık İzin Bakiyesi (Özeti)
+// Personelin işe başlama tarihine (İSG kanunlarına göre) göre hak ettiği, kullandığı ve kalan izin günlerini hesaplar.
+// ===========================
 router.get(['/:id/leave-balance', '/:id/leave-summary'], authMiddleware, checkPermission('view_leaves'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     try {
         const [empRows] = await db.query('SELECT start_date FROM employees WHERE id = ?', [id]);
         if (empRows.length === 0) return res.status(404).json({ success: false, message: 'Personel bulunamadı.' });
@@ -674,7 +723,8 @@ router.get(['/:id/leave-balance', '/:id/leave-summary'], authMiddleware, checkPe
 
 // GET: İzin geçmişini getir
 router.get('/:id/leaves', authMiddleware, checkPermission('view_leaves'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     try {
         const [rows] = await db.query('SELECT * FROM employee_leaves WHERE employee_id = ? ORDER BY start_date DESC, id DESC', [id]);
         res.json({ success: true, leaves: rows });
@@ -686,7 +736,8 @@ router.get('/:id/leaves', authMiddleware, checkPermission('view_leaves'), async 
 
 // POST: Personel için yeni izin ekle
 router.post('/:id/leaves', authMiddleware, checkPermission('manage_leaves'), async (req, res) => {
-    const { id } = req.params;
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Personel ID.' });
     const { leave_type, payment_status, start_date, end_date, total_days, description } = req.body;
 
     if (!leave_type || !payment_status || !start_date || !end_date || !total_days) {
@@ -739,8 +790,11 @@ router.post('/overtimes', authMiddleware, checkPermission('employee_edit'), asyn
         await conn.beginTransaction();
 
         // Saatlik ücretleri hesaplamak için personelleri getir
-        const placeholders = employee_ids.map(() => '?').join(',');
-        const [employees] = await conn.query(`SELECT id, salary, full_name FROM employees WHERE id IN (${placeholders})`, employee_ids);
+        const validEmpIds = employee_ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+        if(validEmpIds.length === 0) return res.status(400).json({ success: false, message: 'Geçerli personel seçilmedi.' });
+        
+        const placeholders = validEmpIds.map(() => '?').join(',');
+        const [employees] = await conn.query(`SELECT id, salary, full_name FROM employees WHERE id IN (${placeholders})`, validEmpIds);
 
         for (const emp of employees) {
             const salary = parseFloat(emp.salary) || 0;

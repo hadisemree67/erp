@@ -1,8 +1,16 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: LoginModal
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Giriş/Kayıt Penceresi (Modal)
 // Açıklama: Kullanıcıların siteye giriş yapmasını veya yeni kayıt oluşturmasını sağlayan açılır penceredir.
 // -----------------------------------------------------------------------------
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { X, CheckCircle2, Leaf, Eye, EyeOff, UserPlus, Check, ArrowLeft } from 'lucide-react';
 import styles from './LoginModal.module.css';
 
@@ -73,10 +81,41 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
       
       if (!response.ok) throw new Error(data.message || 'Giriş başarısız');
       
-      localStorage.setItem('customerToken', data.token);
+      if (data.requires2FA) {
+         setView('2fa_verify');
+         setOtp(['','','','','','']);
+         setSuccessMsg(data.message || 'Lütfen doğrulama kodunu giriniz.');
+         return;
+      }
       
       if (onLoginSuccess) {
-        onLoginSuccess(data.user);
+        onLoginSuccess(data.user, data.token);
+      }
+      handleClose();
+    } catch (err) {
+      setErrorMsg(err.message);
+    }
+  };
+
+  const handleLoginVerify = async (e) => {
+    e.preventDefault();
+    setErrorMsg('');
+    
+    const otpCode = otp.join('');
+    if (otpCode.length !== 6) return setErrorMsg('Kodu eksiksiz giriniz.');
+
+    try {
+      const response = await fetch('http://localhost:3000/api/customers/auth/login-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact: loginContact, otpCode })
+      });
+      const data = await response.json();
+      
+      if (!response.ok) throw new Error(data.message || 'Doğrulama başarısız');
+      
+      if (onLoginSuccess) {
+        onLoginSuccess(data.user, data.token);
       }
       handleClose();
     } catch (err) {
@@ -371,29 +410,38 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
       );
     }
 
-    if (view === 'verify') {
+    if (view === 'verify' || view === '2fa_verify') {
+      const isLogin = view === '2fa_verify';
       return (
         <div className={styles.formContent}>
-          <div className={styles.stepperContainer}>
-            <div className={styles.stepCompleted}>
-              <div className={styles.stepCircle}><Check size={14} strokeWidth={3} /></div>
-              <span>Hesap Bilgileri</span>
+          {!isLogin && (
+            <div className={styles.stepperContainer}>
+              <div className={styles.stepCompleted}>
+                <div className={styles.stepCircle}><Check size={14} strokeWidth={3} /></div>
+                <span>Hesap Bilgileri</span>
+              </div>
+              <div className={styles.stepLineActive}></div>
+              <div className={styles.stepActive}>
+                <div className={styles.stepCircle}>2</div>
+                <span>Doğrulama</span>
+              </div>
             </div>
-            <div className={styles.stepLineActive}></div>
-            <div className={styles.stepActive}>
-              <div className={styles.stepCircle}>2</div>
-              <span>Doğrulama</span>
-            </div>
-          </div>
+          )}
 
           <div className={styles.verifyHeader}>
-            <h2>Doğrulama</h2>
-            <p>Hesabınızı doğrulamak için e-posta adresinize<br/>6 haneli kodu giriniz.</p>
+            {isLogin && (
+              <button className={styles.backBtn} onClick={() => setView('login')} style={{marginBottom: '16px'}}>
+                <ArrowLeft size={16} /> Geri Dön
+              </button>
+            )}
+            <h2 style={{marginTop: isLogin ? '0' : undefined}}>{isLogin ? 'İki Adımlı Doğrulama' : 'Doğrulama'}</h2>
+            <p>Hesabınızı doğrulamak için e-posta adresinize<br/>gönderilen 6 haneli kodu giriniz.</p>
           </div>
 
+          {successMsg && isLogin && <div style={{color: '#00A896', fontSize: '14px', marginBottom: '16px', textAlign: 'center', backgroundColor: '#e6f6f4', padding: '10px', borderRadius: '8px'}}>{successMsg}</div>}
           {errorMsg && <div style={{color: 'red', fontSize: '13px', marginBottom: '16px', textAlign: 'center'}}>{errorMsg}</div>}
 
-          <form className={styles.form} onSubmit={handleVerify}>
+          <form className={styles.form} onSubmit={isLogin ? handleLoginVerify : handleVerify}>
             <div className={styles.otpContainer}>
               {otp.map((digit, idx) => (
                 <input
@@ -413,14 +461,16 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
               Kodu almadınız mı? <button type="button">Yeniden Gönder (58s)</button>
             </div>
 
-            <button type="submit" className={styles.submitBtn}>Kayıt Ol</button>
+            <button type="submit" className={styles.submitBtn}>{isLogin ? 'Giriş Yap' : 'Kayıt Ol'}</button>
           </form>
         </div>
       );
     }
   };
 
-  return (
+  if (!isOpen) return null;
+
+  const modalContent = (
     <div className={styles.overlay} onClick={handleClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         {/* Left Side */}
@@ -447,6 +497,10 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
       </div>
     </div>
   );
+
+  return ReactDOM.createPortal(modalContent, document.body);
 };
 
 export default LoginModal;
+
+

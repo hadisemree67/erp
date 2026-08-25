@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: PurchaseRequests.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Satınalma Modülü / Satınalma Talepleri ve Onay Akışı
- * 
+ * BİLEŞEN ADI: PurchaseRequests
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Şirket içi departmanların veya stok uyarı sisteminin oluşturduğu malzeme satın alma taleplerini listeler; satınalma yöneticilerinin bu talepleri inceleyip onaylamasına, reddetmesine veya doğrudan tedarikçi siparişine dönüştürmesine olanak tanır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Onay Akışı (Approval Workflow), Talep Durum Yönetimi
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/purchasing/requests` rotası ile haberleşerek şirket içi talep ve tedarik koordinasyonunu sağlar.
+ *   Satın alma talepleri ve hammadde tedarik süreçlerini yöneten modül.
  * ============================================================================
  */
 
@@ -499,3 +491,4 @@ const PurchaseRequests = ({ currentUser }) => {
 };
 
 export default PurchaseRequests;
+

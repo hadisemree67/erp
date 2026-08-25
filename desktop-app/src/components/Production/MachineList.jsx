@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: MachineList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Üretim Modülü / Makine ve Ekipman Listesi
- * 
+ * BİLEŞEN ADI: MachineList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Üretim tesisinde kullanılan makinelerin, montaj hatlarının ve operasyonel ekipmanların listelendiği, çalışma kapasitelerinin, durumlarının (aktif/arızalı/bakımda) takip edildiği ekrandır.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Lucide İkonları, Durum Göstergeleri (Badge), Asenkron Veri Çekme
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/production/machines` uç noktasına bağlanarak üretim altyapısının durumunu yönetir.
+ *   Üretim emirleri, makine takibi ve imalat operasyonlarını yöneten arayüz.
  * ============================================================================
  */
 
@@ -114,7 +106,7 @@ const MachineList = ({ currentUser }) => {
         if (m.allowed_categories) {
             try {
                 cats = typeof m.allowed_categories === 'string' ? JSON.parse(m.allowed_categories) : m.allowed_categories;
-            } catch(e) {}
+            } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
         }
         setSelectedCategories(Array.isArray(cats) ? cats : []);
         
@@ -508,3 +500,4 @@ const MachineList = ({ currentUser }) => {
 };
 
 export default MachineList;
+

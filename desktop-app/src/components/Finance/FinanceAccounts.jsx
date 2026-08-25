@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: FinanceAccounts
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Finansal işlemler, gelir-gider takibi ve cari hesap yönetimi ekranı.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (FinanceAccounts.jsx), Finansal hesaplar, e-fatura modalları ve genel bütçe göstergelerini içerir.
@@ -606,3 +613,5 @@ const FinanceAccounts = ({ onNavigate }) => {
 };
 
 export default FinanceAccounts;
+
+

@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: CampaignForm
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   İndirim kampanyaları ve kupon yönetimi işlemlerini sağlayan ekran.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (CampaignForm.jsx), Kampanya listeleme, ekleme ve düzenleme işlemlerini yöneten bileşenleri içerir.
@@ -677,3 +684,5 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
 };
 
 export default CampaignForm;
+
+

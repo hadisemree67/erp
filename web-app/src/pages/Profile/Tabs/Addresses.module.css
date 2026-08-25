@@ -11,7 +11,7 @@
 }
 
 .title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-dark);
   margin: 0 0 8px 0;
@@ -65,7 +65,7 @@
   right: 20px;
   background-color: #e6f6f4;
   color: var(--primary);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 4px;
@@ -116,7 +116,7 @@
   background: none;
   border: none;
   color: var(--text-dark);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: color 0.2s;
@@ -144,10 +144,12 @@
   border-radius: 8px;
   padding: 16px;
   color: var(--text-light);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .infoIcon {
   color: #9ca3af;
   flex-shrink: 0;
 }
+
+

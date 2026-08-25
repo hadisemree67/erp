@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: StaffForm.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Sistem Kullanıcıları Modülü / Kullanıcı ve Yetki Tanımlama Formu
- * 
+ * BİLEŞEN ADI: StaffForm
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   ERP sistemine giriş yapacak yeni bir kullanıcı hesabı oluşturmak veya mevcut kullanıcının şifresini, rolünü (yönetici, personel, depo sorumlusu vb.) ve modül bazlı ince yetkilerini (permissions) yapılandırmak için kullanılan form arayüzüdür.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Yetki Checkbox Ağacı, Şifre ve Rol Yönetimi
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Arkayüzdeki `/api/users` rotası ile etkileşim kurarak sistem güvenlik ve yetkilendirme altyapısını yönetir.
+ *   Kullanıcı yetkilendirme ve sisteme giriş yapan personelleri yönetme ekranı.
  * ============================================================================
  */
 
@@ -290,3 +282,4 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
 };
 
 export default StaffForm;
+

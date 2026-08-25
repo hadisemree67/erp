@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ProductForm.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Ürün Katalog Modülü / Ürün Ekleme ve Düzenleme Formu
- * 
+ * BİLEŞEN ADI: ProductForm
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Sisteme yeni bir ürün, hammadde veya yarı mamul eklemek ya da mevcut ürünün adını, barkodunu, stok kodunu (SKU), fiyatlarını, boyutlarını ve teknik özelliklerini düzenlemek için kullanılan detaylı formdur.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React (useState, useEffect), Barkod ve SKU Doğrulama, Dinamik Form Alanları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/products` rotasının POST ve PUT uç noktalarıyla çalışarak ürün kataloğunu günceller.
+ *   Sistemdeki ürünlerin, varyantların ve stok kartlarının yönetildiği modül.
  * ============================================================================
  */
 
@@ -23,6 +15,7 @@ import { apiFetch } from '../../utils/api';
 import { useState, useEffect } from 'react';
 import Barcode from 'react-barcode';
 import WebCategorySelector from './WebCategorySelector';
+import HighlightsEditor from './HighlightsEditor';
 
 const ProductForm = ({ product, onClose, currentUser }) => {
   const isEditing = !!product;
@@ -90,6 +83,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
 
   const [formData, setFormData] = useState({
     ProductName: product?.ProductName || '',
+    ProductCode: product?.ProductCode || '',
     Brand: product?.Brand || '',
     Category: product?.Category || '',
     supply_type: product?.supply_type || 'MANUFACTURE',
@@ -102,6 +96,49 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     ExpirationDate: product?.ExpirationDate ? product.ExpirationDate.split('T')[0] : '',
     BatchNumber: product?.BatchNumber || '',
     Description: product?.Description || '',
+    BannerSlogan: product?.BannerSlogan || '',
+    FeaturedFeatures: (() => {
+      const f = product?.FeaturedFeatures;
+      if (!f) return '';
+      if (Array.isArray(f)) return f.join('\n');
+      if (typeof f === 'string') {
+        if (f.trim().startsWith('[')) {
+          try { return JSON.parse(f).join('\n'); } catch(e) { return f; }
+        }
+        return f;
+      }
+      return '';
+    })(),
+    WhoCanUse: (() => {
+      const f = product?.WhoCanUse;
+      if (!f) return '';
+      if (Array.isArray(f)) return f.join('\n');
+      if (typeof f === 'string') {
+        if (f.trim().startsWith('[')) {
+          try { return JSON.parse(f).join('\n'); } catch(e) { return f; }
+        }
+        return f;
+      }
+      return '';
+    })(),
+    HowToUse: (() => {
+      const f = product?.HowToUse;
+      if (!f) return '';
+      if (Array.isArray(f)) return f.join('\n');
+      if (typeof f === 'string') {
+        if (f.trim().startsWith('[')) {
+          try { return JSON.parse(f).join('\n'); } catch(e) { return f; }
+        }
+        return f;
+      }
+      return '';
+    })(),
+    Highlights: (() => {
+      const f = product?.Highlights;
+      if (!f) return [];
+      if (Array.isArray(f)) return f;
+      try { return JSON.parse(f); } catch(e) { return []; }
+    })(),
     Formula: product?.Formula || '',
     ProductionTime: product?.ProductionTime || 0,
     Width: product?.Width || '',
@@ -115,8 +152,11 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     critical_stock_level: product?.critical_stock_level || 0,
     shelf_life_months: product?.shelf_life_months || 0,
     is_active: product ? (product.is_active === 1 || product.is_active === true) : true,
+    is_bestseller: product ? (product.is_bestseller === 1 || product.is_bestseller === true) : false,
   });
 
+  const [editingSection, setEditingSection] = useState(null);
+  const [showDescPreview, setShowDescPreview] = useState(false);
   const [barcodes, setBarcodes] = useState(initialBarcodes);
   const [existingImages, setExistingImages] = useState(initialImages);
   const [routingSteps, setRoutingSteps] = useState(
@@ -449,7 +489,21 @@ const ProductForm = ({ product, onClose, currentUser }) => {
 
     const submitData = new FormData();
     Object.keys(formData).forEach(key => {
-      submitData.append(key, formData[key] || '');
+      if (key === 'Highlights') {
+        submitData.append(key, JSON.stringify(formData[key] || []));
+      } else if (key === 'FeaturedFeatures' || key === 'WhoCanUse' || key === 'HowToUse') {
+        // Convert multiline text into an array before stringifying
+        const val = formData[key];
+        let arr = [];
+        if (typeof val === 'string' && val.trim() !== '') {
+            arr = val.split('\n').filter(line => line.trim() !== '');
+        } else if (Array.isArray(val)) {
+            arr = val;
+        }
+        submitData.append(key, JSON.stringify(arr));
+      } else {
+        submitData.append(key, formData[key] || '');
+      }
     });
     if (formData.ExpirationDate) {
       submitData.set('ExpirationDate', formData.ExpirationDate);
@@ -461,6 +515,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     submitData.set('is_stackable', formData.is_stackable ? 1 : 0);
     submitData.set('max_stack_limit', formData.max_stack_limit || 1);
     submitData.set('is_active', formData.is_active ? 1 : 0);
+    submitData.set('is_bestseller', formData.is_bestseller ? 1 : 0);
 
     // Boş barkodları filtrele
     const validBarcodes = barcodes.filter(b => b.trim() !== '');
@@ -550,18 +605,34 @@ const ProductForm = ({ product, onClose, currentUser }) => {
       {error && <div style={{ padding: '12px', backgroundColor: '#fee2e2', color: '#b91c1c', borderRadius: '6px', marginBottom: '20px' }}>{error}</div>}
 
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', padding: '10px', backgroundColor: formData.is_active ? '#ecfdf5' : '#fef2f2', borderRadius: '6px', border: `1px solid ${formData.is_active ? '#a7f3d0' : '#fecaca'}` }}>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <div style={{ position: 'relative' }}>
-                    <input type="checkbox" name="is_active" checked={formData.is_active} onChange={(e) => setFormData({...formData, is_active: e.target.checked})} style={{ opacity: 0, position: 'absolute', width: 0, height: 0 }} />
-                    <div style={{ width: '44px', height: '24px', backgroundColor: formData.is_active ? '#10b981' : '#ef4444', borderRadius: '12px', transition: 'all 0.3s', position: 'relative' }}>
-                        <div style={{ position: 'absolute', top: '2px', left: formData.is_active ? '22px' : '2px', width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', transition: 'all 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+        <div style={{ display: 'flex', gap: '20px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1, padding: '10px', backgroundColor: formData.is_active ? '#ecfdf5' : '#fef2f2', borderRadius: '6px', border: `1px solid ${formData.is_active ? '#a7f3d0' : '#fecaca'}` }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', width: '100%' }}>
+                    <div style={{ position: 'relative' }}>
+                        <input type="checkbox" name="is_active" checked={formData.is_active} onChange={(e) => setFormData({...formData, is_active: e.target.checked})} style={{ opacity: 0, position: 'absolute', width: 0, height: 0 }} />
+                        <div style={{ width: '44px', height: '24px', backgroundColor: formData.is_active ? '#10b981' : '#ef4444', borderRadius: '12px', transition: 'all 0.3s', position: 'relative' }}>
+                            <div style={{ position: 'absolute', top: '2px', left: formData.is_active ? '22px' : '2px', width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', transition: 'all 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+                        </div>
                     </div>
-                </div>
-                <span style={{ marginLeft: '12px', fontWeight: 'bold', color: formData.is_active ? '#065f46' : '#991b1b' }}>
-                    {formData.is_active ? 'Ürün Aktif (Satışa Açık)' : 'Ürün Pasif (Satışa Kapalı)'}
-                </span>
-            </label>
+                    <span style={{ marginLeft: '12px', fontWeight: 'bold', color: formData.is_active ? '#065f46' : '#991b1b' }}>
+                        {formData.is_active ? 'Ürün Aktif (Satışa Açık)' : 'Ürün Pasif (Satışa Kapalı)'}
+                    </span>
+                </label>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1, padding: '10px', backgroundColor: formData.is_bestseller ? '#fffbeb' : '#f8fafc', borderRadius: '6px', border: `1px solid ${formData.is_bestseller ? '#fcd34d' : '#e2e8f0'}` }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', width: '100%' }}>
+                    <div style={{ position: 'relative' }}>
+                        <input type="checkbox" name="is_bestseller" checked={formData.is_bestseller} onChange={(e) => setFormData({...formData, is_bestseller: e.target.checked})} style={{ opacity: 0, position: 'absolute', width: 0, height: 0 }} />
+                        <div style={{ width: '44px', height: '24px', backgroundColor: formData.is_bestseller ? '#f59e0b' : '#cbd5e1', borderRadius: '12px', transition: 'all 0.3s', position: 'relative' }}>
+                            <div style={{ position: 'absolute', top: '2px', left: formData.is_bestseller ? '22px' : '2px', width: '20px', height: '20px', backgroundColor: 'white', borderRadius: '50%', transition: 'all 0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+                        </div>
+                    </div>
+                    <span style={{ marginLeft: '12px', fontWeight: 'bold', color: formData.is_bestseller ? '#b45309' : '#64748b' }}>
+                        Çok Satanlara Ekle
+                    </span>
+                </label>
+            </div>
         </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
@@ -624,7 +695,10 @@ const ProductForm = ({ product, onClose, currentUser }) => {
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ürün Adı *</label>
-            <input type="text" name="ProductName" value={formData.ProductName} onChange={handleChange} required autoFocus style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+            <input type="text" name="ProductName" value={formData.ProductName} onChange={handleChange} required autoFocus style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '16px' }} />
+            
+            <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Ürün Kodu (SKU)</label>
+            <input type="text" name="ProductCode" value={formData.ProductCode} onChange={handleChange} placeholder="Örn: PRD-001" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
           </div>
 
         </div>{/* grid kapanışı */}
@@ -638,6 +712,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
 
         {/* MARKA + SATIŞ FİYATI */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', minHeight: '24px' }}>
                 <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Marka *</label>
@@ -957,9 +1032,176 @@ const ProductForm = ({ product, onClose, currentUser }) => {
         </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '24px' }}>
-          <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>Açıklama</label>
-          <textarea name="Description" value={formData.Description} onChange={handleChange} rows="3" style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', resize: 'vertical' }}></textarea>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', marginBottom: '24px' }}>
+            
+            {/* 1. ÖNE ÇIKAN BİLGİLER */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3d9e82' }}></div>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>Öne Çıkan Bilgiler</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formData.FeaturedFeatures ? formData.FeaturedFeatures.split('\n').filter(Boolean).length + ' madde' : 'Boş'}</span>
+                </div>
+                <button type="button" onClick={() => setEditingSection(editingSection === 'featured' ? null : 'featured')}
+                  style={{ background: editingSection === 'featured' ? '#f0f9f5' : 'none', border: '1px solid #bce8d8', color: '#3d9e82', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                  {editingSection === 'featured' ? 'Kapat' : 'Düzenle'}
+                </button>
+              </div>
+              {editingSection === 'featured' ? (
+                <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0' }}>
+                  <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '6px' }}>Her satıra bir özellik yazın (Örn: Kullanım kolaylığı sağlayan yenilikçi yapı)</label>
+                  <textarea name="FeaturedFeatures" value={formData.FeaturedFeatures} onChange={handleChange} rows="5"
+                    placeholder={"Kullanım kolaylığı sağlayan yenilikçi yapı.\nTemiz içerik prensibiyle geliştirilmiştir."}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box' }} />
+                </div>
+              ) : formData.FeaturedFeatures && (
+                <div style={{ padding: '12px 16px', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {formData.FeaturedFeatures.split('\n').filter(Boolean).map((item, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151' }}>
+                      <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#64748b', flexShrink: 0 }}></div>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 2. AÇIKLAMA (Description) */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Açıklama (Web Sitesinde Görüntülenir)</label>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        <button type="button" onClick={() => setShowDescPreview(false)} style={{ padding: '4px 12px', background: !showDescPreview ? '#3d9e82' : 'white', color: !showDescPreview ? 'white' : '#64748b', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Düzenle</button>
+                        <button type="button" onClick={() => setShowDescPreview(true)} style={{ padding: '4px 12px', background: showDescPreview ? '#3d9e82' : 'white', color: showDescPreview ? 'white' : '#64748b', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Önizle</button>
+                    </div>
+                </div>
+                {!showDescPreview ? (
+                    <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', gap: '4px', padding: '6px', background: '#f8fafc', borderBottom: '1px solid #cbd5e1' }}>
+                            <button type="button" onClick={() => {
+                                const textarea = document.getElementById('desc-textarea');
+                                const start = textarea?.selectionStart || 0;
+                                const end = textarea?.selectionEnd || 0;
+                                const text = formData.Description || '';
+                                const selectedText = text.substring(start, end);
+                                const newText = text.substring(0, start) + '**' + (selectedText || 'Kalın Metin') + '**' + text.substring(end);
+                                setFormData({...formData, Description: newText});
+                            }} style={{ padding: '4px 8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>K</button>
+                            <button type="button" onClick={() => {
+                                const textarea = document.getElementById('desc-textarea');
+                                const start = textarea?.selectionStart || 0;
+                                const end = textarea?.selectionEnd || 0;
+                                const text = formData.Description || '';
+                                const selectedText = text.substring(start, end);
+                                const newText = text.substring(0, start) + '_' + (selectedText || 'İtalik Metin') + '_' + text.substring(end);
+                                setFormData({...formData, Description: newText});
+                            }} style={{ padding: '4px 8px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '4px', cursor: 'pointer', fontStyle: 'italic', fontSize: '13px' }}>İ</button>
+                        </div>
+                        <textarea id="desc-textarea" name="Description" value={formData.Description} onChange={handleChange} rows="10" style={{ padding: '10px', width: '100%', border: 'none', resize: 'vertical', fontSize: '14px', boxSizing: 'border-box' }} placeholder="Ürün açıklaması..."></textarea>
+                    </div>
+                ) : (
+                    <div style={{ border: '1px solid #cbd5e1', borderRadius: '6px', padding: '16px', background: '#f8fafc', minHeight: '200px' }}>
+                        <div style={{ whiteSpace: 'pre-wrap', fontSize: '15px', color: '#334155' }}>
+                            {formData.Description ? formData.Description.split('\n').map((para, i) => (
+                                <p key={i} style={{ marginBottom: '12px' }}>
+                                    {para.split('**').map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part)}
+                                </p>
+                            )) : <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Önizleme yok</span>}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* 3. BANNER SLOGANI */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>Banner Sloganı (Yeşil Alan)</span>
+                  {formData.BannerSlogan && <span style={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>— {formData.BannerSlogan.substring(0,40)}{formData.BannerSlogan.length > 40 ? '...' : ''}</span>}
+                </div>
+                <button type="button" onClick={() => setEditingSection(editingSection === 'banner' ? null : 'banner')}
+                  style={{ background: editingSection === 'banner' ? '#f0f9f5' : 'none', border: '1px solid #bce8d8', color: '#3d9e82', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                  {editingSection === 'banner' ? 'Kapat' : 'Düzenle'}
+                </button>
+              </div>
+              {editingSection === 'banner' && (
+                <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0' }}>
+                  <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '6px' }}>Yeşil banner altında görünen kısa slogan (1 satır)</label>
+                  <input type="text" name="BannerSlogan" value={formData.BannerSlogan} onChange={handleChange}
+                    placeholder="Örn: Hijyenik temizlik, ferah ve yumuşak dokunuş."
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', boxSizing: 'border-box' }} />
+                </div>
+              )}
+            </div>
+
+            {/* 4. BANNER İKONLARI (HighlightsEditor) */}
+            <HighlightsEditor formData={formData} setFormData={setFormData} />
+
+            {/* 5. KİMLER KULLANABİLİR (WhoCanUse) */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#3b82f6' }}></div>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>Kimler Kullanabilir?</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formData.WhoCanUse ? formData.WhoCanUse.split('\n').filter(Boolean).length + ' madde' : 'Boş'}</span>
+                </div>
+                <button type="button" onClick={() => setEditingSection(editingSection === 'who' ? null : 'who')}
+                  style={{ background: editingSection === 'who' ? '#eff6ff' : 'none', border: '1px solid #bfdbfe', color: '#3b82f6', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                  {editingSection === 'who' ? 'Kapat' : 'Düzenle'}
+                </button>
+              </div>
+              {editingSection === 'who' ? (
+                <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0' }}>
+                  <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '6px' }}>Her satıra bir hedef kitle yazın</label>
+                  <textarea name="WhoCanUse" value={formData.WhoCanUse} onChange={handleChange} rows="4"
+                    placeholder={"Yetişkinler\nÇocuklar\nHassas cilde sahip kişiler"}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box' }} />
+                </div>
+              ) : formData.WhoCanUse && (
+                <div style={{ padding: '12px 16px', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {formData.WhoCanUse.split('\n').filter(Boolean).map((item, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151' }}>
+                      <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#3b82f6', flexShrink: 0 }}></div>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 6. NASIL KULLANILIR (HowToUse) */}
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#8b5cf6' }}></div>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>Nasıl Kullanılır? (Adımlar)</span>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formData.HowToUse ? formData.HowToUse.split('\n').filter(Boolean).length + ' adım' : 'Boş'}</span>
+                </div>
+                <button type="button" onClick={() => setEditingSection(editingSection === 'how' ? null : 'how')}
+                  style={{ background: editingSection === 'how' ? '#f5f3ff' : 'none', border: '1px solid #ddd6fe', color: '#8b5cf6', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                  {editingSection === 'how' ? 'Kapat' : 'Düzenle'}
+                </button>
+              </div>
+              {editingSection === 'how' ? (
+                <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0' }}>
+                  <label style={{ fontSize: '12px', color: '#64748b', display: 'block', marginBottom: '6px' }}>Her satıra bir adım yazın</label>
+                  <textarea name="HowToUse" value={formData.HowToUse} onChange={handleChange} rows="4"
+                    placeholder={"Paketin etiketli kısmını açın.\nMendili nazikçe çekiniz.\nKullanım sonrası paketi kapatınız."}
+                    style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '14px', resize: 'vertical', boxSizing: 'border-box' }} />
+                </div>
+              ) : formData.HowToUse && (
+                <div style={{ padding: '12px 16px', borderTop: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {formData.HowToUse.split('\n').filter(Boolean).map((item, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', color: '#374151' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#8b5cf6', color: 'white', fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</div>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
@@ -1026,3 +1268,4 @@ const ProductForm = ({ product, onClose, currentUser }) => {
 };
 
 export default ProductForm;
+

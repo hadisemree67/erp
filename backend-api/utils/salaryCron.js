@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: salaryCron
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, her ayın 1'inde otomatik olarak personel maaşlarını ve mesailerini hesaplayıp 
@@ -96,3 +103,4 @@ cron.schedule('0 1 1 * *', async () => {
         }
     }
 });
+

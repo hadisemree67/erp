@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: InventoryList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Envanter ve Bakiye Raporu
- * 
+ * BİLEŞEN ADI: InventoryList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Tüm depolardaki anlık stok bakiyelerini, depo ve raf bazında ürün miktarlarını, rezerve edilmiş stokları ve kullanılabilir envanter durumunu detaylı olarak listeler.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Çoklu Depo Filtreleme, Envanter Tablosu, Dışa Aktarım (Export) Hazırlığı
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/wms/inventory` rotasından çektiği gerçek zamanlı stok verilerini kullanıcıya sunar.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -288,7 +280,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                     style={{ position: 'absolute', top: '24px', right: '32px', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', zIndex: 10 }}>
                     ← Listeye Dön
                 </button>
-                <InventoryEntry currentUser={currentUser} initialMaterialName={addingStockMaterialName} />
+                <InventoryEntry currentUser={currentUser} initialMaterialName={addingStockMaterialName} onSuccess={() => { setIsAddingStock(false); fetchStockList(); }} />
             </div>
         );
     }
@@ -302,7 +294,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                   style={{ position: 'absolute', top: '24px', right: '32px', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold', zIndex: 10 }}>
                   ← Listeye Dön
               </button>
-              <InventoryEntry currentUser={currentUser} />
+              <InventoryEntry currentUser={currentUser} onSuccess={() => { setIsEntryVisible(false); fetchStockList(); }} />
           </div>
       );
     }
@@ -554,7 +546,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                 let displayBarcode = group.barcode;
                 let barcodeList = [];
                 if (displayBarcode?.startsWith('[')) {
-                    try { barcodeList = JSON.parse(displayBarcode); } catch(e){}
+                    try { barcodeList = JSON.parse(displayBarcode); } catch (e) { console.warn("Sessiz Hata Yakalandı:", e.message); }
                 } else if (displayBarcode) {
                     barcodeList = displayBarcode.split(',').map(b => b.trim());
                 }
@@ -1082,3 +1074,4 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   );
 };
 export default InventoryList;
+

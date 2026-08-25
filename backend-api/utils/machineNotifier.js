@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: machineNotifier
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /**
  * Makinelerin periyodik bakım tarihlerini denetleyen ve yaklaşan bakımlar için 
  * tedarikçilere/ilgililere otomatik e-posta bildirimi gönderen arka plan servisi.
@@ -14,7 +21,9 @@ try {
 }
 
 /**
- * Yaklaşan makine bakımlarını denetler ve e-posta iletir
+ * Yaklaşan makine bakımlarını denetler ve belirlenen tedarikçilere/sorumlulara e-posta iletir.
+ * (0-7 gün arası kalan bakımlar için günlük 1 kez hatırlatma atar).
+ * @returns {Promise<void>}
  */
 const checkUpcomingMaintenances = async () => {
     try {
@@ -71,3 +80,4 @@ const checkUpcomingMaintenances = async () => {
 module.exports = {
     checkUpcomingMaintenances
 };
+

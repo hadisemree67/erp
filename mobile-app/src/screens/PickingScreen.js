@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: PickingScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file PickingScreen.js
  * @description Depo içerisinde atanmış siparişlerin ürün bazlı toplama (picking) işleminin yapıldığı ekran.
  * Kamera ile barkod okutularak ürünlerin toplanması sağlanır.
@@ -973,3 +980,5 @@ const styles = StyleSheet.create({
         fontSize: 14,
     }
 });
+
+

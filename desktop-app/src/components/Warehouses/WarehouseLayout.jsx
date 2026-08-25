@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: WarehouseLayout.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Depo Tanım Modülü / Depo Yerleşim ve Raf Düzeni (Layout)
- * 
+ * BİLEŞEN ADI: WarehouseLayout
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Bir deponun içindeki koridorları, raf sistemlerini, katları ve hücreleri görsel veya yapısal olarak tanımlamayı, raf barkodlarını oluşturmayı ve depo içi lokasyon haritasını yönetmeyi sağlayan arayüzdür.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Raf/Hücre Ağaç Yapısı, Hiyerarşik Veri Yönetimi
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/warehouses/:id/layout` ve raf yönetim rotalarıyla etkileşime girerek WMS hücre takibini mümkün kılar.
+ *   Depo tanımları, raf krokileri ve fiziki lokasyon yönetim bileşeni.
  * ============================================================================
  */
 
@@ -1405,3 +1397,4 @@ const WarehouseLayout = ({ currentUser }) => {
 };
 
 export default WarehouseLayout;
+

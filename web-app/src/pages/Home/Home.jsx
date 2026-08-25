@@ -1,24 +1,93 @@
-import React from 'react';
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: Home
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web uygulamasının (e-ticaret) alt bileşenidir. Ziyaretçilere kullanıcı dostu arayüz sunar.
+ * ============================================================================
+ */
+import React, { useState, useEffect } from 'react';
 import HeroSlider from '../../components/HeroSlider/HeroSlider';
-import CategoryIcons from '../../components/CategoryIcons/CategoryIcons';
 import InfoBanners from '../../components/InfoBanners/InfoBanners';
-import BrandsList from '../../components/BrandsList/BrandsList';
 import ProductCarousel from '../../components/ProductCarousel/ProductCarousel';
+import CategoryBanners from '../../components/CategoryBanners/CategoryBanners';
+import CategoryIcons from '../../components/CategoryIcons/CategoryIcons';
 
 const Home = () => {
+  const [products, setProducts] = useState([]);
+  const [webCategories, setWebCategories] = useState([]);
+  const [categoryBanners, setCategoryBanners] = useState({}); // { category_name: [banner, ...] }
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [prodRes, bannerRes, treeRes] = await Promise.all([
+          fetch('http://localhost:3000/api/products/public'),
+          fetch('http://localhost:3000/api/web-categories/banners/all'),
+          fetch('http://localhost:3000/api/web-categories/tree'),
+        ]);
+
+        const prodData = await prodRes.json();
+        if (prodData.success) setProducts(prodData.data);
+        
+        const treeData = await treeRes.json();
+        if (Array.isArray(treeData)) setWebCategories(treeData);
+
+        const bannerData = await bannerRes.json();
+        if (Array.isArray(bannerData)) {
+          // { category_name: [slot1, slot2, slot3] }
+          const grouped = {};
+          bannerData.forEach(b => {
+            if (!grouped[b.category_name]) grouped[b.category_name] = [];
+            grouped[b.category_name].push(b);
+          });
+          setCategoryBanners(grouped);
+        }
+      } catch (error) {
+        console.error('Veri yüklenirken hata:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
   return (
     <div>
       {/* Öne çıkan kampanyaların gösterildiği geniş kayan vitrin */}
       <HeroSlider />
-      {/* Hızlı erişim sağlayan ikonik kategoriler */}
+
+      {/* Kategori İkonları (Vitamin dahil) */}
       <CategoryIcons />
+
       {/* İndirim ve kargo avantajlarını gösteren bilgi afişleri */}
       <InfoBanners />
-      {/* Popüler markaların logolarıyla listelendiği bölüm */}
-      <BrandsList />
+
       {/* Çok satan veya öne çıkan ürünlerin yana kaydırılarak gösterildiği alan */}
-      <ProductCarousel />
-      
+      {!loading && products.length > 0 && (
+        <>
+          <ProductCarousel title="Çok Satan Ürünler" products={products.filter(p => p.is_bestseller === 1 || p.is_bestseller === true)} />
+
+          {/* Her kategori için ayrı bir Carousel — webCategories sırasına (ID) göre */}
+          {webCategories.map(cat => {
+            const category = cat.name;
+            const categoryProducts = products.filter(p => p.Category === category);
+            if (categoryProducts.length === 0) return null;
+            const banners = categoryBanners[category] || [];
+            return (
+              <div key={category}>
+                {banners.length > 0 && <CategoryBanners banners={banners} />}
+                <ProductCarousel
+                  title={`${category} Ürünleri`}
+                  products={categoryProducts}
+                />
+              </div>
+            );
+          })}
+        </>
+      )}
+
       {/* Sayfanın altında boşluk bırakmak için geçici stil */}
       <div style={{ height: '100px' }}></div>
     </div>
@@ -26,3 +95,4 @@ const Home = () => {
 };
 
 export default Home;
+

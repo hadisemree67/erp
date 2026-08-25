@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: MaterialEditForm.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - WMS Operasyonları / Stok Kalemi ve Bakiye Düzenleme Formu
- * 
+ * BİLEŞEN ADI: MaterialEditForm
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Belirli bir rafta veya lokasyonda bulunan stok kaleminin parti numarası (batch), son kullanma tarihi (SKT), miktar veya lokasyon detaylarında düzeltme yapmak için kullanılan formdur.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Parti ve SKT Yönetimi, Form Doğrulama
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - `/api/wms/stock-balances/:id` rotasıyla haberleşerek hatalı stok kayıtlarını düzeltir.
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 
@@ -177,3 +169,4 @@ const MaterialEditForm = ({ product, onClose, currentUser }) => {
 };
 
 export default MaterialEditForm;
+

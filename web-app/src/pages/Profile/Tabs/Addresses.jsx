@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: Addresses
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web uygulamasının (e-ticaret) alt bileşenidir. Ziyaretçilere kullanıcı dostu arayüz sunar.
+ * ============================================================================
+ */
 import React, { useState } from 'react';
 import { Plus, Edit3, Trash2, Info } from 'lucide-react';
 import styles from './Addresses.module.css';
@@ -126,3 +133,5 @@ const Addresses = () => {
 };
 
 export default Addresses;
+
+

@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: PendingOrdersScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file PendingOrdersScreen.js
  * @description Bekleyen siparişlerin listelendiği ekran. 
  * Kullanıcı buradan sipariş seçip, bir taşıma arabasına (ve bölümlerine) atayarak toplamaya başlayabilir.
@@ -637,3 +644,5 @@ const styles = StyleSheet.create({
         lineHeight: 22,
     }
 });
+
+

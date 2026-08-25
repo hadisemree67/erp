@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: mobile
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu modül, depo personelinin el terminalleri (mobil cihazlar) üzerinden sipariş 
@@ -114,6 +121,7 @@ router.get('/orders/pending', authMiddleware, checkPermission('view_wms'), async
 // POST: Belirli bir siparişi al (atama)
 router.post('/orders/assign/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
     
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
@@ -248,6 +256,7 @@ router.post('/orders/assign/:id', authMiddleware, checkPermission('wms_transfer'
 // POST: Siparişe yeni bölüm (raf) ekle
 router.post('/orders/:id/add-section', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
     const { section_barcode } = req.body;
 
@@ -405,6 +414,7 @@ router.get('/orders/next', authMiddleware, checkPermission('view_wms'), async (r
 // POST: Toplama işlemini iptal et (Geri Dön)
 router.post('/orders/cancel/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
 
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
@@ -431,17 +441,78 @@ router.post('/orders/cancel/:id', authMiddleware, checkPermission('wms_transfer'
 // POST: Siparişi tamamla
 router.post('/orders/complete/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
 
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
 
     try {
-        const updated = await prisma.orders.updateMany({
-            where: { Id: id, PickerId: userId, OrderStatus: 'Haz_rlan_yor' },
-            data: { OrderStatus: 'Haz_r', PickedDate: new Date() }
+        const result = await prisma.$transaction(async (tx) => {
+            const updated = await tx.orders.updateMany({
+                where: { Id: id, PickerId: userId, OrderStatus: 'Haz_rlan_yor' },
+                data: { OrderStatus: 'Haz_r', PickedDate: new Date() }
+            });
+
+            if (updated.count === 0) {
+                return { success: false, updated: 0 };
+            }
+
+            // Siparişteki ürünleri getir ve stoktan (WMS) düş
+            const orderItems = await tx.orderitems.findMany({
+                where: { OrderId: id }
+            });
+
+            for (const item of orderItems) {
+                let remainingToDeduct = item.Quantity;
+                const availableBalances = await tx.wms_stock_balances.findMany({
+                    where: { product_id: item.ProductId, quantity: { gt: 0 } },
+                    orderBy: { quantity: 'desc' }
+                });
+
+                for (const bal of availableBalances) {
+                    if (remainingToDeduct <= 0) break;
+                    let toDeduct = Math.min(bal.quantity, remainingToDeduct);
+                    await tx.wms_stock_balances.update({
+                        where: { id: bal.id },
+                        data: { quantity: { decrement: toDeduct } }
+                    });
+                    remainingToDeduct -= toDeduct;
+                }
+
+                // Eğer yeterli fiziki bakiye yoksa (eksiye düşme durumu) herhangi bir rafa eksi yaz
+                if (remainingToDeduct > 0) {
+                    const firstBal = await tx.wms_stock_balances.findFirst({
+                        where: { product_id: item.ProductId }
+                    });
+                    if (firstBal) {
+                        await tx.wms_stock_balances.update({
+                            where: { id: firstBal.id },
+                            data: { quantity: { decrement: remainingToDeduct } }
+                        });
+                    } else {
+                        await tx.wms_stock_balances.create({
+                            data: { product_id: item.ProductId, quantity: -remainingToDeduct, warehouse_id: 1, location_id: 1, shelf_code: 'WMS_TOPLAMA' }
+                        });
+                    }
+                }
+
+                // 3. Stok Hareketi (StockMovements) oluştur
+                await tx.stockmovements.create({
+                    data: {
+                        ProductId: item.ProductId,
+                        MovementType: 'OUT',
+                        Quantity: item.Quantity,
+                        MovementDate: new Date(),
+                        Description: `Sipariş #${id} toplayıcı tarafından raftan toplandı.`,
+                        warehouse_id: 1
+                    }
+                });
+            }
+
+            return { success: true, updated: 1 };
         });
 
-        if (updated.count === 0) {
+        if (!result.success && result.updated === 0) {
             // Check if it's already completed by this user
             const existing = await prisma.orders.findFirst({
                 where: { Id: id, PickerId: userId, OrderStatus: 'Haz_r' }
@@ -455,11 +526,11 @@ router.post('/orders/complete/:id', authMiddleware, checkPermission('wms_transfe
             return res.status(400).json({ success: false, message: 'Sipariş tamamlanamadı. Size atanmamış olabilir veya durumu uygun değil.' });
         }
 
-        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi topladı.`, null);
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi topladı ve WMS (raf) stokları düşüldü.`, null);
 
         res.json({
             success: true,
-            message: 'Sipariş başarıyla toplandı.'
+            message: 'Sipariş başarıyla toplandı ve ürünler stoktan düşüldü.'
         });
 
     } catch (error) {
@@ -471,6 +542,7 @@ router.post('/orders/complete/:id', authMiddleware, checkPermission('wms_transfe
 // POST: Siparişi paketle (Kargo etiketini oluştur ve doğrula)
 router.post('/orders/package/complete/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const { scannedBarcode, boxBarcode } = req.body; // Yeni üretilen kargo barkodu ve kutu barkodu
     const userId = req.user?.id;
 
@@ -668,6 +740,7 @@ router.get('/orders/ready-for-packaging', authMiddleware, checkPermission('view_
 // POST: Paketleme görevini al (Assign)
 router.post('/orders/package/assign/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
 
@@ -706,6 +779,7 @@ router.post('/orders/package/assign/:id', authMiddleware, checkPermission('wms_t
 // POST: Paketlemeyi iptal et (Geri bırak)
 router.post('/orders/package/cancel/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
     try {
         const updated = await prisma.orders.updateMany({
@@ -877,3 +951,4 @@ router.get('/picking_carts/scan-for-packaging', authMiddleware, checkPermission(
 });
 
 module.exports = router;
+

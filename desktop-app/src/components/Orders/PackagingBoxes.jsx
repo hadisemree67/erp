@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: PackagingBoxes
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Müşteri siparişleri, paketleme, kargo ve iade işlemlerini kapsayan ekran.
+ * ============================================================================
+ */
 /*
  * ÖZET:
  * Bu dosya (PackagingBoxes.jsx), Müşteri siparişleri, kargo takibi ve siparişlerin paketlenmesi aşamalarını içerir.
@@ -660,3 +667,5 @@ const PackagingBoxes = () => {
 };
 
 export default PackagingBoxes;
+
+

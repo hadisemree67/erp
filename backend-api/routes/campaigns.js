@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: campaigns
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * Bu modül, sistemdeki indirim kampanyalarının (2 al 1 öde, tutar indirimi vb.), 
  * kapak resimlerinin ve geçerlilik tarihlerinin yönetildiği CRUD uç noktalarıdır.
@@ -118,6 +125,49 @@ const ensureCampaignsTable = async () => {
 };
 ensureCampaignsTable();
 
+// GET: Public aktif kampanyaları getir (Müşteriler için)
+router.get('/public', async (req, res) => {
+    try {
+        const query = `
+            SELECT * FROM campaigns 
+            WHERE status = 'Aktif' 
+            AND (start_date IS NULL OR start_date <= CURDATE())
+            AND (end_date IS NULL OR end_date >= CURDATE())
+            ORDER BY created_at DESC
+        `;
+        const [rows] = await db.query(query);
+        
+        for (let row of rows) {
+            const [products] = await db.query('SELECT product_id FROM campaign_products WHERE campaign_id = ?', [row.id]);
+            row.target_product_ids = products.map(p => p.product_id);
+
+            if (row.target_barcode) {
+                // target_barcode is sometimes stored as a JSON array string e.g. '["12345"]'
+                // Strip all non-alphanumeric characters to be absolutely safe (removes brackets, quotes, escapes)
+                let cleanBarcode = row.target_barcode.replace(/[^a-zA-Z0-9]/g, '');
+                row.target_barcode = cleanBarcode; // Update for frontend
+
+                // Fetch basic product info for the target barcode to display in the UI
+                const pQuery = `
+                    SELECT p.Id, p.ProductName, p.SalePrice, p.ImagePath
+                    FROM products p
+                    LEFT JOIN product_barcodes pb ON p.Id = pb.product_id
+                    WHERE pb.barcode = ? OR p.ProductCode = ?
+                    LIMIT 1
+                `;
+                const [targetProducts] = await db.query(pQuery, [cleanBarcode, cleanBarcode]);
+                if (targetProducts.length > 0) {
+                    row.target_product = targetProducts[0];
+                }
+            }
+        }
+
+        res.json({ success: true, data: rows });
+    } catch (error) {        console.error('Public kampanyalar getirilirken hata:', error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası.' });
+    }
+});
+
 // GET: Tüm kampanyaları getir
 router.get('/', authMiddleware, checkPermission('view_campaigns'), async (req, res) => {
     try {
@@ -160,11 +210,14 @@ router.get('/', authMiddleware, checkPermission('view_campaigns'), async (req, r
 // GET: Tek kampanya detayı
 router.get('/:id', authMiddleware, checkPermission('view_campaigns'), async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [req.params.id]);
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kampanya ID.' });
+
+        const [rows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
         if (rows.length === 0) {
             return res.status(404).json({ success: false, message: 'Kampanya bulunamadı.' });
         }
-        const [products] = await db.query('SELECT product_id FROM campaign_products WHERE campaign_id = ?', [req.params.id]);
+        const [products] = await db.query('SELECT product_id FROM campaign_products WHERE campaign_id = ?', [id]);
         rows[0].target_product_ids = products.map(p => p.product_id);
         
         res.json({ success: true, data: rows[0] });
@@ -233,7 +286,9 @@ router.post('/', authMiddleware, checkPermission('campaign_manage'), uploadMiddl
 // PUT: Kampanya güncelle
 router.put('/:id', authMiddleware, checkPermission('campaign_manage'), uploadMiddleware, async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kampanya ID.' });
+
         const {
             title, campaign_type, discount_rate, min_amount, buy_quantity,
             pay_quantity, gift_quantity, gift_product_name, target_product_ids, target_barcode, start_date,
@@ -293,7 +348,9 @@ router.put('/:id', authMiddleware, checkPermission('campaign_manage'), uploadMid
 // PATCH & PUT: Durum değiştir (Aktif <-> Pasif)
 const updateStatusHandler = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kampanya ID.' });
+
         const { status } = req.body;
 
         const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
@@ -322,7 +379,9 @@ router.put('/:id/status', authMiddleware, checkPermission('campaign_manage'), up
 // DELETE: Kampanya sil
 router.delete('/:id', authMiddleware, checkPermission('campaign_manage'), async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = parseInt(req.params.id, 10);
+        if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kampanya ID.' });
+
         const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
         if (oldRows.length === 0) {
             return res.status(404).json({ success: false, message: 'Kampanya bulunamadı.' });
@@ -338,3 +397,4 @@ router.delete('/:id', authMiddleware, checkPermission('campaign_manage'), async 
 });
 
 module.exports = router;
+

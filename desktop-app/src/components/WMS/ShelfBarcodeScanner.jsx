@@ -1,11 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: ShelfBarcodeScanner.jsx
- * MODÜL: Önyüz Bileşeni - WMS
- * 
- * GÖREV: 
- * Depo raflarına yapıştırılan barkodları okuyarak (Enter tuşu ile) 
- * ilgili depo ve raf bilgisini ebeveyn bileşene (onShelfFound) iletir.
+ * BİLEŞEN ADI: ShelfBarcodeScanner
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Depo (WMS), stok giriş-çıkış, envanter ve raf işlemlerini yöneten ekran.
  * ============================================================================
  */
 import React from 'react';
@@ -51,3 +48,4 @@ export default function ShelfBarcodeScanner({ onShelfFound }) {
         </div>
     );
 }
+

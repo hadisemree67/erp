@@ -1,11 +1,37 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: wmsUtils
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 /*
  * Bu modül, Depo (WMS) sistemindeki ortak hesaplama ve kapasite kontrol
  * fonksiyonlarını barındırır. calculateShelf3D gibi hacimsel hesaplamalar
  * bu dosyadan projenin diğer modüllerine dağıtılır.
  */
 
-// Rafın içine (3 boyutlu olarak) kaç koli ürün sığacağını hesaplıyoruz.
-// Ürünün en/boy/derinliği ile rafın boşluğunu çarpıştırıyoruz.
+/**
+ * Rafın içine (3 boyutlu olarak) kaç koli/ürün sığacağını hesaplar.
+ * Ürünün en/boy/derinliği ile rafın boşluğunu karşılaştırır.
+ * 
+ * @param {Object} params - Hesaplama parametreleri
+ * @param {number} params.sW - Raf genişliği (cm)
+ * @param {number} params.sH - Raf yüksekliği (cm)
+ * @param {number} params.sD - Raf derinliği (cm)
+ * @param {number} params.maxVolume - Rafın maksimum hacmi (cm³)
+ * @param {number} params.pW - Paket/Ürün genişliği (cm)
+ * @param {number} params.pH - Paket/Ürün yüksekliği (cm)
+ * @param {number} params.pD - Paket/Ürün derinliği (cm)
+ * @param {number} params.productVolume - Paket/Ürün hacmi (cm³)
+ * @param {boolean|string|number} params.isStackable - Üst üste dizilebilir mi?
+ * @param {number} params.maxStackLimit - Maksimum üst üste dizilme limiti
+ * @param {number} params.pCap - Kolideki ürün adedi (kapasitesi)
+ * @param {number} params.currentPackages - Raftaki mevcut paket sayısı
+ * @param {number} params.currentFilledVol - Raftaki mevcut dolu hacim
+ * 
+ * @returns {Object} Hesaplama sonuçları (maxPackagesEmpty, remainingPackages, maxItems, physicallyFits, vb.)
+ */
 function calculateShelf3D(params) {
     // 1. GÜVENLİK VE TİP KONTROLÜ (Type Coercion & NaN Koruması)
     // Tüm girdileri güvenli sayı formatına çeviriyoruz. Undefined/Null gelirse NaN patlaması önlenir.
@@ -125,3 +151,4 @@ function calculateShelf3D(params) {
 module.exports = {
     calculateShelf3D
 };
+

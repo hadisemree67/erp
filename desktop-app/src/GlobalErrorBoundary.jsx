@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: GlobalErrorBoundary.jsx
- * MODÜL / KATMAN: Önyüz Çekirdeği - Global Hata Yakalama Kalkanı (Error Boundary)
- * 
+ * BİLEŞEN ADI: GlobalErrorBoundary
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   React bileşen ağacında render sırasında, yaşam döngüsü metodlarında veya alt bileşenlerde meydana gelebilecek beklenmeyen hataları (crash) yakalar; uygulamanın tamamen beyaz ekrana düşmesini engelleyerek kullanıcıya şık bir hata ekranı ve yenileme seçeneği sunar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React Class Component, Error Boundary Yaşam Döngüsü (componentDidCatch)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - main.jsx içerisinde ana App bileşenini sarmalayarak tüm önyüzü uygulama çökmelerine karşı korur.
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
  * ============================================================================
  */
 
@@ -55,3 +47,4 @@ class GlobalErrorBoundary extends React.Component {
 }
 
 export default GlobalErrorBoundary;
+

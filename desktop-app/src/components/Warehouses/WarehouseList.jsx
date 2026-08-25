@@ -1,16 +1,8 @@
 /**
  * ============================================================================
- * DOSYA ADI: WarehouseList.jsx
- * MODÜL / KATMAN: Önyüz Bileşeni - Depo Tanım Modülü / Depolar ve Lojistik Merkezler Listesi
- * 
+ * BİLEŞEN ADI: WarehouseList
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Şirkete ait tüm depoları, şubeleri ve lojistik merkezleri listeler. Depoların doluluk oranlarını, sorumlu kişileri ve genel durumlarını özetler; depo düzenleme veya raf tasarım sayfalarına geçiş sağlar.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React, Depo Kartları / Tablosu, Kapasite Göstergeleri, Lucide İkonları
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Depo tanımlama modülünün ana ekranıdır; `/api/warehouses` rotasından aldığı verileri listeler.
+ *   Depo tanımları, raf krokileri ve fiziki lokasyon yönetim bileşeni.
  * ============================================================================
  */
 
@@ -164,3 +156,4 @@ const WarehouseList = ({ onNavigate, onEdit }) => {
 };
 
 export default WarehouseList;
+

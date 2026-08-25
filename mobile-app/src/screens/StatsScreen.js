@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: StatsScreen
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Mobil uygulamanın ana ekran bileşeni. Kullanıcı arayüzünü ve navigasyonu barındırır.
+ * ============================================================================
+ */
+/**
  * @file StatsScreen.js
  * @description Günlük liderlik ve performans istatistiklerini gösteren ekran.
  * En çok sipariş toplayan çalışanların listesini getirir.
@@ -230,3 +237,5 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     }
 });
+
+

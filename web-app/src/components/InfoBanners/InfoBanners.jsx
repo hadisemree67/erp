@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * BİLEŞEN ADI: InfoBanners
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Web sitesinin çeşitli sayfalarında tekrar kullanılabilen (Reusable) arayüz parçasıdır.
+ * ============================================================================
+ */
 // -----------------------------------------------------------------------------
 // Bileşen Adı: Bilgi Afişleri (Banners)
 // Açıklama: Kullanıcılara ücretsiz kargo, indirim veya güvenli alışveriş gibi fırsatları sunan afişlerdir.
@@ -49,3 +56,5 @@ const InfoBanners = () => {
 };
 
 export default InfoBanners;
+
+

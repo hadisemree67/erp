@@ -1,3 +1,10 @@
+﻿/**
+ * ============================================================================
+ * BİLEŞEN ADI: vite.config
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ * ============================================================================
+ */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -9,3 +16,4 @@ export default defineConfig({
     port: 5173
   }
 })
+

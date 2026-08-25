@@ -1,22 +1,9 @@
 /**
  * ============================================================================
- * DOSYA ADI: App.jsx
- * MODÜL / KATMAN: Önyüz Çekirdeği - Ana Uygulama Bileşeni ve Yönlendirme (Routing)
- * 
+ * BİLEŞEN ADI: App
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Uygulamanın ana kabuğunu (shell) oluşturur. Kullanıcının oturum durumunu yönetir, aktif sayfalar arası geçişi (tab/navigation) kontrol eder ve sol menü (Sidebar) ile içerik alanını bütünleştirir.
- * 
- * KULLANILAN TEKNOLOJİLER VE KÜTÜPHANELER:
- *   - React (useState, useEffect hook'ları), Durum Yönetimi (State Management)
- * 
- * MİMARİ VE ENTEGRASYON NOTLARI:
- *   - Tüm alt sayfa bileşenlerini (WMS, Products, Employees vb.) içinde barındıran en üst düzey kök bileşendir.
+ *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
  * ============================================================================
- */
-
-/*
- * ÖZET:
- * Bu dosya (App.jsx), Uygulamanın ana çekirdeği; genel yönlendirme (routing), kenar çubuğu (Sidebar) ve hata yakalama (ErrorBoundary) yapılarını barındırır.
  */
 
 import { useState, useEffect } from 'react';
@@ -27,6 +14,7 @@ import ProductList from './components/Products/ProductList';
 import ProductForm from './components/Products/ProductForm';
 import OutsourcedProducts from './components/Products/OutsourcedProducts';
 import PurchasedProducts from './components/Products/PurchasedProducts';
+import CategoryManager from './components/Categories/CategoryManager';
 import StaffList from './components/Staff/StaffList';
 import StaffForm from './components/Staff/StaffForm';
 import EmployeeList from './components/Employees/EmployeeList';
@@ -38,7 +26,6 @@ import StockEntry from './components/WMS/StockEntry';
 import StockList from './components/WMS/StockList';
 import InventoryEntry from './components/WMS/InventoryEntry';
 import InventoryList from './components/WMS/InventoryList';
-import WhatsAppApprovals from './components/WMS/WhatsAppApprovals';
 import WarehouseList from './components/Warehouses/WarehouseList';
 import WarehouseForm from './components/Warehouses/WarehouseForm';
 import PickingCarts from './components/Warehouses/PickingCarts';
@@ -61,6 +48,7 @@ import FinanceAccounts from './components/Finance/FinanceAccounts';
 import CustomerList from './components/Customers/CustomerList';
 import CustomerForm from './components/Customers/CustomerForm';
 import CustomerOrders from './components/Orders/CustomerOrders';
+import CustomerReturns from './components/Orders/CustomerReturns';
 import PackagingBoxes from './components/Orders/PackagingBoxes';
 import OrderPacking from './components/Orders/OrderPacking';
 import CourierDelivery from './components/Orders/CourierDelivery';
@@ -126,6 +114,33 @@ function App() {
   // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
   useEffect(() => {
+    const verifySession = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const res = await apiFetch('http://localhost:3000/api/auth/verify');
+          const data = await res.json();
+          if (data.success) {
+            // Token veritabanında aktif ve geçerli, otomatik giriş yap.
+            setCurrentUser(data.user);
+            setIsLoggedIn(true);
+            fetchStats();
+          } else {
+            // Token çalınmış veya başka bir bilgisayardan giriş yapılmış
+            localStorage.removeItem('token');
+            setIsLoggedIn(false);
+            alert("Oturumunuz başka bir cihazdan açıldığı için sonlandırıldı.");
+          }
+        } catch (e) {
+          console.error("Session verify failed", e);
+          localStorage.removeItem('token');
+          setIsLoggedIn(false);
+        }
+      }
+    };
+    verifySession();
+  }, []);
+  useEffect(() => {
     if (isLoggedIn) {
       fetchPendingRequests();
       const interval = setInterval(fetchPendingRequests, 30000); // Her 30 saniyede bir kontrol et
@@ -172,7 +187,7 @@ function App() {
         setErrorMsg(data.message || 'Giriş başarısız.');
       }
     } catch (err) {
-      setErrorMsg('Sunucuya bağlanılamadı.');
+      setErrorMsg(`Sunucuya bağlanılamadı. Hata: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -305,6 +320,7 @@ function App() {
           {currentView === 'urun-ekle' && <ProductForm currentUser={currentUser} product={null} onClose={() => setCurrentView('urun-listesi')} />}
           {currentView === 'fason-urunler' && <OutsourcedProducts currentUser={currentUser} />}
           {currentView === 'ticari-urunler' && <PurchasedProducts currentUser={currentUser} />}
+          {currentView === 'kategoriler' && <CategoryManager />}
 
           {currentView === 'stok-giris' && <StockEntry currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'stok-listesi' && <StockList currentUser={currentUser} initialEntryVisible={false} />}
@@ -319,7 +335,6 @@ function App() {
           {currentView === 'depo-kabulleri' && <WarehouseAcceptance currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'mal-kabul' && <GoodsReceipt currentUser={currentUser} onNavigate={setCurrentView} />}
           {currentView === 'depo-krokisi' && <WarehouseLayout currentUser={currentUser} />}
-          {currentView === 'whatsapp-onaylari' && <WhatsAppApprovals currentUser={currentUser} />}
 
           {currentView === 'personeller' && <StaffList currentUser={currentUser} onAdd={() => { setSelectedStaff(null); setCurrentView('personel-ekle'); }} onEdit={(user) => { setSelectedStaff(user); setCurrentView('personel-ekle'); }} />}
           {currentView === 'personel-ekle' && <StaffForm currentUser={currentUser} staff={selectedStaff} onClose={() => setCurrentView('personeller')} />}
@@ -340,8 +355,9 @@ function App() {
           {(currentView === 'musteri-listesi' || currentView === 'b2b-b2c-cari') && <CustomerList currentUser={currentUser} onNavigate={setCurrentView} onEdit={setSelectedCustomer} />}
           {currentView === 'musteri-ekle' && <CustomerForm currentUser={currentUser} customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onNavigate={setCurrentView} />}
           {currentView === 'musteri-siparisleri' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="tumu" customerId={selectedCustomer?.Id} />}
-          {currentView === 'aktif-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="aktif" />}
-          {currentView === 'gecmis-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="gecmis" />}
+          {currentView === 'aktif-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="tumu" />}
+          {currentView === 'gecmis-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="tumu" />}
+          {currentView === 'iade-talepleri' && <CustomerReturns currentUser={currentUser} />}
           {currentView === 'kutu-tanim' && <PackagingBoxes />}
           {currentView === 'siparis-paketleme' && <OrderPacking />}
           {currentView === 'kurye-teslimat' && <CourierDelivery />}
@@ -418,3 +434,4 @@ function App() {
 }
 
 export default App;
+

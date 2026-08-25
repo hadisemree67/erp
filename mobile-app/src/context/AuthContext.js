@@ -1,4 +1,11 @@
 /**
+ * ============================================================================
+ * BİLEŞEN ADI: AuthContext
+ * GÖREV VE AKIŞ AÇIKLAMASI:
+ *   Global durum (state) yönetimini sağlayan Context Provider modülü.
+ * ============================================================================
+ */
+/**
  * @file AuthContext.js
  * @description Kullanıcı oturum yönetimini (Authentication) sağlayan React Context dosyası.
  * Uygulama genelinde kullanıcı durumunu, giriş (login) ve çıkış (logout) işlemlerini barındırır.
@@ -107,3 +114,5 @@ export const AuthProvider = ({ children }) => {
         </AuthContext.Provider>
     );
 };
+
+
