@@ -47,7 +47,7 @@ const HighlightsEditor = ({ formData, setFormData }) => {
                 setFormData({...formData, Highlights: newH});
               }} style={{ position: 'absolute', top: '-6px', right: '-6px', width: '20px', height: '20px', background: '#ef4444', color: 'white', borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>X</button>
               
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #cbd5e1', color: '#3d9e82' }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(getHighlightIconSvg(hl.iconId)) }} />
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #cbd5e1', color: '#3d9e82' }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(getHighlightIconSvg(hl.iconId), { USE_PROFILES: { svg: true } }) }} />
               <textarea value={hl.label} onChange={(e) => {
                 const newH = [...formData.Highlights];
                 newH[idx].label = e.target.value;
@@ -64,7 +64,7 @@ const HighlightsEditor = ({ formData, setFormData }) => {
               <button type="button" key={icon.id} onClick={() => {
                 setFormData({...formData, Highlights: [...(formData.Highlights || []), { iconId: icon.id, label: 'Yeni\nÖzellik' }]});
               }} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '20px', cursor: 'pointer', fontSize: '12px', color: '#334155' }}>
-                <div style={{ color: '#3d9e82' }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(icon.svg) }} />
+                <div style={{ color: '#3d9e82' }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(icon.svg, { USE_PROFILES: { svg: true } }) }} />
                 {icon.name}
               </button>
             ))}
