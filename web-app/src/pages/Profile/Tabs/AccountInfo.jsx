@@ -65,7 +65,7 @@ const AccountInfo = () => {
       const token = localStorage.getItem('customerToken');
       if (!token) return;
       try {
-        const response = await fetch('http://localhost:3000/api/customers/auth/profile', {
+        const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/profile', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
@@ -126,7 +126,7 @@ const AccountInfo = () => {
     const finalUser = { ...user, firstName: fName, lastName: lName };
 
     try {
-      const response = await fetch('http://localhost:3000/api/customers/auth/profile', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

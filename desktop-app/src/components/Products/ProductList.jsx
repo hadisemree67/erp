@@ -45,7 +45,7 @@ const ProductList = ({ onNavigate, currentUser }) => {
   const fetchProducts = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     try {
-      const response = await apiFetch('http://localhost:3000/api/products');
+      const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/products');
       const data = await response.json();
       if (response.ok) {
         // Hammaddeleri state'e alıyoruz ama listede gizleyeceğiz
@@ -74,7 +74,7 @@ const ProductList = ({ onNavigate, currentUser }) => {
     if (!window.confirm('Bu ürünü silmek istediğinize emin misiniz?')) return;
     
     try {
-      const response = await apiFetch(`http://localhost:3000/api/products/${id}`, {
+      const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/products/${id}`, {
         method: 'DELETE',
         headers: {
             'X-User-Id': currentUser?.id
@@ -144,7 +144,7 @@ const ProductList = ({ onNavigate, currentUser }) => {
     if (!window.confirm(`${selectedIds.length} ürünü silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
     
     try {
-      const response = await apiFetch('http://localhost:3000/api/products/bulk', {
+      const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/products/bulk', {
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json',
@@ -461,7 +461,7 @@ const ProductList = ({ onNavigate, currentUser }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         {firstImage ? (
                             <>
-                              <img src={firstImage.startsWith('http') ? firstImage : `http://localhost:3000${firstImage}`} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
+                              <img src={firstImage.startsWith('http') ? firstImage : `${import.meta.env.VITE_API_URL}${firstImage}`} alt="" style={{ width: '40px', height: '40px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }} />
                               <div style={{ width: '40px', height: '40px', borderRadius: '6px', backgroundColor: '#f1f5f9', display: 'none', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '10px', textAlign: 'center', border: '1px solid #e2e8f0' }}>Görsel Yok</div>
                             </>
                         ) : (

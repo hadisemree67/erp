@@ -40,7 +40,7 @@ const WarehouseTransfer = ({ currentUser }) => {
 
     const fetchStocks = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/wms/stock-list');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/stock-list');
             const data = await res.json();
             if (data.success) {
                 setStocks(data.data.filter(s => s.quantity > 0) || []);
@@ -52,7 +52,7 @@ const WarehouseTransfer = ({ currentUser }) => {
 
     const fetchWarehouses = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/warehouses');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses');
             const data = await res.json();
             if (Array.isArray(data)) {
                 setWarehouses(data);
@@ -83,7 +83,7 @@ const WarehouseTransfer = ({ currentUser }) => {
         setMessage({ text: '', type: '' });
 
         try {
-            const res = await apiFetch('http://localhost:3000/api/wms/transfer', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/transfer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

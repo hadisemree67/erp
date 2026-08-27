@@ -176,7 +176,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
 
     const fetchProducts = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/products');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/products');
             const data = await res.json();
             if (Array.isArray(data)) {
                 // Sadece Hammadde olanları filtrele
@@ -189,7 +189,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
 
     const fetchBrands = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/brands');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/brands');
             const data = await res.json();
             if (Array.isArray(data)) setBrandList(data);
         } catch (err) { console.warn("Sessiz Hata Yakalandı:", err.message); }
@@ -199,7 +199,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
         if (!newBrandName.trim()) return;
         setAddingBrand(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/brands', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/brands', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id },
                 body: JSON.stringify({ name: newBrandName.trim() })
@@ -222,8 +222,8 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 await fetchProducts();
                 await fetchBrands();
                 const [whRes, supRes] = await Promise.all([
-                    apiFetch('http://localhost:3000/api/warehouses'),
-                    apiFetch('http://localhost:3000/api/suppliers')
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses'),
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/suppliers')
                 ]);
                 const whData = await whRes.json();
                 const supData = await supRes.json();
@@ -317,7 +317,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 if (alloc.shelfCode) {
                     try {
                         queryParams.set('shelfCode', alloc.shelfCode);
-                        const res = await apiFetch(`http://localhost:3000/api/wms/shelf-capacity?${queryParams.toString()}`);
+                        const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/shelf-capacity?${queryParams.toString()}`);
                         const data = await res.json();
                         if (data.success && data.hasVolumeInfo) {
                             if (JSON.stringify(newCaps[alloc.shelfCode]) !== JSON.stringify(data)) {
@@ -346,7 +346,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
             const pId = existingProduct ? existingProduct.Id : (editItem ? editItem.product_id : 'new');
             const qs = `warehouseId=${formData.warehouseId}&productId=${pId}&w=${formData.width || 0}&h=${formData.height || 0}&d=${formData.depth || 0}&stackable=${formData.is_stackable ? 1 : 0}&max_stack=${formData.max_stack_limit || 1}&pCap=${formData.package_capacity || 1}`;
 
-            apiFetch(`http://localhost:3000/api/wms/warehouse-capacities?${qs}`)
+            apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouse-capacities?${qs}`)
                 .then(r => r.json())
                 .then(d => {
                     if (d.success) setAllShelvesCapacity(d.data);
@@ -627,7 +627,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
 
             if (editItem) {
                 // Update product (Name, Brand, etc.)
-                await apiFetch(`http://localhost:3000/api/products/${editItem.product_id}`, {
+                await apiFetch(`${import.meta.env.VITE_API_URL}/api/products/${editItem.product_id}`, {
                     method: 'PUT',
                     headers: { 'x-user-id': currentUser?.id },
                     body: createProductFormData(editItem.product)
@@ -635,7 +635,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
 
                 // Update stock balance
                 if (batch) {
-                    await apiFetch(`http://localhost:3000/api/wms/stock/${batch.balance_id}`, {
+                    await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/stock/${batch.balance_id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id },
                         body: JSON.stringify({
@@ -664,14 +664,14 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 targetProductId = existingProduct.Id;
 
                 // Ensure the brand or barcode updates on existing material
-                await apiFetch(`http://localhost:3000/api/products/${existingProduct.Id}`, {
+                await apiFetch(`${import.meta.env.VITE_API_URL}/api/products/${existingProduct.Id}`, {
                     method: 'PUT',
                     headers: { 'x-user-id': currentUser?.id },
                     body: createProductFormData(existingProduct)
                 });
             } else {
                 // Create material
-                const prodRes = await apiFetch('http://localhost:3000/api/products', {
+                const prodRes = await apiFetch(import.meta.env.VITE_API_URL + '/api/products', {
                     method: 'POST',
                     headers: { 'x-user-id': currentUser?.id },
                     body: createProductFormData()
@@ -685,7 +685,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                 }
             }
 
-            const res = await apiFetch('http://localhost:3000/api/wms/stock-entry', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/stock-entry', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id },
                 body: JSON.stringify({
@@ -1307,7 +1307,7 @@ const InventoryEntry = ({ currentUser, initialMaterialName = '', editItem = null
                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', marginTop: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                             <span style={{ fontSize: '14px' }}>📄</span>
-                                                            <a href={`http://localhost:3000${sup.contract_file}`} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none', fontWeight: '500', fontSize: '13px' }}>
+                                                            <a href={`${import.meta.env.VITE_API_URL}${sup.contract_file}`} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none', fontWeight: '500', fontSize: '13px' }}>
                                                                 Mevcut Sözleşmeyi Görüntüle
                                                             </a>
                                                         </div>

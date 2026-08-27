@@ -25,7 +25,7 @@ const WarehouseList = ({ onNavigate, onEdit }) => {
     const fetchWarehouses = async () => {
         setLoading(true);
         try {
-            const response = await apiFetch('http://localhost:3000/api/warehouses');
+            const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses');
             const data = await response.json();
             if (response.ok) {
                 setWarehouses(data);
@@ -51,7 +51,7 @@ const WarehouseList = ({ onNavigate, onEdit }) => {
         }
 
         try {
-            const response = await apiFetch(`http://localhost:3000/api/warehouses/${id}`, {
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/warehouses/${id}`, {
                 method: 'DELETE'
             });
             const data = await response.json();

@@ -58,7 +58,7 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
     
     useEffect(() => {
         if (formData.product_id) {
-            apiFetch(`http://localhost:3000/api/production/max-quantity/${formData.product_id}`)
+            apiFetch(`${import.meta.env.VITE_API_URL}/api/production/max-quantity/${formData.product_id}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.success && data.maxQuantity !== undefined) {
@@ -84,8 +84,8 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
         const fetchInitialData = async () => {
             try {
                 const [pRes, uRes] = await Promise.all([
-                    apiFetch('http://localhost:3000/api/products'),
-                    apiFetch('http://localhost:3000/api/production/users')
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/products'),
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/production/users')
                 ]);
                 
                 const pData = await pRes.json();
@@ -129,7 +129,7 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
         setLoading(true);
         setMatchError('');
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/orders/match', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/orders/match', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ product_id: formData.product_id, planned_quantity: formData.planned_quantity })
@@ -160,7 +160,7 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
         setMissingMaterials([]);
 
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/orders', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
@@ -189,7 +189,7 @@ const ProductionOrder = ({ currentUser, onNavigate }) => {
         if (purchasedMaterials[material.name]) return;
 
         try {
-            const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

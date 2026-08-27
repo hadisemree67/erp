@@ -288,7 +288,7 @@ export default function PickingScreen({ route, navigation }) {
             let path = item.ImagePath.trim();
             if (!path.startsWith('http')) {
                 // Remove trailing /api from baseURL to get the root host
-                const host = api.defaults.baseURL ? api.defaults.baseURL.replace('/api', '') : 'http://localhost:3000';
+                const host = api.defaults.baseURL ? api.defaults.baseURL.replace('/api', '') : process.env.EXPO_PUBLIC_API_URL;
                 path = `${host}${path.startsWith('/') ? '' : '/'}${path}`;
             }
             imgUri = encodeURI(path);

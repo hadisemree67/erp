@@ -72,7 +72,7 @@ const BulkEditEmployeeModal = ({ selectedIds, onClose, onSuccess, currentUser })
         setError(null);
 
         try {
-            const response = await apiFetch('http://localhost:3000/api/employees/bulk-edit', {
+            const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/employees/bulk-edit', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

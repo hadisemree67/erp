@@ -72,7 +72,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     setErrorMsg('');
 
     try {
-      const response = await fetch('http://localhost:3000/api/customers/auth/login', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contact: loginContact, password: loginPassword })
@@ -105,7 +105,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     if (otpCode.length !== 6) return setErrorMsg('Kodu eksiksiz giriniz.');
 
     try {
-      const response = await fetch('http://localhost:3000/api/customers/auth/login-verify', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/login-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contact: loginContact, otpCode })
@@ -132,7 +132,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/customers/auth/register', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -160,7 +160,7 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
     if (otpCode.length !== 6) return setErrorMsg('Kodu eksiksiz giriniz.');
 
     try {
-      const response = await fetch('http://localhost:3000/api/customers/auth/verify', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contact: registerData.contact, otpCode })

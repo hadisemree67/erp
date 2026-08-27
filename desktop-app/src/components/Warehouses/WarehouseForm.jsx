@@ -130,7 +130,7 @@ const WarehouseForm = ({ warehouse, onNavigate }) => {
 
         setSubmitting(true);
         try {
-            const url = isEditing ? `http://localhost:3000/api/warehouses/${warehouse.id}` : 'http://localhost:3000/api/warehouses';
+            const url = isEditing ? `${import.meta.env.VITE_API_URL}/api/warehouses/${warehouse.id}` : import.meta.env.VITE_API_URL + '/api/warehouses';
             const method = isEditing ? 'PUT' : 'POST';
 
             const response = await apiFetch(url, {

@@ -23,7 +23,7 @@ const Coupons = () => {
           return;
         }
 
-        const res = await fetch('http://localhost:3000/api/coupons/my-coupons', {
+        const res = await fetch(import.meta.env.VITE_API_URL + '/api/coupons/my-coupons', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

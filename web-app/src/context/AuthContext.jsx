@@ -24,7 +24,7 @@ export const AuthProvider = ({ children }) => {
 
             if (token && savedUser) {
                 try {
-                    const response = await fetch('http://localhost:3000/api/customers/auth/verify', {
+                    const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/verify', {
                         method: 'GET',
                         headers: {
                             'Authorization': `Bearer ${token}`

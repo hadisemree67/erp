@@ -40,7 +40,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
     // 3. Backend API İstekleri (Veri Çekme)
     const fetchPendingCount = async () => {
       try {
-        const res = await apiFetch('http://localhost:3000/api/production/requests');
+        const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/requests');
         const data = await res.json();
         if (data.success) {
           setPendingCount(data.data.filter(r => r.status === 'Bekleyen').length);

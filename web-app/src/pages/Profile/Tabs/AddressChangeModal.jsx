@@ -25,7 +25,7 @@ const AddressChangeModal = ({ isOpen, onClose, order, onAddressUpdated }) => {
         setLoading(true);
         try {
             const token = localStorage.getItem('customerToken');
-            const res = await fetch('http://localhost:3000/api/customers/auth/profile', {
+            const res = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/profile', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
@@ -58,7 +58,7 @@ ${a.isDefault ? '(Varsayılan Adres)' : ''}`.trim();
         setUpdating(true);
         try {
             const token = localStorage.getItem('customerToken');
-            const res = await fetch(`http://localhost:3000/api/customers/auth/my-orders/${order.Id}/address`, {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/api/customers/auth/my-orders/${order.Id}/address`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

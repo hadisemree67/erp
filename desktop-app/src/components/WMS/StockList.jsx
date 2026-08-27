@@ -59,7 +59,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   const handleCreatePurchaseRequest = async (material, missingQty) => {
       const orderQty = Math.ceil(missingQty * 1.10); // 10% fazlası
       try {
-          const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+          const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -83,7 +83,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   const fetchStockList = async () => {
     setLoading(true);
     try {
-      const response = await apiFetch('http://localhost:3000/api/wms/stock-list');
+      const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/stock-list');
       const data = await response.json();
       if (data.success) {
         // Hammaddeleri Stok listesinden gizle
@@ -106,7 +106,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
 
   useEffect(() => {
     fetchStockList();
-    apiFetch('http://localhost:3000/api/warehouses')
+    apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses')
       .then(res => res.json())
       .then(whData => {
           if (Array.isArray(whData)) setWarehouses(whData.filter(w => w.warehouse_type === 'STOK'));
@@ -115,7 +115,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
 
   useEffect(() => {
       if (editingStock && editingStock.warehouse_id && editingStock.product_id) {
-          apiFetch(`http://localhost:3000/api/wms/warehouse-capacities?warehouseId=${editingStock.warehouse_id}&productId=${editingStock.product_id}`)
+          apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouse-capacities?warehouseId=${editingStock.warehouse_id}&productId=${editingStock.product_id}`)
               .then(r => r.json())
               .then(d => {
                   if (d.success) setAllShelvesCapacity(d.data);
@@ -148,7 +148,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                 shelfCode = parts[1];
             }
 
-            const res = await apiFetch('http://localhost:3000/api/wms/deduct-fefo', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/deduct-fefo', {
                 method: 'POST',
                 headers: { 'x-user-id': currentUser?.id, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -182,7 +182,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   const handleDeleteStock = async (id) => {
       if (!window.confirm('Bu stok bakiye kaydını tamamen silmek istediğinize emin misiniz?')) return;
       try {
-          const response = await apiFetch(`http://localhost:3000/api/wms/stock/${id}`, { 
+          const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/stock/${id}`, { 
               method: 'DELETE',
               headers: { 'x-user-id': currentUser?.id }
           });
@@ -200,7 +200,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
   const submitEditStock = async (e) => {
       e.preventDefault();
       try {
-          const response = await apiFetch(`http://localhost:3000/api/wms/stock/${editingStock.balance_id}`, {
+          const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/stock/${editingStock.balance_id}`, {
               method: 'PUT',
               headers: { 
                   'Content-Type': 'application/json',
@@ -752,7 +752,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                                   setProductionRequestProduct(selectedGroup);
                                   setCapacityData(null);
                                   setCapacityLoading(true);
-                                  apiFetch(`http://localhost:3000/api/production/capacity-analysis/${selectedGroup.product_id}`)
+                                  apiFetch(`${import.meta.env.VITE_API_URL}/api/production/capacity-analysis/${selectedGroup.product_id}`)
                                       .then(r => r.json())
                                       .then(d => { 
                                           if (d.success) {
@@ -978,7 +978,7 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                             }
 
                             try {
-                                const res = await apiFetch('http://localhost:3000/api/production/requests', {
+                                const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/requests', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({

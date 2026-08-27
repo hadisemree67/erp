@@ -42,7 +42,7 @@ const ReturnModal = ({ isOpen, onClose, order, onSuccess }) => {
 
     const token = localStorage.getItem('customerToken');
     try {
-      const response = await fetch('http://localhost:3000/api/customers/auth/returns', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/returns', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

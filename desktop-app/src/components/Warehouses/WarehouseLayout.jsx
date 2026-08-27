@@ -67,7 +67,7 @@ const WarehouseLayout = ({ currentUser }) => {
         // 3. Backend API İstekleri (Veri Çekme)
         const fetchProds = async () => {
             try {
-                const res = await apiFetch('http://localhost:3000/api/products');
+                const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/products');
                 const data = await res.json();
                 if (Array.isArray(data)) setProducts(data);
             } catch (err) {
@@ -88,7 +88,7 @@ const WarehouseLayout = ({ currentUser }) => {
             }
             const fetchLayout = async () => {
                 try {
-                    const res = await apiFetch(`http://localhost:3000/api/wms/warehouses/${selectedWarehouse}/layout`);
+                    const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouses/${selectedWarehouse}/layout`);
                     const data = await res.json();
                     if (data.success && data.data) {
                         if (data.data.floors) {
@@ -129,7 +129,7 @@ const WarehouseLayout = ({ currentUser }) => {
         
         setSavingLayout(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/wms/warehouses/${selectedWarehouse}/layout`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouses/${selectedWarehouse}/layout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ floors })
@@ -149,7 +149,7 @@ const WarehouseLayout = ({ currentUser }) => {
 
     const fetchWarehouses = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/warehouses');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses');
             if (res.ok) {
                 const data = await res.json();
                 setWarehouses(data);
@@ -224,7 +224,7 @@ const WarehouseLayout = ({ currentUser }) => {
         if (!selectedWarehouse) return;
         setLoadingShelf(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/wms/warehouses/${selectedWarehouse}/shelves/${shelfCode}/stock`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouses/${selectedWarehouse}/shelves/${shelfCode}/stock`);
             const data = await res.json();
             if (data.success) {
                 setShelfDetails(data);
@@ -241,7 +241,7 @@ const WarehouseLayout = ({ currentUser }) => {
         if (!modalData || !modalData.shelfCode) return;
         if (!window.confirm("Bu raftaki tüm ürünler silinecek (çıkış yapılacak). Emin misiniz?")) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/wms/warehouses/${selectedWarehouse}/shelves/${modalData.shelfCode}/clear`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouses/${selectedWarehouse}/shelves/${modalData.shelfCode}/clear`, {
                 method: 'POST',
                 body: JSON.stringify({ userId: currentUser?.id })
             });
@@ -290,7 +290,7 @@ const WarehouseLayout = ({ currentUser }) => {
 
         setSubmittingStock(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/wms/stock-entry', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/stock-entry', {
                 method: 'POST',
                 body: JSON.stringify({
                     productId: product.Id,
@@ -351,7 +351,7 @@ const WarehouseLayout = ({ currentUser }) => {
         }
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/wms/warehouses/${selectedWarehouse}/products/${product.Id}/shelves`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouses/${selectedWarehouse}/products/${product.Id}/shelves`);
             const data = await res.json();
             if (data.success) {
                 setHighlightedShelves(data.data);

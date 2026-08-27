@@ -82,7 +82,7 @@ const ProductCarousel = ({ title = "Ürünler", products = [] }) => {
             if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
               mainImage = imgPath;
             } else {
-              mainImage = `http://localhost:3000${imgPath}`;
+              mainImage = `${import.meta.env.VITE_API_URL}${imgPath}`;
             }
           }
             

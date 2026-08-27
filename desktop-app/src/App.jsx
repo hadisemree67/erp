@@ -86,7 +86,7 @@ function App() {
 
   const fetchStats = async () => {
     try {
-      const res = await apiFetch('http://localhost:3000/api/dashboard-stats');
+      const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/dashboard-stats');
       const data = await res.json();
       if (data.success) {
         setStats(data);
@@ -101,7 +101,7 @@ function App() {
     const canSee = currentUser?.role === 'admin' || currentUser?.role === 'Üretim' || (currentUser?.permissions || []).includes('view_production');
     if (!canSee) return;
     try {
-      const res = await apiFetch('http://localhost:3000/api/production/requests');
+      const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/requests');
       const data = await res.json();
       if (data.success) {
         setPendingRequests(data.data.filter(r => r.status === 'Bekleyen'));
@@ -118,7 +118,7 @@ function App() {
       const token = localStorage.getItem('token');
       if (token) {
         try {
-          const res = await apiFetch('http://localhost:3000/api/auth/verify');
+          const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/auth/verify');
           const data = await res.json();
           if (data.success) {
             // Token veritabanında aktif ve geçerli, otomatik giriş yap.
@@ -169,7 +169,7 @@ function App() {
     setErrorMsg('');
 
     try {
-      const response = await apiFetch('http://localhost:3000/api/login', {
+      const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -218,7 +218,7 @@ function App() {
           onLogout={async () => { 
             try {
               // Sunucu tarafında token'ı kara listeye al (Blacklist)
-              await apiFetch('http://localhost:3000/api/logout', { method: 'POST' });
+              await apiFetch(import.meta.env.VITE_API_URL + '/api/logout', { method: 'POST' });
             } catch (e) {
               console.error("Logout API hatası:", e);
             }

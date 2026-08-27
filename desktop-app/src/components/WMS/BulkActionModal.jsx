@@ -42,7 +42,7 @@ const BulkActionModal = ({ isOpen, onClose, selectedIds, currentUser, onActionSu
             // 3. Backend API İstekleri (Veri Çekme)
             const fetchWarehouses = async () => {
                 try {
-                    const res = await apiFetch('http://localhost:3000/api/warehouses');
+                    const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses');
                     const data = await res.json();
                     if (Array.isArray(data)) setWarehouses(data);
                 } catch (err) {
@@ -76,7 +76,7 @@ const BulkActionModal = ({ isOpen, onClose, selectedIds, currentUser, onActionSu
         setError(null);
 
         try {
-            const res = await apiFetch('http://localhost:3000/api/wms/bulk-action', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/bulk-action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id },
                 body: JSON.stringify({

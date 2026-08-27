@@ -48,7 +48,7 @@ const PackagingBoxes = () => {
 
     const fetchSuppliers = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/suppliers');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/suppliers');
             const data = await res.json();
             if (data.success) {
                 setSuppliers(data.data);
@@ -60,7 +60,7 @@ const PackagingBoxes = () => {
 
     const fetchBoxes = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/boxes');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/boxes');
             const data = await res.json();
             if (data.success) {
                 setBoxes(data.data);
@@ -79,8 +79,8 @@ const PackagingBoxes = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         const url = editingBox 
-            ? `http://localhost:3000/api/boxes/${editingBox.Id}`
-            : 'http://localhost:3000/api/boxes';
+            ? `${import.meta.env.VITE_API_URL}/api/boxes/${editingBox.Id}`
+            : import.meta.env.VITE_API_URL + '/api/boxes';
         
         try {
             const fd = new FormData();
@@ -150,7 +150,7 @@ const PackagingBoxes = () => {
         }
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/boxes/${stockFormData.BoxId}/add-stock`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/boxes/${stockFormData.BoxId}/add-stock`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(stockFormData)
@@ -173,7 +173,7 @@ const PackagingBoxes = () => {
     const handleDelete = async (id) => {
         if (!window.confirm('Bu kutuyu silmek istediğinize emin misiniz?')) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/boxes/${id}`, { method: 'DELETE' });
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/boxes/${id}`, { method: 'DELETE' });
             if (res.ok) fetchBoxes();
         } catch (error) {
             console.error('Error deleting box:', error);
@@ -212,7 +212,7 @@ const PackagingBoxes = () => {
         if (!newBarcode) return alert("Barkod boş olamaz!");
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/boxes/${selectedBoxForBarcode.Id}/barcodes`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/boxes/${selectedBoxForBarcode.Id}/barcodes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ barcode: newBarcode })
@@ -239,7 +239,7 @@ const PackagingBoxes = () => {
         if (!window.confirm("Bu barkodu silmek istediğinize emin misiniz?")) return;
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/boxes/${selectedBoxForBarcode.Id}/barcodes/${barcodeId}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/boxes/${selectedBoxForBarcode.Id}/barcodes/${barcodeId}`, {
                 method: 'DELETE'
             });
             const data = await res.json();
@@ -488,7 +488,7 @@ const PackagingBoxes = () => {
                                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', marginTop: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                             <span style={{ fontSize: '14px' }}>📄</span>
-                                                            <a href={`http://localhost:3000${sup.contract_file}`} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none', fontWeight: '500', fontSize: '13px' }}>
+                                                            <a href={`${import.meta.env.VITE_API_URL}${sup.contract_file}`} target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none', fontWeight: '500', fontSize: '13px' }}>
                                                                 Mevcut Sözleşmeyi Görüntüle
                                                             </a>
                                                         </div>

@@ -59,7 +59,7 @@ const MaterialEditForm = ({ product, onClose, currentUser }) => {
         }
 
         try {
-            const res = await apiFetch('http://localhost:3000/api/products/' + product.Id, {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/products/' + product.Id, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id },
                 body: JSON.stringify({

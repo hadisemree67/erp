@@ -63,7 +63,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   const handleCreatePurchaseRequest = async (material, missingQty) => {
       const orderQty = Math.ceil(missingQty * 1.10); // 10% fazlası
       try {
-          const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+          const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -88,8 +88,8 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
     setLoading(true);
     try {
       const [prodRes, stockRes] = await Promise.all([
-          apiFetch('http://localhost:3000/api/products'),
-          apiFetch('http://localhost:3000/api/wms/stock-list')
+          apiFetch(import.meta.env.VITE_API_URL + '/api/products'),
+          apiFetch(import.meta.env.VITE_API_URL + '/api/wms/stock-list')
       ]);
       const prodData = await prodRes.json();
       const stockData = await stockRes.json();
@@ -133,7 +133,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
 
   useEffect(() => {
     fetchStockList();
-    apiFetch('http://localhost:3000/api/warehouses')
+    apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses')
       .then(res => res.json())
       .then(whData => {
           if (Array.isArray(whData)) setWarehouses(whData.filter(w => w.warehouse_type === 'STOK'));
@@ -142,7 +142,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
 
   useEffect(() => {
       if (editingStock && editingStock.warehouse_id && editingStock.product_id) {
-          apiFetch(`http://localhost:3000/api/wms/warehouse-capacities?warehouseId=${editingStock.warehouse_id}&productId=${editingStock.product_id}`)
+          apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouse-capacities?warehouseId=${editingStock.warehouse_id}&productId=${editingStock.product_id}`)
               .then(r => r.json())
               .then(d => {
                   if (d.success) setAllShelvesCapacity(d.data);
@@ -167,7 +167,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
 
         setFastDeductLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/wms/deduct-fefo', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/deduct-fefo', {
                 method: 'POST',
                 headers: { 'x-user-id': currentUser?.id, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ barcode: fastDeductBarcode, quantity: fastDeductQty, description: fastDeductDescription })
@@ -194,7 +194,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   const handleDeleteStock = async (id) => {
       if (!window.confirm('Bu stok bakiye kaydını tamamen silmek istediğinize emin misiniz?')) return;
       try {
-          const response = await apiFetch(`http://localhost:3000/api/wms/stock/${id}`, { 
+          const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/stock/${id}`, { 
               method: 'DELETE',
               headers: { 'x-user-id': currentUser?.id }
           });
@@ -212,7 +212,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
   const submitEditStock = async (e) => {
       e.preventDefault();
       try {
-          const response = await apiFetch(`http://localhost:3000/api/wms/stock/${editingStock.balance_id}`, {
+          const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/stock/${editingStock.balance_id}`, {
               method: 'PUT',
               headers: { 
                   'Content-Type': 'application/json',
@@ -302,7 +302,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
     const handleDeleteProduct = async (product) => {
         if (!window.confirm(`"${product.product_name}" adlı malzemeyi tamamen silmek istediğinize emin misiniz? (Tüm stok hareketleri de silinir)`)) return;
         try {
-            const response = await apiFetch(`http://localhost:3000/api/products/${product.product_id}`, { 
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/products/${product.product_id}`, { 
                 method: 'DELETE',
                 headers: { 'x-user-id': currentUser?.id }
             });
@@ -742,7 +742,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                                   setProductionRequestProduct(selectedGroup);
                                   setCapacityData(null);
                                   setCapacityLoading(true);
-                                  apiFetch(`http://localhost:3000/api/production/capacity-analysis/${selectedGroup.product_id}`)
+                                  apiFetch(`${import.meta.env.VITE_API_URL}/api/production/capacity-analysis/${selectedGroup.product_id}`)
                                       .then(r => r.json())
                                       .then(d => { 
                                           if (d.success) {
@@ -959,7 +959,7 @@ const InventoryList = ({ currentUser, initialEntryVisible = false }) => {
                             }
 
                             try {
-                                const res = await apiFetch('http://localhost:3000/api/production/requests', {
+                                const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/requests', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({

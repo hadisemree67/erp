@@ -22,9 +22,9 @@ const Home = () => {
     const fetchData = async () => {
       try {
         const [prodRes, bannerRes, treeRes] = await Promise.all([
-          fetch('http://localhost:3000/api/products/public'),
-          fetch('http://localhost:3000/api/web-categories/banners/all'),
-          fetch('http://localhost:3000/api/web-categories/tree'),
+          fetch(import.meta.env.VITE_API_URL + '/api/products/public'),
+          fetch(import.meta.env.VITE_API_URL + '/api/web-categories/banners/all'),
+          fetch(import.meta.env.VITE_API_URL + '/api/web-categories/tree'),
         ]);
 
         const prodData = await prodRes.json();

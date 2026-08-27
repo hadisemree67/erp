@@ -23,7 +23,7 @@ const ActivityLog = ({ currentUser }) => {
 
     const fetchActivities = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/activities');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/activities');
             const data = await res.json();
             setActivities(Array.isArray(data) ? data : []);
         } catch (err) {
@@ -43,7 +43,7 @@ const ActivityLog = ({ currentUser }) => {
         if (!window.confirm('Bu işlemi geri almak istediğinize emin misiniz?')) return;
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/activities/${logId}/undo`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/activities/${logId}/undo`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

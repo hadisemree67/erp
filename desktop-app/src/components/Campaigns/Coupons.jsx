@@ -47,7 +47,7 @@ const Coupons = ({ currentUser }) => {
     const fetchCoupons = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/coupons');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/coupons');
             const data = await res.json();
             if (data.success) {
                 setCoupons(data.coupons);
@@ -64,8 +64,8 @@ const Coupons = ({ currentUser }) => {
     const fetchProductsAndCategories = async () => {
         try {
             const [prodRes, custRes] = await Promise.all([
-                apiFetch('http://localhost:3000/api/products'),
-                apiFetch('http://localhost:3000/api/customers')
+                apiFetch(import.meta.env.VITE_API_URL + '/api/products'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/customers')
             ]);
             
             if (prodRes.ok) {
@@ -136,8 +136,8 @@ const Coupons = ({ currentUser }) => {
         try {
             const method = editingId ? 'PUT' : 'POST';
             const url = editingId 
-                ? `http://localhost:3000/api/coupons/${editingId}`
-                : 'http://localhost:3000/api/coupons';
+                ? `${import.meta.env.VITE_API_URL}/api/coupons/${editingId}`
+                : import.meta.env.VITE_API_URL + '/api/coupons';
 
             const res = await apiFetch(url, {
                 method,
@@ -161,7 +161,7 @@ const Coupons = ({ currentUser }) => {
     const handleDelete = async (id) => {
         if (!window.confirm('Bu kuponu silmek istediğinize emin misiniz?')) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/coupons/${id}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/coupons/${id}`, {
                 method: 'DELETE'
             });
             const data = await res.json();

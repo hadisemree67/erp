@@ -58,7 +58,7 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
         if (isEditing && employee?.id) {
             const fetchDocuments = async () => {
                 try {
-                    const res = await apiFetch(`http://localhost:3000/api/employees/${employee.id}/documents`);
+                    const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${employee.id}/documents`);
                     const data = await res.json();
                     if (data.success) {
                         setExistingDocuments(data.documents);
@@ -100,7 +100,7 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
         if (!window.confirm('Bu belgeyi kalıcı olarak silmek istediğinize emin misiniz?')) return;
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/employees/documents/${docId}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/documents/${docId}`, {
                 method: 'DELETE',
                 headers: { 'X-User-Id': currentUser?.id }
             });
@@ -121,7 +121,7 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
         setLoading(true);
         setError(null);
 
-        const url = isEditing ? `http://localhost:3000/api/employees/${employee.id}` : 'http://localhost:3000/api/employees';
+        const url = isEditing ? `${import.meta.env.VITE_API_URL}/api/employees/${employee.id}` : import.meta.env.VITE_API_URL + '/api/employees';
         const method = isEditing ? 'PUT' : 'POST';
 
         try {
@@ -307,7 +307,7 @@ const EmployeeForm = ({ employee, onClose, currentUser }) => {
                                         <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#0f172a', textDecoration: 'none', padding: '8px 12px', backgroundColor: 'white', borderRadius: '6px', border: '1px solid #cbd5e1', transition: 'all 0.2s' }} onMouseOver={e => Object.assign(e.currentTarget.style, { borderColor: '#94a3b8', backgroundColor: '#f1f5f9' })} onMouseOut={e => Object.assign(e.currentTarget.style, { borderColor: '#cbd5e1', backgroundColor: 'white' })}>
                                             📄 <span style={{ fontWeight: '500' }}>{doc.file_name}</span> 
                                             <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px' }}>
-                                                <a href={`http://localhost:3000${doc.file_path}`} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none', fontSize: '12px', fontWeight: '600' }}>Görüntüle</a>
+                                                <a href={`${import.meta.env.VITE_API_URL}${doc.file_path}`} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none', fontSize: '12px', fontWeight: '600' }}>Görüntüle</a>
                                                 <button type="button" onClick={() => handleDeleteExistingDocument(doc.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px', fontWeight: '600', padding: 0 }}>Sil</button>
                                             </div>
                                         </div>

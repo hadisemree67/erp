@@ -38,7 +38,7 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
         // 3. Backend API İstekleri (Veri Çekme)
         const fetchPermissions = async () => {
             try {
-                const res = await apiFetch('http://localhost:3000/api/users/permissions');
+                const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/users/permissions');
                 const data = await res.json();
                 if (Array.isArray(data)) setAllPermissions(data);
             } catch (err) {
@@ -47,7 +47,7 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
         };
         const fetchEmployees = async () => {
             try {
-                const res = await apiFetch('http://localhost:3000/api/employees');
+                const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/employees');
                 const data = await res.json();
                 if (Array.isArray(data)) setEmployees(data.filter(e => e.is_active !== 0 && e.work_status !== 'İşten Ayrıldı'));
             } catch (err) {
@@ -101,7 +101,7 @@ const StaffForm = ({ staff, onClose, currentUser }) => {
             return;
         }
 
-        const url = isEditing ? `http://localhost:3000/api/users/${staff.id}` : 'http://localhost:3000/api/users';
+        const url = isEditing ? `${import.meta.env.VITE_API_URL}/api/users/${staff.id}` : import.meta.env.VITE_API_URL + '/api/users';
         const method = isEditing ? 'PUT' : 'POST';
 
         const payload = {

@@ -98,7 +98,7 @@ const OrderDetailModal = ({ isOpen, onClose, order, onOpenReturn, onOrderUpdated
                     imagePath = item.ImagePath;
                   }
                 }
-                const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `http://localhost:3000${imagePath}`) : '';
+                const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `${import.meta.env.VITE_API_URL}${imagePath}`) : '';
 
                 return (
                   <div key={item.Id} className={styles.orderItem}>

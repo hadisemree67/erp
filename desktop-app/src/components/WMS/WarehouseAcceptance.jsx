@@ -39,7 +39,7 @@ const WarehouseAcceptance = ({ currentUser }) => {
     const fetchOrders = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/warehouse-acceptances');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/warehouse-acceptances');
             const data = await res.json();
             if (data.success) {
                 setOrders(data.data);
@@ -54,7 +54,7 @@ const WarehouseAcceptance = ({ currentUser }) => {
 
     const fetchWarehouses = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/warehouses');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses');
             const data = await res.json();
             if (Array.isArray(data)) {
                 setWarehouses(data.filter(w => w.warehouse_type === 'STOK'));
@@ -77,7 +77,7 @@ const WarehouseAcceptance = ({ currentUser }) => {
             const whId = alloc.warehouseId;
             if (whId && !warehouseCapacities[whId]) {
                 try {
-                    const res = await apiFetch(`http://localhost:3000/api/wms/warehouse-capacities?warehouseId=${whId}&productId=${entryOrder.product_id}`);
+                    const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouse-capacities?warehouseId=${whId}&productId=${entryOrder.product_id}`);
                     const data = await res.json();
                     if (data.success) {
                         setWarehouseCapacities(prev => ({ ...prev, [whId]: data.data }));
@@ -166,7 +166,7 @@ const WarehouseAcceptance = ({ currentUser }) => {
 
     const fetchOrdersSilently = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/warehouse-acceptances');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/warehouse-acceptances');
             const data = await res.json();
             if (data.success) {
                 setOrders(data.data);
@@ -220,7 +220,7 @@ const WarehouseAcceptance = ({ currentUser }) => {
         e.preventDefault();
         if (!defectOrder || !defectQty) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${defectOrder.id}/report-defect`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${defectOrder.id}/report-defect`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ received_quantity: defectQty, reason: defectReason })
@@ -240,7 +240,7 @@ const WarehouseAcceptance = ({ currentUser }) => {
 
     const handleAcceptDelivery = async (orderId) => {
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${orderId}/accept-delivery`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${orderId}/accept-delivery`, {
                 method: 'POST'
             });
             const data = await res.json();
@@ -282,7 +282,7 @@ const WarehouseAcceptance = ({ currentUser }) => {
     const handleStockEntry = async (e) => {
         e.preventDefault();
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${entryOrder.id}/warehouse-stock-entry`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${entryOrder.id}/warehouse-stock-entry`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -39,7 +39,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/requests');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/requests');
             const data = await res.json();
             if (data.success) {
                 setRequests(data.data);
@@ -54,7 +54,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
 
     const fetchProducts = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/products');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/products');
             const data = await res.json();
             if (Array.isArray(data)) {
                 setProducts(data);
@@ -71,7 +71,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
         }
         setCapacityLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/capacity-analysis/${productId}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/capacity-analysis/${productId}`);
             const data = await res.json();
             if (data.success) {
                 setCapacityData(data.data);
@@ -102,7 +102,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
 
     const fetchRequestsSilently = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/requests');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/requests');
             const data = await res.json();
             if (data.success) {
                 setRequests(data.data);
@@ -121,7 +121,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
     const handleCreatePurchaseRequest = async (material, missingQty) => {
         const orderQty = Math.ceil(missingQty * 1.10); // 10% fazlası
         try {
-            const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -158,7 +158,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
         }
         
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/requests', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/requests', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -190,7 +190,7 @@ const ProductionRequests = ({ currentUser, onNavigate }) => {
         }
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/requests/${id}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/requests/${id}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status })

@@ -23,7 +23,7 @@ const CustomerReturns = ({ currentUser }) => {
     const fetchReturns = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/orders/returns');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/orders/returns');
             const data = await res.json();
             if (data.success) {
                 setReturns(data.returns || []);
@@ -39,7 +39,7 @@ const CustomerReturns = ({ currentUser }) => {
         if (!window.confirm(`Talebi '${newStatus}' olarak güncellemek istediğinize emin misiniz?`)) return;
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/returns/${id}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/returns/${id}`, {
                 method: 'PUT',
                 body: JSON.stringify({ status: newStatus })
             });
@@ -222,7 +222,7 @@ const CustomerReturns = ({ currentUser }) => {
                                                                 parsedImagePath = it.image_path;
                                                             }
                                                         }
-                                                        const imgSrc = parsedImagePath ? (parsedImagePath.startsWith('http') ? parsedImagePath : `http://localhost:3000${parsedImagePath}`) : '';
+                                                        const imgSrc = parsedImagePath ? (parsedImagePath.startsWith('http') ? parsedImagePath : `${import.meta.env.VITE_API_URL}${parsedImagePath}`) : '';
 
                                                         return (
                                                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: '#475569', marginBottom: '8px' }}>

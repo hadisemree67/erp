@@ -21,7 +21,7 @@ const Settings = ({ currentUser }) => {
     const fetchSettings = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/settings');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/settings');
             const data = await res.json();
             if (data.success) {
                 setSettings(data.data);
@@ -41,7 +41,7 @@ const Settings = ({ currentUser }) => {
         setSaving(true);
         
         try {
-            const res = await apiFetch('http://localhost:3000/api/settings', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ updates: { [key]: newValue } })

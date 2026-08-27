@@ -49,8 +49,8 @@ const StockEntry = ({ currentUser, onNavigate, onSuccess }) => {
         const fetchData = async () => {
             try {
                 const [prodRes, whRes] = await Promise.all([
-                    apiFetch('http://localhost:3000/api/products'),
-                    apiFetch('http://localhost:3000/api/warehouses')
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/products'),
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses')
                 ]);
                 const prodData = await prodRes.json();
                 const whData = await whRes.json();
@@ -120,7 +120,7 @@ const StockEntry = ({ currentUser, onNavigate, onSuccess }) => {
             for (const alloc of formData.shelfAllocations) {
                 if (alloc.shelfCode) {
                     try {
-                        const res = await apiFetch(`http://localhost:3000/api/wms/shelf-capacity?warehouseId=${formData.warehouseId}&shelfCode=${alloc.shelfCode}&productId=${formData.productId}`);
+                        const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/shelf-capacity?warehouseId=${formData.warehouseId}&shelfCode=${alloc.shelfCode}&productId=${formData.productId}`);
                         const data = await res.json();
                         if (data.success && data.hasVolumeInfo) {
                             if (JSON.stringify(newCaps[alloc.shelfCode]) !== JSON.stringify(data)) {
@@ -145,7 +145,7 @@ const StockEntry = ({ currentUser, onNavigate, onSuccess }) => {
 
     useEffect(() => {
         if (formData.warehouseId && formData.productId) {
-            apiFetch(`http://localhost:3000/api/wms/warehouse-capacities?warehouseId=${formData.warehouseId}&productId=${formData.productId}`)
+            apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouse-capacities?warehouseId=${formData.warehouseId}&productId=${formData.productId}`)
                 .then(r => r.json())
                 .then(d => {
                     if (d.success) setAllShelvesCapacity(d.data);
@@ -324,7 +324,7 @@ const StockEntry = ({ currentUser, onNavigate, onSuccess }) => {
         setSuccess(false);
 
         try {
-            const res = await apiFetch('http://localhost:3000/api/wms/stock-entry', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/wms/stock-entry', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'x-user-id': currentUser?.id },
                 body: JSON.stringify({

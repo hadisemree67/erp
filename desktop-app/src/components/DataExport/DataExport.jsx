@@ -36,9 +36,9 @@ const DataExport = ({ currentUser }) => {
         const fetchFilters = async () => {
             try {
                 const [resWh, resCat, resBrand] = await Promise.all([
-                    apiFetch('http://localhost:3000/api/warehouses'),
-                    apiFetch('http://localhost:3000/api/categories'),
-                    apiFetch('http://localhost:3000/api/brands')
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses'),
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/categories'),
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/brands')
                 ]);
                 
                 const dataWh = await resWh.json();
@@ -92,7 +92,7 @@ const DataExport = ({ currentUser }) => {
                 ageGroup: filters.ageGroup
             }).toString();
 
-            const res = await apiFetch(`http://localhost:3000/api/data-export?${query}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/data-export?${query}`);
             const result = await res.json();
 
             if (result.success) {

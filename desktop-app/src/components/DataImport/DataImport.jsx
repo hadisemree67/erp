@@ -18,7 +18,7 @@ const MODULES = [
     {
         id: 'customers',
         name: 'Müşteriler / Cariler',
-        endpoint: 'http://localhost:3000/api/customers',
+        endpoint: import.meta.env.VITE_API_URL + '/api/customers',
         fields: [
             { key: 'CustomerName', label: 'Firma / Müşteri Adı', required: true },
             { key: 'Phone', label: 'Telefon', required: false },
@@ -29,7 +29,7 @@ const MODULES = [
     {
         id: 'products',
         name: 'Ürünler',
-        endpoint: 'http://localhost:3000/api/products',
+        endpoint: import.meta.env.VITE_API_URL + '/api/products',
         fields: [
             { key: 'ProductName', label: 'Ürün Adı', required: true },
             { key: 'Barcode', label: 'Barkod (Ürün Kodu)', required: true },

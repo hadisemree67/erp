@@ -71,7 +71,7 @@ const LeaveManagement = ({ currentUser }) => {
     const fetchEmployees = async (search = '') => {
         setLoading(true);
         try {
-            const url = search ? `http://localhost:3000/api/employees?search=${encodeURIComponent(search)}` : 'http://localhost:3000/api/employees';
+            const url = search ? `${import.meta.env.VITE_API_URL}/api/employees?search=${encodeURIComponent(search)}` : import.meta.env.VITE_API_URL + '/api/employees';
             const res = await apiFetch(url);
             const data = await res.json();
             setEmployees(Array.isArray(data) ? data.filter(e => e.is_active !== 0) : []);
@@ -92,8 +92,8 @@ const LeaveManagement = ({ currentUser }) => {
     const fetchLeaveData = async (employeeId) => {
         try {
             const [summaryRes, historyRes] = await Promise.all([
-                apiFetch(`http://localhost:3000/api/employees/${employeeId}/leave-summary`),
-                apiFetch(`http://localhost:3000/api/employees/${employeeId}/leaves`)
+                apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${employeeId}/leave-summary`),
+                apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${employeeId}/leaves`)
             ]);
             
             const summaryData = await summaryRes.json();
@@ -131,7 +131,7 @@ const LeaveManagement = ({ currentUser }) => {
         setSubmitting(true);
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/employees/${selectedEmployee.id}/leaves`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${selectedEmployee.id}/leaves`, {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',

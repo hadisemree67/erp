@@ -62,7 +62,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
 
     const fetchWarehouseUsers = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/warehouse-users');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/warehouse-users');
             const data = await res.json();
             if (data.success) {
                 setWarehouseUsers(data.data);
@@ -75,7 +75,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
     const handleViewOrder = async (id, silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${id}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${id}`);
             const data = await res.json();
             if (data.success) {
                 setOrder(data.order);
@@ -160,7 +160,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
             // Optimistic update
             setMaterials(prev => prev.map(m => m.id === activePickMaterial.id ? { ...m, is_picked: true, actual_quantity: qty } : m));
             
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${order.id}/pick`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${order.id}/pick`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ material_id: activePickMaterial.id, actual_quantity: qty })
@@ -183,7 +183,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
 
     const handleStartProduction = async () => {
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${order.id}/start`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${order.id}/start`, {
                 method: 'POST'
             });
             const data = await res.json();
@@ -200,7 +200,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
 
     const startStepRequest = async (stepId) => {
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${order.id}/steps/${stepId}/start`, { method: 'POST' });
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${order.id}/steps/${stepId}/start`, { method: 'POST' });
             const data = await res.json();
             if (data.success) {
                 setActiveVerifyStep(null);
@@ -278,7 +278,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
                     setVerifyBarcode('');
                     setVerifyError('');
                     try {
-                        const res = await apiFetch(`http://localhost:3000/api/production/orders/${order.id}/steps/${activeVerifyStep.id}/verify-material`, {
+                        const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${order.id}/steps/${activeVerifyStep.id}/verify-material`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ material_name: matchedMaterial.material_name })
@@ -304,7 +304,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
 
     const handleCompleteStep = async (stepId) => {
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${order.id}/steps/${stepId}/complete`, { method: 'POST' });
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${order.id}/steps/${stepId}/complete`, { method: 'POST' });
             const data = await res.json();
             if (data.success) {
                 handleViewOrder(order.id, true);
@@ -328,7 +328,7 @@ const ProductionDetail = ({ currentUser, orderId, onNavigate }) => {
                 delivered_to_user_id: deliveredToUserId
             };
 
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${order.id}/complete`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${order.id}/complete`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

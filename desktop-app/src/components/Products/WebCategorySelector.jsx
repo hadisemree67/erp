@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
-const API = 'http://localhost:3000/api/web-categories';
+const API = import.meta.env.VITE_API_URL + '/api/web-categories';
 
 // Yeni kayıt eklemek için küçük modal
 function AddModal({ title, onSave, onClose }) {

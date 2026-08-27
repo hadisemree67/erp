@@ -44,7 +44,7 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
 
     const fetchEmployees = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/employees');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/employees');
             const data = await res.json();
             if (Array.isArray(data)) {
                 setEmployees(data.filter(e => e.is_active === 1 && e.offboarding_status !== 'PENDING'));
@@ -99,7 +99,7 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
         setLoading(true);
         setError(null);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/employees/${selectedEmpId}/offboard-request`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${selectedEmpId}/offboard-request`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUser?.id },
                 body: JSON.stringify({
@@ -127,7 +127,7 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
 
     const handleApprove = async (empId, department, currentStatus) => {
         try {
-            await apiFetch(`http://localhost:3000/api/employees/${empId}/offboard-approve`, {
+            await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${empId}/offboard-approve`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUser?.id },
                 body: JSON.stringify({ department, status: !currentStatus })
@@ -147,7 +147,7 @@ const EmployeeOffboard = ({ currentUser, onClose }) => {
 
         if (window.confirm('Bu personelin şirketle tüm ilişiği kesilecektir. Onaylıyor musunuz?')) {
             try {
-                const res = await apiFetch(`http://localhost:3000/api/employees/${empId}/offboard`, {
+                const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${empId}/offboard`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'X-User-Id': currentUser?.id }
                 });

@@ -31,7 +31,7 @@ const CampaignList = ({ currentUser, onNavigate }) => {
         setLoading(true);
         setError(null);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/campaigns?search=${encodeURIComponent(searchTerm)}&status=${statusFilter}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/campaigns?search=${encodeURIComponent(searchTerm)}&status=${statusFilter}`);
             const data = await res.json();
             if (data.success) {
                 setCampaigns(data.data);
@@ -63,7 +63,7 @@ const CampaignList = ({ currentUser, onNavigate }) => {
         const campId = camp.id || camp.Id;
         const newStatus = camp.status === 'Aktif' ? 'Pasif' : 'Aktif';
         try {
-            const res = await apiFetch(`http://localhost:3000/api/campaigns/${campId}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/${campId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus })
@@ -84,7 +84,7 @@ const CampaignList = ({ currentUser, onNavigate }) => {
     const handleDelete = async (id, title) => {
         if (!window.confirm(`"${title}" kampanyasını silmek istediğinize emin misiniz?`)) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/campaigns/${id}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/campaigns/${id}`, {
                 method: 'DELETE'
             });
             const data = await res.json();

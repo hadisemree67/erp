@@ -40,7 +40,7 @@ const SupplierList = ({ currentUser }) => {
     const fetchSuppliers = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/suppliers');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/suppliers');
             const data = await res.json();
             if (data.success) {
                 setSuppliers(data.data || []);
@@ -65,8 +65,8 @@ const SupplierList = ({ currentUser }) => {
         
         try {
             const url = editingSupplier 
-                ? `http://localhost:3000/api/suppliers/${editingSupplier.Id}`
-                : 'http://localhost:3000/api/suppliers';
+                ? `${import.meta.env.VITE_API_URL}/api/suppliers/${editingSupplier.Id}`
+                : import.meta.env.VITE_API_URL + '/api/suppliers';
                 
             const method = editingSupplier ? 'PUT' : 'POST';
 
@@ -108,7 +108,7 @@ const SupplierList = ({ currentUser }) => {
         if (!window.confirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')) return;
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/suppliers/${id}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/suppliers/${id}`, {
                 method: 'DELETE'
             });
             const data = await res.json();

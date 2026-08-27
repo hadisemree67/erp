@@ -22,7 +22,7 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
         // 3. Backend API İstekleri (Veri Çekme)
     const fetchStaff = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/users');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/users');
             const data = await res.json();
             setStaff(Array.isArray(data) ? data : []);
         } catch (err) {
@@ -53,7 +53,7 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
         if (!window.confirm('Bu personeli silmek istediğinize emin misiniz?')) return;
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/users/${id}`, { 
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/users/${id}`, { 
                 method: 'DELETE',
                 headers: {
                     'X-User-Id': currentUser?.id
@@ -82,7 +82,7 @@ const StaffList = ({ onEdit, onAdd, currentUser }) => {
         setStaff(prev => prev.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u));
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/users/${user.id}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/users/${user.id}/status`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

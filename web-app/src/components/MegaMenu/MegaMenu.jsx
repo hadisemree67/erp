@@ -45,7 +45,7 @@ const MegaMenuContent = ({ isOpen, onClose }) => {
   // 2. Yan Etkiler ve Veri Çekme (useEffect)
 
   useEffect(() => {
-    fetch('http://localhost:3000/api/web-categories/tree')
+    fetch(import.meta.env.VITE_API_URL + '/api/web-categories/tree')
       .then(res => res.json())
       .then(data => {
         let newCatList = [...staticCategories];

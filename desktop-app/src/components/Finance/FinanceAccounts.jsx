@@ -153,7 +153,7 @@ const FinanceAccounts = ({ onNavigate }) => {
     const fetchAccounts = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/finance/accounts?tab=${activeTab}&period=${activePeriod}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/finance/accounts?tab=${activeTab}&period=${activePeriod}`);
             const data = await res.json();
             if (data.success) {
                 setAccountsData(data.data || []);
@@ -204,7 +204,7 @@ const FinanceAccounts = ({ onNavigate }) => {
 
         setSubmitting(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/finance/transactions', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/finance/transactions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -250,7 +250,7 @@ const FinanceAccounts = ({ onNavigate }) => {
         if (!window.confirm(`"${item.title}" kalemi sistemden silinecek. Onaylıyor musunuz?`)) return;
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/finance/transactions/${item.raw_id}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/finance/transactions/${item.raw_id}`, {
                 method: 'DELETE'
             });
             const data = await res.json();

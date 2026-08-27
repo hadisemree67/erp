@@ -41,8 +41,8 @@ const PurchaseRequests = ({ currentUser }) => {
     const fetchMaterialsAndSuppliers = async () => {
         try {
             const [matRes, supRes] = await Promise.all([
-                apiFetch('http://localhost:3000/api/products'),
-                apiFetch('http://localhost:3000/api/suppliers')
+                apiFetch(import.meta.env.VITE_API_URL + '/api/products'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/suppliers')
             ]);
             const matData = await matRes.json();
             const supData = await supRes.json();
@@ -61,7 +61,7 @@ const PurchaseRequests = ({ currentUser }) => {
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/purchasing/requests');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests');
             const data = await res.json();
             if (data.success) {
                 setRequests(data.data);
@@ -76,7 +76,7 @@ const PurchaseRequests = ({ currentUser }) => {
 
     const fetchRequestsSilently = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/purchasing/requests');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests');
             const data = await res.json();
             if (data.success) {
                 setRequests(data.data);
@@ -103,7 +103,7 @@ const PurchaseRequests = ({ currentUser }) => {
     const handleCreateManualRequest = async (e) => {
         e.preventDefault();
         try {
-            const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -121,7 +121,7 @@ const PurchaseRequests = ({ currentUser }) => {
                     if (selectedSupplier && (selectedSupplier.Email || selectedSupplier.email)) {
                         const sEmail = selectedSupplier.Email || selectedSupplier.email;
                         try {
-                            const mailRes = await apiFetch(`http://localhost:3000/api/purchasing/requests/${data.id}/send-order`, {
+                            const mailRes = await apiFetch(`${import.meta.env.VITE_API_URL}/api/purchasing/requests/${data.id}/send-order`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ 
@@ -166,7 +166,7 @@ const PurchaseRequests = ({ currentUser }) => {
         }
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/purchasing/requests/${id}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/purchasing/requests/${id}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status })
@@ -191,7 +191,7 @@ const PurchaseRequests = ({ currentUser }) => {
         }
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/purchasing/requests/${orderModal.request.id}/send-order`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/purchasing/requests/${orderModal.request.id}/send-order`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 

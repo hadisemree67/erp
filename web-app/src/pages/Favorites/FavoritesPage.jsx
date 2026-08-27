@@ -63,7 +63,7 @@ const FavoritesPage = () => {
                         imagePath = product.images[0];
                     }
                     
-                    const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `http://localhost:3000${imagePath}`) : '/placeholder-image.png';
+                    const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `${import.meta.env.VITE_API_URL}${imagePath}`) : '/placeholder-image.png';
                     const oldPrice = parseFloat(product.SalePrice) * 1.2; // Görsel amaçlı
 
                     return (

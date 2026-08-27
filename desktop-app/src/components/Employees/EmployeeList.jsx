@@ -69,7 +69,7 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
     const fetchEmployees = async (search = '') => {
         setLoading(true);
         try {
-            const url = search ? `http://localhost:3000/api/employees?search=${encodeURIComponent(search)}` : 'http://localhost:3000/api/employees';
+            const url = search ? `${import.meta.env.VITE_API_URL}/api/employees?search=${encodeURIComponent(search)}` : import.meta.env.VITE_API_URL + '/api/employees';
             const res = await apiFetch(url);
             const data = await res.json();
             if (Array.isArray(data)) {
@@ -96,7 +96,7 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
     const handleDelete = async (id) => {
         if (!window.confirm('Bu personeli listeden çıkarmak istediğinize emin misiniz?')) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/employees/${id}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${id}`, {
                 method: 'DELETE',
                 headers: { 'X-User-Id': currentUser?.id }
             });
@@ -137,7 +137,7 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
         setDocumentsModalOpen(true);
         setDocsLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/employees/${employeeId}/documents`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/${employeeId}/documents`);
             const data = await res.json();
             if (data.success) {
                 setSelectedEmployeeDocs(data.documents);
@@ -193,7 +193,7 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
         if (!window.confirm(`${selectedIds.length} personeli kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) return;
         
         try {
-            const response = await apiFetch('http://localhost:3000/api/employees/bulk', {
+            const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/employees/bulk', {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
@@ -349,7 +349,7 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
                                     <td style={{ padding: '12px 24px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                             {emp.photo_path ? (
-                                                <img src={`http://localhost:3000${emp.photo_path}`} alt={emp.full_name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #e2e8f0', filter: activeTab === 'alumni' ? 'grayscale(100%)' : 'none' }} />
+                                                <img src={`${import.meta.env.VITE_API_URL}${emp.photo_path}`} alt={emp.full_name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid #e2e8f0', filter: activeTab === 'alumni' ? 'grayscale(100%)' : 'none' }} />
                                             ) : (
                                                 <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#e2e8f0', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px', flexShrink: 0 }}>
                                                     {emp.full_name ? emp.full_name.substring(0, 2).toUpperCase() : '??'}
@@ -433,7 +433,7 @@ const EmployeeList = ({ currentUser, onNavigate }) => {
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 {selectedEmployeeDocs.map(doc => (
-                                    <a key={doc.id} href={`http://localhost:3000${doc.file_path}`} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', backgroundColor: '#f8fafc', borderRadius: '8px', textDecoration: 'none', color: '#0f172a', border: '1px solid #e2e8f0', transition: 'all 0.2s' }} onMouseOver={e => Object.assign(e.currentTarget.style, { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' })} onMouseOut={e => Object.assign(e.currentTarget.style, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' })}>
+                                    <a key={doc.id} href={`${import.meta.env.VITE_API_URL}${doc.file_path}`} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', backgroundColor: '#f8fafc', borderRadius: '8px', textDecoration: 'none', color: '#0f172a', border: '1px solid #e2e8f0', transition: 'all 0.2s' }} onMouseOver={e => Object.assign(e.currentTarget.style, { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' })} onMouseOut={e => Object.assign(e.currentTarget.style, { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' })}>
                                         <span style={{ fontSize: '20px' }}>📄</span>
                                         <div style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500', fontSize: '14px' }}>
                                             {doc.file_name}

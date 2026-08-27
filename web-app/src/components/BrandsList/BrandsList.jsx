@@ -24,7 +24,7 @@ const BrandsList = () => {
   useEffect(() => {
     const fetchBrands = async () => {
       try {
-        const res = await fetch('http://localhost:3000/api/brands');
+        const res = await fetch(import.meta.env.VITE_API_URL + '/api/brands');
         const data = await res.json();
         
         const brandsWithLogos = data.filter(b => b.logo_url);
@@ -62,7 +62,7 @@ const BrandsList = () => {
         <div className={styles.brandsContainer} style={{ flexWrap: showAll ? 'wrap' : 'nowrap' }}>
           {brands.length > 0 ? (
             (showAll ? brands : brands.slice(currentIndex, currentIndex + 6)).map((brand, idx) => {
-              const imgSrc = `http://localhost:3000${brand.logo_url}`;
+              const imgSrc = `${import.meta.env.VITE_API_URL}${brand.logo_url}`;
               const altText = brand.name;
               return (
                 <Link key={idx} to={`/brand/${encodeURIComponent(brand.name)}`} style={{ textDecoration: 'none' }}>

@@ -27,7 +27,7 @@ const PurchaseOrders = () => {
     const fetchOrders = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/purchasing/orders');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/orders');
             const data = await res.json();
             if (data.success) {
                 setOrders(data.data);
@@ -42,7 +42,7 @@ const PurchaseOrders = () => {
 
     const fetchOrdersSilently = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/purchasing/orders');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/orders');
             const data = await res.json();
             if (data.success) {
                 setOrders(data.data);
@@ -67,7 +67,7 @@ const PurchaseOrders = () => {
 
     const handleUpdateStatus = async (id, status) => {
         try {
-            const res = await apiFetch(`http://localhost:3000/api/purchasing/orders/${id}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/purchasing/orders/${id}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status })

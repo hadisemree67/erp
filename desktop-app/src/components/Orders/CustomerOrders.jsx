@@ -98,12 +98,12 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         if (showLoading) setLoading(true);
         try {
             const [ordersRes, customersRes, productsRes, boxesRes, campaignsRes, shippersRes] = await Promise.all([
-                apiFetch('http://localhost:3000/api/orders'),
-                apiFetch('http://localhost:3000/api/customers'),
-                apiFetch('http://localhost:3000/api/products'),
-                apiFetch('http://localhost:3000/api/boxes'),
-                apiFetch('http://localhost:3000/api/campaigns'),
-                apiFetch('http://localhost:3000/api/shippers')
+                apiFetch(import.meta.env.VITE_API_URL + '/api/orders'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/customers'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/products'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/boxes'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/campaigns'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/shippers')
             ]);
 
             const ordersData = await ordersRes.json();
@@ -140,7 +140,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
     const fetchStats = async (range) => {
         setStatsLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/mobile/stats?range=${range}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/mobile/stats?range=${range}`);
             const data = await res.json();
             if (data.success) {
                 setStatsData(data.stats || []);
@@ -212,7 +212,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         }
 
         try {
-            const res = await apiFetch('http://localhost:3000/api/coupons/validate', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/coupons/validate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ code: couponCodeInput, items: validItems })
@@ -327,7 +327,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
 
         setSubmitting(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/orders', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -380,7 +380,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         }
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/${orderId}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${orderId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus })
@@ -400,7 +400,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         if (!window.confirm('Bu siparişi onaylayıp Onaylandı aşamasına almak istediğinize emin misiniz?')) return;
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/${orderId}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${orderId}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'Onaylandı' })
@@ -427,7 +427,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         setPacking(true);
         try {
             const trackingNo = `CRG-${order.Id}-${Date.now().toString().slice(-4)}`;
-            const res = await apiFetch(`http://localhost:3000/api/orders/${order.Id}/pack`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${order.Id}/pack`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -631,7 +631,7 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
     const handleDeleteOrder = async (orderId, orderNo) => {
         if (!window.confirm(`${orderNo} numaralı siparişi tamamen silmek istediğinize emin misiniz?`)) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/${orderId}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${orderId}`, {
                 method: 'DELETE'
             });
             const data = await res.json();

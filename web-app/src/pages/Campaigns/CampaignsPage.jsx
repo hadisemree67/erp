@@ -9,7 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styles from './CampaignsPage.module.css';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL;
 
 const CampaignsPage = () => {
   const [campaigns, setCampaigns] = useState([]);

@@ -36,7 +36,7 @@ export const CartProvider = ({ children }) => {
     useEffect(() => {
         const fetchCampaigns = async () => {
             try {
-                const res = await axios.get('http://localhost:3000/api/campaigns/public');
+                const res = await axios.get(import.meta.env.VITE_API_URL + '/api/campaigns/public');
                 if (res.data.success) {
                     setCampaigns(res.data.data);
                 }
@@ -60,7 +60,7 @@ export const CartProvider = ({ children }) => {
                 let isUpdated = false;
                 const updatedItems = await Promise.all(items.map(async (item) => {
                     try {
-                        const res = await axios.get(`http://localhost:3000/api/products/public/${item.Id}`);
+                        const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/products/public/${item.Id}`);
                         if (res.data.success) {
                             const fresh = res.data.data;
                             if (
@@ -117,7 +117,7 @@ export const CartProvider = ({ children }) => {
         if (cartItems.length > 0 && sessionId) {
             const interval = setInterval(async () => {
                 try {
-                    await axios.post('http://localhost:3000/api/cart/ping', { session_id: sessionId });
+                    await axios.post(import.meta.env.VITE_API_URL + '/api/cart/ping', { session_id: sessionId });
                 } catch (e) {
                     console.error("Ping error", e);
                 }
@@ -134,7 +134,7 @@ export const CartProvider = ({ children }) => {
 
         try {
             // Arka plandan stok ayır
-            const res = await axios.post('http://localhost:3000/api/cart/reserve', {
+            const res = await axios.post(import.meta.env.VITE_API_URL + '/api/cart/reserve', {
                 session_id: sessionId,
                 product_id: product.Id,
                 quantity: newTotalQuantity
@@ -169,7 +169,7 @@ export const CartProvider = ({ children }) => {
         if (!sessionId) return;
         
         try {
-            await axios.post('http://localhost:3000/api/cart/release', {
+            await axios.post(import.meta.env.VITE_API_URL + '/api/cart/release', {
                 session_id: sessionId,
                 product_id: productId
             });
@@ -188,7 +188,7 @@ export const CartProvider = ({ children }) => {
         }
 
         try {
-            const res = await axios.post('http://localhost:3000/api/cart/reserve', {
+            const res = await axios.post(import.meta.env.VITE_API_URL + '/api/cart/reserve', {
                 session_id: sessionId,
                 product_id: productId,
                 quantity: newQuantity
@@ -212,7 +212,7 @@ export const CartProvider = ({ children }) => {
     const clearCart = async () => {
         if (!sessionId) return;
         try {
-            await axios.post('http://localhost:3000/api/cart/clear', { session_id: sessionId });
+            await axios.post(import.meta.env.VITE_API_URL + '/api/cart/clear', { session_id: sessionId });
             setCartItems([]);
             localStorage.removeItem('cart_items');
         } catch (e) {

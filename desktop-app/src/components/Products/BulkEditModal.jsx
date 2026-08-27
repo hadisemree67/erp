@@ -45,8 +45,8 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
         const fetchData = async () => {
             try {
                 const [catRes, brandRes] = await Promise.all([
-                    apiFetch('http://localhost:3000/api/categories'),
-                    apiFetch('http://localhost:3000/api/brands')
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/categories'),
+                    apiFetch(import.meta.env.VITE_API_URL + '/api/brands')
                 ]);
                 if (catRes.ok) setCategories(await catRes.json());
                 if (brandRes.ok) setBrands(await brandRes.json());
@@ -109,7 +109,7 @@ const BulkEditModal = ({ selectedIds, onClose, onSuccess, currentUser }) => {
         setError(null);
 
         try {
-            const response = await apiFetch('http://localhost:3000/api/products/bulk-edit', {
+            const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/products/bulk-edit', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

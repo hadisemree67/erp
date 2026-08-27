@@ -49,7 +49,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
         (campaign?.target_product_ids && campaign.target_product_ids.length > 0) || campaign?.target_product_id 
             ? { type: 'success', message: `Kayıtlı Ürün(ler) Bağlı` } : null
     );
-    const [imagePreview, setImagePreview] = useState(campaign?.cover_image_path ? `http://localhost:3000${campaign.cover_image_path}` : null);
+    const [imagePreview, setImagePreview] = useState(campaign?.cover_image_path ? `${import.meta.env.VITE_API_URL}${campaign.cover_image_path}` : null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
@@ -60,7 +60,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
         // 3. Backend API İstekleri (Veri Çekme)
         const fetchProducts = async () => {
             try {
-                const res = await apiFetch('http://localhost:3000/api/products');
+                const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/products');
                 const data = await res.json();
                 if (Array.isArray(data)) {
                     setProducts(data.filter(p => p.Category !== 'Hammadde'));
@@ -201,7 +201,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
         }
 
         try {
-            const url = isEdit ? `http://localhost:3000/api/campaigns/${campaign.id}` : 'http://localhost:3000/api/campaigns';
+            const url = isEdit ? `${import.meta.env.VITE_API_URL}/api/campaigns/${campaign.id}` : import.meta.env.VITE_API_URL + '/api/campaigns';
             const method = isEdit ? 'PUT' : 'POST';
 
             const res = await apiFetch(url, {

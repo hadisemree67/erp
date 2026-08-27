@@ -67,8 +67,8 @@ const PickingCarts = ({ currentUser }) => {
         try {
             // Depoları ve Taşıma arabalarını paralel çek
             const [warehousesRes, cartsRes] = await Promise.all([
-                apiFetch('http://localhost:3000/api/warehouses'),
-                apiFetch('http://localhost:3000/api/picking_carts')
+                apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/picking_carts')
             ]);
 
             const warehousesData = await warehousesRes.json();
@@ -103,7 +103,7 @@ const PickingCarts = ({ currentUser }) => {
         }
 
         try {
-            const url = editCartId ? `http://localhost:3000/api/picking_carts/${editCartId}` : 'http://localhost:3000/api/picking_carts';
+            const url = editCartId ? `${import.meta.env.VITE_API_URL}/api/picking_carts/${editCartId}` : import.meta.env.VITE_API_URL + '/api/picking_carts';
             const method = editCartId ? 'PUT' : 'POST';
             
             const payload = {
@@ -169,7 +169,7 @@ const PickingCarts = ({ currentUser }) => {
 
     const toggleActive = async (id, currentStatus) => {
         try {
-            const response = await apiFetch(`http://localhost:3000/api/picking_carts/${id}/toggle-active`, {
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/picking_carts/${id}/toggle-active`, {
                 method: 'PUT',
                 body: JSON.stringify({ is_active: !currentStatus })
             });
@@ -190,7 +190,7 @@ const PickingCarts = ({ currentUser }) => {
         if (!window.confirm('Bu taşıma arabasını silmek istediğinize emin misiniz? (Bağlı olan tüm bölümler silinecektir)')) return;
         
         try {
-            const response = await apiFetch(`http://localhost:3000/api/picking_carts/${id}`, {
+            const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/picking_carts/${id}`, {
                 method: 'DELETE'
             });
             const res = await response.json();

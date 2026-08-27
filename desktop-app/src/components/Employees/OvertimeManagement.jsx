@@ -39,7 +39,7 @@ const OvertimeManagement = ({ currentUser }) => {
     const fetchSalaries = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/employees/salaries?month=${month}&year=${year}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/employees/salaries?month=${month}&year=${year}`);
             const data = await res.json();
             if (data.success) {
                 setSalaries(data.data);
@@ -65,7 +65,7 @@ const OvertimeManagement = ({ currentUser }) => {
 
         setSubmitting(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/employees/overtimes', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/employees/overtimes', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

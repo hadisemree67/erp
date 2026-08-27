@@ -33,7 +33,7 @@ const Orders = () => {
         return;
       }
       
-      const res = await fetch('http://localhost:3000/api/customers/auth/my-orders', {
+      const res = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/my-orders', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -157,7 +157,7 @@ const Orders = () => {
                       imagePath = item.ImagePath;
                     }
                   }
-                  const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `http://localhost:3000${imagePath}`) : '';
+                  const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `${import.meta.env.VITE_API_URL}${imagePath}`) : '';
                   return (
                     <div key={item.Id} className={styles.miniImageWrap}>
                       {imgSrc ? (

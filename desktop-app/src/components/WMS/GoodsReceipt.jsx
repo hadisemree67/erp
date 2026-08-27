@@ -39,8 +39,8 @@ const GoodsReceipt = () => {
         setLoading(true);
         try {
             const [ordersRes, whRes] = await Promise.all([
-                apiFetch('http://localhost:3000/api/purchasing/orders'),
-                apiFetch('http://localhost:3000/api/warehouses')
+                apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/orders'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses')
             ]);
             
             const ordersData = await ordersRes.json();
@@ -81,7 +81,7 @@ const GoodsReceipt = () => {
             setAllShelvesCapacity({});
             return;
         }
-        apiFetch(`http://localhost:3000/api/wms/warehouse-capacities?warehouseId=${modal.warehouse_id}&productId=${modal.order.product_id}`)
+        apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/warehouse-capacities?warehouseId=${modal.warehouse_id}&productId=${modal.order.product_id}`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
@@ -163,7 +163,7 @@ const GoodsReceipt = () => {
         // 10 saniyede bir sessiz güncelle
         const intervalId = setInterval(async () => {
             try {
-                const res = await apiFetch('http://localhost:3000/api/purchasing/orders');
+                const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/orders');
                 const data = await res.json();
                 if (data.success) {
                     setOrders(data.data.filter(o => o.status === 'Depo Kabul Bekliyor'));
@@ -180,7 +180,7 @@ const GoodsReceipt = () => {
         // Failsafe: Eğer depolar henüz yüklenmemişse popup açılırken çek
         if (currentWarehouses.length === 0) {
             try {
-                const whRes = await apiFetch('http://localhost:3000/api/warehouses');
+                const whRes = await apiFetch(import.meta.env.VITE_API_URL + '/api/warehouses');
                 const whData = await whRes.json();
                 if (Array.isArray(whData)) {
                     setWarehouses(whData);
@@ -325,7 +325,7 @@ const GoodsReceipt = () => {
                 return;
             }
 
-            const res = await apiFetch(`http://localhost:3000/api/purchasing/orders/${modal.order.id}/receive`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/purchasing/orders/${modal.order.id}/receive`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

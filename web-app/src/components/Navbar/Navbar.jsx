@@ -20,7 +20,7 @@ const Navbar = () => {
   useEffect(() => {
     const fetchBrands = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/brands');
+        const response = await fetch(import.meta.env.VITE_API_URL + '/api/brands');
         const data = await response.json();
         if (Array.isArray(data)) {
           setBrands(data);
@@ -77,7 +77,7 @@ const Navbar = () => {
                 {brands.filter(b => (b.name || '').toLowerCase().includes(brandSearch.toLowerCase())).map(brand => (
                   <Link to={`/brand/${encodeURIComponent(brand.name)}`} key={brand.id} className={styles.brandItem}>
                     {brand.logo_url ? (
-                      <img src={`http://localhost:3000${brand.logo_url}`} alt={brand.name} className={styles.brandLogo} />
+                      <img src={`${import.meta.env.VITE_API_URL}${brand.logo_url}`} alt={brand.name} className={styles.brandLogo} />
                     ) : (
                       <div className={styles.brandLogo} style={{ backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
                         <span style={{ fontSize: '10px', color: '#64748b' }}>Logo Yok</span>

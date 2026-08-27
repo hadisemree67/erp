@@ -50,8 +50,8 @@ const CustomerForm = ({ customer, onClose, onNavigate }) => {
         setError(null);
 
         const url = isEditing
-            ? `http://localhost:3000/api/customers/${customer.Id}`
-            : `http://localhost:3000/api/customers`;
+            ? `${import.meta.env.VITE_API_URL}/api/customers/${customer.Id}`
+            : `${import.meta.env.VITE_API_URL}/api/customers`;
 
         const method = isEditing ? 'PUT' : 'POST';
 

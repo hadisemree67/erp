@@ -8,8 +8,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 
-const API        = 'http://localhost:3000/api/web-categories';
-const API_BRANDS = 'http://localhost:3000/api/brands';
+const API        = import.meta.env.VITE_API_URL + '/api/web-categories';
+const API_BRANDS = import.meta.env.VITE_API_URL + '/api/brands';
 
 /* ─── Açılır/Kapanır Bölüm ─── */
 function Section({ title, badge, open, onToggle, children }) {
@@ -46,7 +46,7 @@ function PhotoSlot({ label, imageUrl, onUpload, uploading, aspect = '16/5', desc
             {description && <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 10px' }}>{description}</p>}
             <div style={{ position: 'relative', width: '100%', aspectRatio: aspect, background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', marginBottom: '8px' }}>
                 {imageUrl ? (
-                    <img src={`http://localhost:3000${imageUrl}`} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <img src={`${import.meta.env.VITE_API_URL}${imageUrl}`} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 ) : (
                     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', gap: '4px' }}>
                         <span style={{ fontSize: '28px' }}>🖼️</span>
@@ -70,7 +70,7 @@ function ThumbSlot({ item, onUpload, uploading }) {
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
             <div style={{ width: '100%', aspectRatio: '4/3', background: '#f8fafc', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {item.image_url
-                    ? <img src={`http://localhost:3000${item.image_url}`} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={`${import.meta.env.VITE_API_URL}${item.image_url}`} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontSize: '20px', opacity: 0.3 }}>📷</span>
                 }
             </div>
@@ -117,7 +117,7 @@ function BannerSlot({ slot, banner, categoryId, brands, onUpdate }) {
             {/* Görsel */}
             <div style={{ position: 'relative', width: '100%', aspectRatio: '3/1.2', background: '#f1f5f9' }}>
                 {banner?.image_url
-                    ? <img src={`http://localhost:3000${banner.image_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={`${import.meta.env.VITE_API_URL}${banner.image_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}><span style={{ fontSize: '22px' }}>🖼️</span><span style={{ fontSize: '11px' }}>Boş</span></div>
                 }
                 <div style={{ position: 'absolute', top: 6, left: 8, background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: '10px', fontWeight: '700', padding: '2px 7px', borderRadius: '20px' }}>{slot}. Banner</div>
@@ -291,7 +291,7 @@ export default function CategoryManager() {
                                                             {/* Kutu fotoğrafı */}
                                                             <div style={{ width: '52px', height: '36px', borderRadius: '6px', overflow: 'hidden', background: '#f1f5f9', flexShrink: 0, border: '1px solid #e2e8f0' }}>
                                                                 {title.image_url
-                                                                    ? <img src={`http://localhost:3000${title.image_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                    ? <img src={`${import.meta.env.VITE_API_URL}${title.image_url}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                                     : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: '14px' }}>📷</div>
                                                                 }
                                                             </div>

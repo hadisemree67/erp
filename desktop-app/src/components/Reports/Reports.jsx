@@ -39,8 +39,8 @@ function Reports({ currentUser }) {
     setError(null);
     try {
       const [summaryRes, topSellingRes] = await Promise.all([
-        apiFetch('http://localhost:3000/api/reports/summary'),
-        apiFetch(`http://localhost:3000/api/reports/top-selling?period=${activePeriod}`)
+        apiFetch(import.meta.env.VITE_API_URL + '/api/reports/summary'),
+        apiFetch(`${import.meta.env.VITE_API_URL}/api/reports/top-selling?period=${activePeriod}`)
       ]);
       
       if (summaryRes.ok && topSellingRes.ok) {

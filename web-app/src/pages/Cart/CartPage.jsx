@@ -29,7 +29,7 @@ const CartPage = () => {
         if (!token) return setCouponError('Kupon kullanmak için giriş yapmalısınız.');
         
         try {
-            const res = await fetch('http://localhost:3000/api/coupons/apply', {
+            const res = await fetch(import.meta.env.VITE_API_URL + '/api/coupons/apply', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -59,7 +59,7 @@ const CartPage = () => {
                 return;
             }
             try {
-                const res = await fetch(`http://localhost:3000/api/cart/validate-stock`, {
+                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/cart/validate-stock`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -128,7 +128,7 @@ const CartPage = () => {
                                     imagePath = item.ImagePath;
                                 }
                             }
-                            const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `http://localhost:3000${imagePath}`) : '/placeholder-image.png';
+                            const imgSrc = imagePath ? (imagePath.startsWith('http') ? imagePath : `${import.meta.env.VITE_API_URL}${imagePath}`) : '/placeholder-image.png';
 
                             const isInvalid = invalidItems.includes(item.Id);
 

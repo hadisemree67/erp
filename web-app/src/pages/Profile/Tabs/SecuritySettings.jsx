@@ -52,7 +52,7 @@ const SecuritySettings = () => {
       setLoading(true);
       const token = localStorage.getItem('customerToken');
       
-      const response = await fetch('http://localhost:3000/api/customers/auth/change-password', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -83,7 +83,7 @@ const SecuritySettings = () => {
     try {
       setIs2FALoading(true);
       const token = localStorage.getItem('customerToken');
-      const response = await fetch('http://localhost:3000/api/customers/auth/toggle-2fa', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/toggle-2fa', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -116,7 +116,7 @@ const SecuritySettings = () => {
     try {
       setSessionsLoading(true);
       const token = localStorage.getItem('customerToken');
-      const response = await fetch('http://localhost:3000/api/customers/auth/sessions', {
+      const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/sessions', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

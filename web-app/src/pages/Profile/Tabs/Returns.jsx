@@ -28,7 +28,7 @@ const Returns = () => {
         return;
       }
       
-      const res = await fetch('http://localhost:3000/api/customers/auth/returns', {
+      const res = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/returns', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -187,7 +187,7 @@ const Returns = () => {
                         parsedImagePath = item.image_path;
                       }
                     }
-                    const imgSrc = parsedImagePath ? (parsedImagePath.startsWith('http') ? parsedImagePath : `http://localhost:3000${parsedImagePath}`) : '';
+                    const imgSrc = parsedImagePath ? (parsedImagePath.startsWith('http') ? parsedImagePath : `${import.meta.env.VITE_API_URL}${parsedImagePath}`) : '';
 
                     return (
                       <div key={idx} className={styles.returnItem}>

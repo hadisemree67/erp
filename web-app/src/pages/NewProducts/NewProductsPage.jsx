@@ -12,7 +12,7 @@ import { useCart } from '../../context/CartContext';
 import { useFavorites } from '../../context/FavoritesContext';
 import styles from './NewProductsPage.module.css';
 
-const API_BASE = 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL;
 
 const NewProductsPage = () => {
   const [products, setProducts] = useState([]);

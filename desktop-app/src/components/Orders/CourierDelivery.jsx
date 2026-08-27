@@ -32,7 +32,7 @@ const CourierDelivery = () => {
         setIsSuccess(false);
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/by-cargo/${barcode.trim()}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/by-cargo/${barcode.trim()}`);
             const data = await res.json();
             
             if (data.success) {
@@ -56,7 +56,7 @@ const CourierDelivery = () => {
     const handleShip = async () => {
         if (!order) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/${order.Id}/ship`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${order.Id}/ship`, {
                 method: 'POST'
             });
             const data = await res.json();

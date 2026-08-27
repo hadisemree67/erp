@@ -28,7 +28,7 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
     const fetchCustomers = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/customers');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/customers');
             const data = await res.json();
             if (data.success) {
                 setCustomers(data.data || []);
@@ -47,7 +47,7 @@ const CustomerList = ({ currentUser, onNavigate, onEdit }) => {
         if (!window.confirm(`"${name}" isimli müşteriyi silmek istediğinize emin misiniz?`)) return;
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/customers/${id}`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/customers/${id}`, {
                 method: 'DELETE'
             });
             const data = await res.json();

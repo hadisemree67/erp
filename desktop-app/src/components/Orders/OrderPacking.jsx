@@ -39,7 +39,7 @@ const OrderPacking = () => {
         setStatusMessage('');
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/by-cargo/${barcode.trim()}`);
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/by-cargo/${barcode.trim()}`);
             const data = await res.json();
             
             if (data.success) {
@@ -120,7 +120,7 @@ const OrderPacking = () => {
         }
 
         try {
-            const res = await apiFetch(`http://localhost:3000/api/orders/${order.Id}/pack`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${order.Id}/pack`, {
                 method: 'POST'
             });
             const data = await res.json();

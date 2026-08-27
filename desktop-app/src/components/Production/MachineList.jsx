@@ -47,7 +47,7 @@ const MachineList = ({ currentUser }) => {
     const fetchMachines = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/machines');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/machines');
             const data = await res.json();
             if (data.success) {
                 setMachines(data.data);
@@ -61,7 +61,7 @@ const MachineList = ({ currentUser }) => {
 
     const fetchCategories = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/categories');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/categories');
             const data = await res.json();
             if (Array.isArray(data)) {
                 setCategories(data);
@@ -117,7 +117,7 @@ const MachineList = ({ currentUser }) => {
         if (!window.confirm('Bu makineyi silmek istediğinize emin misiniz?')) return;
         
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/machines/${id}`, { method: 'DELETE' });
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/machines/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.success) {
                 fetchMachines();
@@ -132,7 +132,7 @@ const MachineList = ({ currentUser }) => {
     const handleFixMachine = async (id, machineName) => {
         if (!window.confirm(`${machineName} makinesi için arıza giderildi olarak işaretlenip durumu "Boş (Çalışıyor)" yapılsın mı?`)) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/machines/${id}/status`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/machines/${id}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'Boş' })
@@ -170,7 +170,7 @@ const MachineList = ({ currentUser }) => {
         e.preventDefault();
         try {
             const method = editingId ? 'PUT' : 'POST';
-            const url = editingId ? `http://localhost:3000/api/production/machines/${editingId}` : 'http://localhost:3000/api/production/machines';
+            const url = editingId ? `${import.meta.env.VITE_API_URL}/api/production/machines/${editingId}` : import.meta.env.VITE_API_URL + '/api/production/machines';
             
             const res = await apiFetch(url, {
                 method,
@@ -208,7 +208,7 @@ const MachineList = ({ currentUser }) => {
         
         setReportingLoading(true);
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/machines/${reportingMachine.id}/report-issue`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/machines/${reportingMachine.id}/report-issue`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

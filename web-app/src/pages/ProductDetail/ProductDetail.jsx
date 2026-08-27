@@ -108,7 +108,7 @@ const ProductDetail = () => {
     window.scrollTo(0, 0);
     const fetchProduct = async () => {
       try {
-        const response = await fetch(`http://localhost:3000/api/products/public/${id}`);
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/products/public/${id}`);
         const data = await response.json();
         if (data.success) {
           setProduct(data.data);
@@ -136,7 +136,7 @@ const ProductDetail = () => {
     if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
       return imgPath;
     }
-    return `http://localhost:3000${imgPath}`;
+    return `${import.meta.env.VITE_API_URL}${imgPath}`;
   };
 
   const images = product.images && product.images.length > 0

@@ -21,7 +21,7 @@ const Addresses = () => {
       const token = localStorage.getItem('customerToken');
       if (!token) return;
       try {
-        const response = await fetch('http://localhost:3000/api/customers/auth/profile', {
+        const response = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/profile', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
@@ -40,7 +40,7 @@ const Addresses = () => {
     const token = localStorage.getItem('customerToken');
     if (!token) return;
     try {
-      await fetch('http://localhost:3000/api/customers/auth/addresses', {
+      await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/addresses', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

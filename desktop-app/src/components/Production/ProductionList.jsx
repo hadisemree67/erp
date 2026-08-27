@@ -24,7 +24,7 @@ const ProductionList = ({ currentUser, onNavigate }) => {
     const fetchOrders = async () => {
         setLoading(true);
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/orders');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/orders');
             const data = await res.json();
             if (data.success) {
                 setOrders(data.data);
@@ -45,7 +45,7 @@ const ProductionList = ({ currentUser, onNavigate }) => {
 
     const fetchWarehouseUsers = async () => {
         try {
-            const res = await apiFetch('http://localhost:3000/api/production/warehouse-users');
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/production/warehouse-users');
             const data = await res.json();
             if (data.success) {
                 setWarehouseUsers(data.data);
@@ -58,7 +58,7 @@ const ProductionList = ({ currentUser, onNavigate }) => {
     const handleArchive = async (id) => {
         if (!window.confirm('Bu siparişi kapatıp arşivlemek istediğinize emin misiniz?')) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${id}/archive`, { method: 'POST' });
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${id}/archive`, { method: 'POST' });
             const data = await res.json();
             if (data.success) {
                 fetchOrders();
@@ -74,7 +74,7 @@ const ProductionList = ({ currentUser, onNavigate }) => {
     const handleDelete = async (id) => {
         if (!window.confirm('Bu siparişi iptal edip tamamen silmek istediğinize emin misiniz?')) return;
         try {
-            const res = await apiFetch(`http://localhost:3000/api/production/orders/${id}`, { method: 'DELETE' });
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/production/orders/${id}`, { method: 'DELETE' });
             const data = await res.json();
             if (data.success) {
                 fetchOrders();

@@ -207,9 +207,9 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     const fetchMaterialsAndMachines = async () => {
         try {
             const [matRes, machRes, suppRes] = await Promise.all([
-                apiFetch('http://localhost:3000/api/products'),
-                apiFetch('http://localhost:3000/api/production/machines'),
-                apiFetch('http://localhost:3000/api/suppliers')
+                apiFetch(import.meta.env.VITE_API_URL + '/api/products'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/production/machines'),
+                apiFetch(import.meta.env.VITE_API_URL + '/api/suppliers')
             ]);
             const matData = await matRes.json();
             if (Array.isArray(matData)) {
@@ -246,7 +246,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
   
   const fetchBrands = async () => {
     try {
-      const response = await apiFetch('http://localhost:3000/api/brands');
+      const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/brands');
       const data = await response.json();
       if (Array.isArray(data)) {
         setBrandList(data);
@@ -261,7 +261,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
 
   const fetchCategories = async () => {
     try {
-      const response = await apiFetch('http://localhost:3000/api/categories');
+      const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/categories');
       const data = await response.json();
       if (Array.isArray(data)) {
         setCategoryList(data);
@@ -283,7 +283,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     if (!newBrandName.trim()) return;
     setAddingBrand(true);
     try {
-        const res = await apiFetch('http://localhost:3000/api/brands', {
+        const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/brands', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -315,7 +315,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     fd.append('logo', brandLogoFile);
 
     try {
-        const res = await apiFetch(`http://localhost:3000/api/brands/${selectedBrandForLogo.id}`, {
+        const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/brands/${selectedBrandForLogo.id}`, {
             method: 'PUT',
             headers: {
                 'X-User-Id': currentUser?.id 
@@ -341,7 +341,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     if (!newCategoryName.trim()) return;
     setAddingCategory(true);
     try {
-        const res = await apiFetch('http://localhost:3000/api/categories', {
+        const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/categories', {
             method: 'POST',
             headers: { 
               'Content-Type': 'application/json',
@@ -482,8 +482,8 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     setError(null);
 
     const url = isEditing 
-      ? `http://localhost:3000/api/products/${product.Id}`
-      : `http://localhost:3000/api/products`;
+      ? `${import.meta.env.VITE_API_URL}/api/products/${product.Id}`
+      : `${import.meta.env.VITE_API_URL}/api/products`;
       
     const method = isEditing ? 'PUT' : 'POST';
 
@@ -867,7 +867,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
                               <label style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Sözleşme Dosyası (PDF vb.)</label>
                               {supplier.contract_file && !supplier.remove_contract && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', padding: '8px', backgroundColor: '#ecfdf5', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
-                                      <a href={supplier.contract_file.startsWith('http') ? supplier.contract_file : `http://localhost:3000${supplier.contract_file}`} target="_blank" rel="noreferrer" style={{ fontSize: '13px', color: '#059669', textDecoration: 'none', fontWeight: '500' }}>Mevcut Sözleşmeyi Görüntüle</a>
+                                      <a href={supplier.contract_file.startsWith('http') ? supplier.contract_file : `${import.meta.env.VITE_API_URL}${supplier.contract_file}`} target="_blank" rel="noreferrer" style={{ fontSize: '13px', color: '#059669', textDecoration: 'none', fontWeight: '500' }}>Mevcut Sözleşmeyi Görüntüle</a>
                                       <button type="button" onClick={() => handleProductSupplierChange(sIndex, 'remove_contract', true)} style={{ padding: '4px 8px', background: '#fee2e2', color: '#ef4444', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '11px' }}>Kaldır</button>
                                   </div>
                               )}
@@ -914,7 +914,7 @@ const ProductForm = ({ product, onClose, currentUser }) => {
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '16px' }}>
                     {existingImages.map((img, index) => (
                         <div key={index} style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                            <img src={img.startsWith('http') ? img : `http://localhost:3000${img}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={img.startsWith('http') ? img : `${import.meta.env.VITE_API_URL}${img}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             <button type="button" onClick={() => removeExistingImage(index)} style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(255,0,0,0.8)', color: 'white', border: 'none', borderRadius: '0 0 0 4px', fontSize: '10px', cursor: 'pointer', padding: '2px 4px' }}>✕</button>
                         </div>
                     ))}

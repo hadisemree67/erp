@@ -42,7 +42,7 @@ const BrandPage = () => {
     const fetchBrandProducts = async () => {
       setLoading(true);
       try {
-        let url = `http://localhost:3000/api/products/public?`;
+        let url = `${import.meta.env.VITE_API_URL}/api/products/public?`;
         const params = new URLSearchParams();
         if (brandName) params.append('brand', brandName);
 
@@ -88,7 +88,7 @@ const BrandPage = () => {
               if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
                 return imgPath;
               }
-              return `http://localhost:3000${imgPath}`;
+              return `${import.meta.env.VITE_API_URL}${imgPath}`;
             };
 
             const mainImage = product.images && product.images.length > 0

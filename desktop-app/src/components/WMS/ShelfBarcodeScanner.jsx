@@ -20,7 +20,7 @@ export default function ShelfBarcodeScanner({ onShelfFound }) {
             e.target.value = ''; 
             
             try {
-                const res = await apiFetch(`http://localhost:3000/api/wms/shelf-by-barcode?barcode=${barcode}`);
+                const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/shelf-by-barcode?barcode=${barcode}`);
                 const data = await res.json();
                 if (data.success) {
                     onShelfFound(data.data.warehouse_id, data.data.shelf_code);

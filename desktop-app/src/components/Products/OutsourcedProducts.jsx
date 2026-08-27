@@ -30,7 +30,7 @@ const OutsourcedProducts = ({ currentUser }) => {
     const fetchProducts = async () => {
         try {
             setLoading(true);
-            const res = await apiFetch('http://localhost:3000/api/products', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/products', {
                 headers: { 'X-User-Id': currentUser?.id }
             });
             const data = await res.json();
@@ -68,7 +68,7 @@ const OutsourcedProducts = ({ currentUser }) => {
                 supplier_id: orderModal.product.supplier_id || null
             };
 
-            const res = await apiFetch('http://localhost:3000/api/purchasing/requests', {
+            const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/purchasing/requests', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',

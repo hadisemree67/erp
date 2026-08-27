@@ -51,7 +51,7 @@ const CheckoutPage = () => {
         // Kargo firmalarını çek
         const fetchShippers = async () => {
             try {
-                const res = await fetch('http://localhost:3000/api/shippers/public');
+                const res = await fetch(import.meta.env.VITE_API_URL + '/api/shippers/public');
                 const data = await res.json();
                 if (data.success) {
                     setShippers(data.data);
@@ -70,7 +70,7 @@ const CheckoutPage = () => {
             const token = localStorage.getItem('customerToken');
             if (token) {
                 try {
-                    const res = await fetch('http://localhost:3000/api/customers/auth/profile', {
+                    const res = await fetch(import.meta.env.VITE_API_URL + '/api/customers/auth/profile', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
                     const data = await res.json();
@@ -148,7 +148,7 @@ const CheckoutPage = () => {
             // Ödeme simülasyonu
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            const response = await fetch('http://localhost:3000/api/orders/public/checkout', {
+            const response = await fetch(import.meta.env.VITE_API_URL + '/api/orders/public/checkout', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
