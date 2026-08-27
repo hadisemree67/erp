@@ -32,13 +32,10 @@ class GlobalErrorBoundary extends React.Component {
     if (this.state.hasError) {
       // 5. Arayüz (UI) Çizimi ve Render Edilmesi
       return (
-        <div style={{ padding: '20px', backgroundColor: 'white', color: 'red', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, overflow: 'auto' }}>
-          <h2>React Kritik Çökme!</h2>
-          <pre style={{ whiteSpace: 'pre-wrap', fontWeight: 'bold' }}>{this.state.error && this.state.error.toString()}</pre>
-          <details style={{ whiteSpace: 'pre-wrap', marginTop: '10px', color: '#333' }}>
-            {this.state.errorInfo && this.state.errorInfo.componentStack}
-          </details>
-          <button onClick={() => window.location.reload()} style={{ marginTop: '20px', padding: '10px 20px', fontSize: '16px' }}>Sayfayı Yenile</button>
+        <div style={{ padding: '40px', backgroundColor: 'white', color: '#1e293b', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#dc2626', marginBottom: '12px' }}>❌ Beklenmedik Bir Hata Oluştu</h2>
+          <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px', textAlign: 'center', maxWidth: '400px' }}>Uygulama beklenmedik bir sorunla karşılaştı. Lütfen sayfayı yenileyerek tekrar deneyin. Sorun devam ederse sistem yöneticinize başvurun.</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', fontSize: '15px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Sayfayı Yenile</button>
         </div>
       );
     }

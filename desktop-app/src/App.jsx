@@ -202,7 +202,7 @@ function App() {
         setErrorMsg(data.message || 'Giriş başarısız.');
       }
     } catch (err) {
-      setErrorMsg(`Sunucuya bağlanılamadı. Hata: ${err.message}`);
+      setErrorMsg('Sunucuya bağlanılamadı. Lütfen bağlantınızı kontrol edin.');
     } finally {
       setLoading(false);
     }

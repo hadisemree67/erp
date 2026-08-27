@@ -31,8 +31,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      webSecurity: false, // [Ağ hatalarını ve katı Chromium CORS kurallarını aşmak için kapatıldı]
-      allowRunningInsecureContent: true, // [Yerel geliştirme proxy hatalarını önler]
+      webSecurity: true, // GÜVENLİK: Chromium same-origin korumasını devrede tut
       backgroundThrottling: false // Arka planda donmayı ve uykuya geçmeyi engeller
     }
   });
@@ -54,8 +53,8 @@ function createWindow() {
   // GÜVENLİK: Dış bağlantılara izinsiz yönlendirmeyi engelle
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl);
-    // Sadece izin verilen alan adlarına (localhost) izin ver
-    if (parsedUrl.hostname !== 'localhost') {
+    // Sadece izin verilen alan adlarına (localhost, 127.0.0.1) izin ver
+    if (parsedUrl.hostname !== 'localhost' && parsedUrl.hostname !== '127.0.0.1') {
       event.preventDefault();
       console.log(`Engellenen dış bağlantı: ${navigationUrl}`);
     }
