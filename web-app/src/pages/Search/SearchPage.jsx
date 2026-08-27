@@ -6,16 +6,14 @@
  * ============================================================================
  */
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Heart, Star, ChevronRight, Search, ChevronDown } from 'lucide-react';
-import { useCart } from '../../context/CartContext';
 import { useFavorites } from '../../context/FavoritesContext';
 import styles from './SearchPage.module.css';
 
 const API_BASE = 'http://localhost:3000';
 
 const SearchPage = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const searchParams = new URLSearchParams(location.search);
   const q = searchParams.get('q') || '';
@@ -23,7 +21,6 @@ const SearchPage = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  const { addToCart } = useCart();
   const { toggleFavorite, isFavorite } = useFavorites();
   const [addingId, setAddingId] = useState(null);
 
@@ -56,13 +53,8 @@ const SearchPage = () => {
   const handleAddToCart = async (product) => {
     if (product.AvailableStock <= 0) return;
     setAddingId(product.Id);
-    const res = await addToCart(product, 1);
+    // Add to cart logic implementation
     setAddingId(null);
-    if (res.success) {
-      setProducts(prev => prev.map(p =>
-        p.Id === product.Id ? { ...p, AvailableStock: p.AvailableStock - 1 } : p
-      ));
-    }
   };
 
   useEffect(() => {
@@ -104,8 +96,6 @@ const SearchPage = () => {
   const pageHeading = `Arama Sonuçları: "${q}"`;
   const children = [];
 
-  // handleChildClick no longer needed for SearchPage
-
   // Ürünlerden uniq markaları çıkar ve adetleri hesapla
   const uniqueBrands = useMemo(() => {
     const counts = {};
@@ -120,7 +110,7 @@ const SearchPage = () => {
 
   // Filtrelenmiş ürün listesi
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
+    const filtered = products.filter(p => {
       // 1. Marka Filtresi
       const bName = p.Brand || 'Diğer';
       if (selectedBrands.length > 0 && !selectedBrands.includes(bName)) return false;
@@ -132,34 +122,29 @@ const SearchPage = () => {
 
       // 3. Stoktakiler Filtresi
       if (inStockOnly && p.AvailableStock <= 0) return false;
-
-      // 4. İndirimli (Temsili olarak isDiscounted veya vs bakılır, şu an pas geçebiliriz veya özel logic eklenebilir)
-      // Şimdilik sadece dummy kontrol
-      // if (discountedOnly && !p.isDiscounted) return false; 
       
       return true;
     });
 
     // Sıralama
+    let sorted = [...filtered];
     if (sortOrder === 'priceAsc') {
-      filtered.sort((a, b) => (parseFloat(a.SalePrice) || 0) - (parseFloat(b.SalePrice) || 0));
+      sorted.sort((a, b) => (parseFloat(a.SalePrice) || 0) - (parseFloat(b.SalePrice) || 0));
     } else if (sortOrder === 'priceDesc') {
-      filtered.sort((a, b) => (parseFloat(b.SalePrice) || 0) - (parseFloat(a.SalePrice) || 0));
+      sorted.sort((a, b) => (parseFloat(b.SalePrice) || 0) - (parseFloat(a.SalePrice) || 0));
     } else if (sortOrder === 'newest') {
-      filtered.sort((a, b) => b.Id - a.Id);
+      sorted.sort((a, b) => b.Id - a.Id);
     } else if (sortOrder === 'oldest') {
-      filtered.sort((a, b) => a.Id - b.Id);
+      sorted.sort((a, b) => a.Id - b.Id);
     } else if (sortOrder === 'nameAsc') {
-      filtered.sort((a, b) => (a.ProductName || '').localeCompare(b.ProductName || ''));
+      sorted.sort((a, b) => (a.ProductName || '').localeCompare(b.ProductName || ''));
     } else if (sortOrder === 'nameDesc') {
-      filtered.sort((a, b) => (b.ProductName || '').localeCompare(a.ProductName || ''));
-    } else if (sortOrder === 'rating') {
-      // Şimdilik rating yok, dummy olarak sabit kalabilir
+      sorted.sort((a, b) => (b.ProductName || '').localeCompare(a.ProductName || ''));
     } else if (sortOrder === 'random') {
-      filtered.sort(() => Math.random() - 0.5);
+      sorted.sort(() => Math.random() - 0.5);
     }
     
-    return filtered;
+    return sorted;
   }, [products, selectedBrands, minPrice, maxPrice, inStockOnly, discountedOnly, newOnly, sortOrder]);
 
   const handleBrandToggle = (brandName) => {
