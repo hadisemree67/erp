@@ -72,7 +72,16 @@ const Home = () => {
           {/* Her kategori için ayrı bir Carousel — webCategories sırasına (ID) göre */}
           {webCategories.map(cat => {
             const category = cat.name;
-            const categoryProducts = products.filter(p => p.Category === category);
+            const categoryProducts = products.filter(p => {
+              if (p.Category === category) return true;
+              if (p.web_categories) {
+                try {
+                  const wc = typeof p.web_categories === 'string' ? JSON.parse(p.web_categories) : p.web_categories;
+                  if (Array.isArray(wc) && wc.includes(category)) return true;
+                } catch(e) {}
+              }
+              return false;
+            });
             if (categoryProducts.length === 0) return null;
             const banners = categoryBanners[category] || [];
             return (

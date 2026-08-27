@@ -21,15 +21,18 @@ const ProductCarousel = ({ title = "Ürünler", products = [] }) => {
   const { toggleFavorite, isFavorite } = useFavorites();
   const [addingId, setAddingId] = React.useState(null);
   const [localProducts, setLocalProducts] = React.useState([]);
-  const [currentIndex, setCurrentIndex] = React.useState(0);
-
+  const scrollRef = React.useRef(null);
   const isBestsellerSection = title === "Çok Satan Ürünler";
 
   const handleNext = () => {
-    if (currentIndex + 5 >= localProducts.length) {
-      setCurrentIndex(0);
-    } else {
-      setCurrentIndex(currentIndex + 5);
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+    }
+  };
+
+  const handlePrev = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: -300, behavior: 'smooth' });
     }
   };
 
@@ -66,8 +69,13 @@ const ProductCarousel = ({ title = "Ürünler", products = [] }) => {
       </div>
       
       <div className={styles.productGridContainer}>
-        <div className={styles.productGrid}>
-          {localProducts.slice(currentIndex, currentIndex + 5).map((product) => {
+        {localProducts.length > 5 && (
+          <button className={styles.prevBtn} onClick={handlePrev}>
+            <ChevronRight size={24} style={{ transform: 'rotate(180deg)' }} />
+          </button>
+        )}
+        <div className={styles.productGrid} ref={scrollRef}>
+          {localProducts.map((product) => {
           let mainImage = 'https://via.placeholder.com/300x300?text=Görsel+Yok';
           if (product.images && product.images.length > 0) {
             const imgPath = product.images[0];

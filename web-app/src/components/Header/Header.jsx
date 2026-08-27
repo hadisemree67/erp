@@ -10,7 +10,7 @@
 // Açıklama: Sitenin üst kısmındaki arama çubuğu, kullanıcı menüsü, sepet ve logoyu barındırır.
 // -----------------------------------------------------------------------------
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Search, User, Heart, ShoppingBag, Truck, CheckCircle2, Leaf, LogOut, Package, Ticket, MapPin, RefreshCcw, Bell, CreditCard, ShieldCheck, ChevronRight } from 'lucide-react';
 import LoginModal from '../LoginModal/LoginModal';
 import styles from './Header.module.css';
@@ -21,9 +21,18 @@ import { useFavorites } from '../../context/FavoritesContext';
 const Header = () => {
   // 1. State Tanımlamaları (Durum Yönetimi)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const { currentUser, login, logout } = useAuth();
   const { cartItemsCount } = useCart();
   const { favoritesCount } = useFavorites();
+  const navigate = useNavigate();
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/arama?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
   
   // 2. Yardımcı Fonksiyonlar (Helper Methods)
 
@@ -86,16 +95,18 @@ const Header = () => {
           </a>
 
           {/* Search */}
-          <div className={styles.searchBar}>
+          <form className={styles.searchBar} onSubmit={handleSearch}>
             <input 
               type="text" 
               placeholder="Ürün, kategori veya marka ara..." 
               className={styles.searchInput}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
-            <button className={styles.searchButton}>
+            <button type="submit" className={styles.searchButton}>
               <Search size={20} />
             </button>
-          </div>
+          </form>
 
           {/* User Actions */}
           <div className={styles.userActions}>

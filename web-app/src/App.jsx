@@ -10,6 +10,7 @@ import { Routes, Route } from 'react-router-dom';
 import Home from './pages/Home/Home';
 import ProductDetail from './pages/ProductDetail/ProductDetail';
 import CategoryPage from './pages/Category/CategoryPage';
+import SearchPage from './pages/Search/SearchPage';
 import BrandPage from './pages/Brand/BrandPage';
 import ProfileLayout from './pages/Profile/ProfileLayout';
 import MainLayout from './layouts/MainLayout';
@@ -41,6 +42,7 @@ function App() {
             <Route path="/category/:category/:subcategory" element={<CategoryPage />} />
             <Route path="/category/:category/:subcategory/:subtitle" element={<CategoryPage />} />
             <Route path="/brand/:brandName" element={<BrandPage />} />
+            <Route path="/arama" element={<SearchPage />} />
             <Route path="/sepetim" element={<CartPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/checkout/success" element={<CheckoutSuccess />} />

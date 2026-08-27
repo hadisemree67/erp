@@ -39,11 +39,14 @@ const authMiddleware = async (req, res, next) => {
         }
 
         // TEKİL OTURUM (STRICT SINGLE SESSION): Veritabanında bu token hala aktif mi?
+        // ŞİMDİLİK DEVRE DIŞI BIRAKILDI (Aynı anda mobilde ve webde kullanılabilmesi için)
+        /*
         const [activeSessionRows] = await db.query('SELECT id FROM user_sessions WHERE token = ?', [token]);
         if (activeSessionRows.length === 0) {
             console.warn(`[GÜVENLİK UYARISI] Personel hesabı başka cihazdan açıldığı için eski oturum düşürüldü.`);
             return res.status(401).json({ success: false, message: 'Hesabınıza başka bir cihazdan giriş yapıldı. Güvenliğiniz için bu oturum sonlandırıldı.' });
         }
+        */
 
         // Token'ın geçerliliği gizli anahtar (JWT_SECRET) kullanılarak doğrulanıyor
         const secretKey = process.env.JWT_SECRET;
@@ -76,7 +79,7 @@ const authMiddleware = async (req, res, next) => {
         // EK GÜVENLİK: Veritabanına gidip bu kullanıcı hala var mı ve aktif mi diye kontrol ediyoruz
         // PERFORMANS: 2 ayrı sorgu yapmak yerine tek bir LEFT JOIN sorgusu ile kullanıcıyı ve yetkilerini aynı anda çekiyoruz
         const [rows] = await db.query(`
-            SELECT u.id, u.role, u.is_active, p.permission_key 
+            SELECT u.id, u.role, u.name, u.is_active, p.permission_key 
             FROM users u 
             LEFT JOIN user_permissions up ON u.id = up.user_id 
             LEFT JOIN permissions p ON up.permission_id = p.id 
@@ -95,7 +98,9 @@ const authMiddleware = async (req, res, next) => {
 
         // Doğrulanmış kullanıcı verisi, güncel rol ve yetkilerle birlikte isteğe (req.user) ekleniyor
         req.user = {
-            ...decoded,
+            id: decoded.id,
+            username: decoded.username,
+            name: rows[0].name,
             role: rows[0].role, // DB'deki güncel rol
             permissions: permissions // DB'deki güncel yetkiler
         };

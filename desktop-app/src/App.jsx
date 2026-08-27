@@ -124,7 +124,22 @@ function App() {
             // Token veritabanında aktif ve geçerli, otomatik giriş yap.
             setCurrentUser(data.user);
             setIsLoggedIn(true);
-            fetchStats();
+            
+            const perms = data.user.permissions || [];
+            const isAdmin = data.user.role === 'admin';
+            
+            if (isAdmin || perms.includes('view_dashboard')) {
+              setCurrentView('anasayfa');
+              fetchStats();
+            } else if (perms.includes('view_products')) {
+              setCurrentView('urun-listesi');
+            } else if (perms.includes('view_employees')) {
+              setCurrentView('insan-kaynaklari');
+            } else if (perms.includes('view_offboarding')) {
+              setCurrentView('personel-cikis');
+            } else {
+              setCurrentView('anasayfa');
+            }
           } else {
             // Token çalınmış veya başka bir bilgisayardan giriş yapılmış
             localStorage.removeItem('token');
