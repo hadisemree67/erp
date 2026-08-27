@@ -65,7 +65,7 @@ router.post('/', authMiddleware, checkPermission('campaign_manage'), async (req,
         res.json({ success: true, message: 'Kupon oluşturuldu.', coupon: newCoupon });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: 'Kupon oluşturulurken hata oluştu: ' + error.message });
+        res.status(500).json({ success: false, message: 'Kupon oluşturulurken hata oluştu.' });
     }
 });
 

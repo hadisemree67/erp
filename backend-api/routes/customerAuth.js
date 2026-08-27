@@ -630,8 +630,7 @@ router.post('/login-verify', async (req, res) => {
         res.json({
             success: true,
             token,
-            user: { id: user.Id, name: user.CustomerName, email: user.Email, phone: user.Phone, TwoFactorEnabled: user.TwoFactorEnabled },
-            passwordHash: user.Password
+            user: { id: user.Id, name: user.CustomerName, email: user.Email, phone: user.Phone, TwoFactorEnabled: user.TwoFactorEnabled }
         });
     } catch (err) {
         console.error('Login verify error:', err);

@@ -211,7 +211,7 @@ app.use('/api/', generalLimiter);
 // GÜVENLİK: Login için Rate Limiter (Kaba kuvvet saldırılarını engeller)
 const loginLimiter = rateLimit({
     windowMs: 5 * 60 * 1000,
-    max: 1000, // [Geçici] Sunucu çökmesi sonrası çoklu denemelerde takılmamak için artırıldı
+    max: 10, // 5 dakikada en fazla 10 deneme
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message: 'Çok fazla başarısız giriş denemesi. Lütfen 5 dakika bekleyin.' }
@@ -609,7 +609,7 @@ app.post('/api/login', async (req, res) => {
 
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu: ' + error.message, stack: error.stack });
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu. Lütfen tekrar deneyin.' });
     }
 });
 

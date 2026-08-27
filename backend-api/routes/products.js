@@ -779,7 +779,7 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('Ürün güncellenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Ürün güncellenirken sunucu hatası oluştu: ' + (error.message || 'Bilinmeyen Hata') });
+        res.status(500).json({ success: false, message: 'Ürün güncellenirken sunucu hatası oluştu.' });
     }
 });
 

@@ -396,7 +396,7 @@ router.post('/stock-entry', authMiddleware, checkPermission('stock_entry'), asyn
         await conn.query('ROLLBACK');
         conn.release();
         console.error('Stok girişi hatası:', error);
-        res.status(500).json({ success: false, message: 'Stok işlemi sırasında hata oluştu. Detay: ' + (error.message || error.toString()) });
+        res.status(500).json({ success: false, message: 'Stok işlemi sırasında hata oluştu.' });
     }
 });
 
@@ -1179,7 +1179,7 @@ router.post('/deduct-fefo', authMiddleware, checkRole(['Depo']), async (req, res
     } catch (error) {
         await db.query('ROLLBACK');
         console.error('FEFO stok düşümü hatası:', error);
-        res.status(500).json({ success: false, message: 'Stok düşülürken hata oluştu: ' + error.message });
+        res.status(500).json({ success: false, message: 'Stok düşülürken hata oluştu.' });
     }
 });
 
