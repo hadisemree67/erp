@@ -144,18 +144,22 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const app = express();
 
-// A simple access logger
+// GÜVENLİK: Access logger — URL path gösterilir ama query string loglanmaz (token/OTP sızıntısını önler)
 app.use((req, res, next) => {
-    console.log(`[REQUEST] ${req.method} ${req.url}`);
+    const safePath = req.path; // Sadece path — query string yok
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`[REQUEST] ${req.method} ${safePath}`);
+    }
     const originalSend = res.send;
     res.send = function (data) {
-        if (res.statusCode >= 400) {
-            console.error(`[RESPONSE ERROR] ${req.method} ${req.url} -> Status: ${res.statusCode}`);
+        if (res.statusCode >= 400 && process.env.NODE_ENV !== 'production') {
+            console.error(`[RESPONSE ERROR] ${req.method} ${safePath} -> Status: ${res.statusCode}`);
         }
         return originalSend.apply(res, arguments);
     };
     next();
 });
+
 
 app.locals.system_paused = false;
 db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'system_paused'")
@@ -191,8 +195,41 @@ app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
 
+const ALLOWED_ORIGINS = [
+    'http://localhost:5173',  // Vite dev
+    'http://127.0.0.1:5173',  // Vite dev (127.0.0.1 formatı)
+    'http://localhost:4173',  // Vite preview
+    'http://localhost:3001',  // Web-app
+    'http://localhost:3002',  // Desktop-app dev sunucusu
+    'http://127.0.0.1:3002',  // Desktop-app dev sunucusu (127.0.0.1 formatı)
+    'app://',                 // Electron
+    'file://',                // Electron (file protokolü)
+];
+
 app.use(cors({
-    origin: true, // Gelen tüm origin'lere (Electron, Vite, file://) dinamik olarak izin verir.
+    origin: (origin, callback) => {
+        // Electron / desktop uygulamalar null origin gönderir, izin ver
+        if (!origin) return callback(null, true);
+        
+        // Ngrok veya prod domain'leri için env değişkeni desteği
+        const extraOrigin = process.env.ALLOWED_ORIGIN;
+        
+        // Geliştirme ortamında (localhost, 127.0.0.1 ve yerel ağ IP'leri) izin ver
+        if (
+            ALLOWED_ORIGINS.includes(origin) || 
+            (extraOrigin && origin === extraOrigin) ||
+            origin.startsWith('http://192.168.') || 
+            origin.startsWith('http://10.') || 
+            origin.startsWith('http://172.') ||
+            origin.startsWith('http://localhost:') ||
+            origin.startsWith('http://127.0.0.1:')
+        ) {
+            return callback(null, true);
+        }
+        
+        console.warn(`[GÜVENLİK] CORS reddedildi: ${origin}`);
+        return callback(new Error('CORS politikası: Bu kaynaktan erişim izni yok.'));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'ngrok-skip-browser-warning'],
     credentials: true
@@ -219,7 +256,8 @@ const loginLimiter = rateLimit({
 app.use('/api/login', loginLimiter);
 
 // JSON gövde sınırı (Denial of Service koruması) ve Syntax Error kalkanı
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         return res.status(400).json({ success: false, message: 'Geçersiz JSON formatı (Syntax Error) gönderildi.' });
@@ -499,7 +537,7 @@ app.put('/api/categories/:id/image', authMiddleware, checkRole(['Depo', 'Üretim
     }
 });
 
-app.get('/api/dashboard-stats', async (req, res) => {
+app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
     try {
         const [products] = await db.query("SELECT COUNT(Id) as count FROM products WHERE Category != 'Hammadde' OR Category IS NULL");
         const [brands] = await db.query('SELECT COUNT(id) as count FROM brands');
@@ -685,9 +723,15 @@ app.use((err, req, res, next) => {
         require('fs').appendFileSync('error.log', new Date().toISOString() + ' [API HATASI] ' + req.url + ' : ' + (err.stack || err.message || err) + '\n');
     } catch (e) { }
 
+    // GÜVENLİK: Production'da iç hata detaylarını (stack trace vb.) asla istemciye sızdırma
+    const isProduction = process.env.NODE_ENV === 'production';
+    const clientMessage = isProduction
+        ? 'Sunucu tarafında bir hata oluştu.'
+        : (err.message || 'Sunucu işlem sırasında bir hata ile karşılaştı.');
+
     res.status(err.status || 500).json({
         success: false,
-        message: err.message || 'Sunucu işlem sırasında bir hata ile karşılaştı.'
+        message: clientMessage
     });
 });
 

@@ -10,9 +10,28 @@ const router = express.Router();
 const db = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { generateFingerprint } = require('../utils/fingerprint');
 const prisma = require('../prisma');
 const { toFrontendStatus } = require('../utils/enumMapper');
+
+// GÜVENLİK: Müşteri login için brute-force koruşma
+const authLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 dakika
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Fazla deneme. Lütfen 10 dakika bekleyin.' }
+});
+
+// GÜVENLİK: OTP doğrulama için çok katlı brute-force koruşma (6 haneli = 1M olasılık)
+const otpLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 dakika
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Fazla yanlış doğrulama denemesi. Lütfen 10 dakika bekleyin.' }
+});
 // Müşteriler için özel yetkilendirme ve blacklist kontrol middleware'i
 const customerAuthMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -72,11 +91,19 @@ router.get('/verify', customerAuthMiddleware, (req, res) => {
 // GÜVENLİK İYİLEŞTİRMESİ: /fixdb debug endpoint'i schema sızıntısını önlemek için kaldırıldı.
 // POST /api/customers/auth/register
 // Step 1: Create unverified customer, hash password, generate OTP
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
     const { firstName, lastName, contact, password } = req.body;
     
     if (!firstName || !lastName || !contact || !password) {
         return res.status(400).json({ message: 'Tüm alanları doldurunuz.' });
+    }
+
+    // GÜVENLİK: Şifre gücü doğrulaması (Müşteri hesabı)
+    if (password.length < 8) {
+        return res.status(400).json({ message: 'Şifre en az 8 karakter olmalıdır.' });
+    }
+    if (!/[A-Z]/.test(password) && !/[a-z]/.test(password)) {
+        return res.status(400).json({ message: 'Şifre en az bir harf içermelidir.' });
     }
 
     try {
@@ -95,7 +122,7 @@ router.post('/register', async (req, res) => {
             // For simplicity, we'll update the existing unverified record
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 12); // Cost factor 12 (daha güvenli)
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP
         const otpExpiry = new Date(Date.now() + 5 * 60000); // 5 minutes from now
         
@@ -122,7 +149,7 @@ router.post('/register', async (req, res) => {
             const { sendOtpEmail } = require('../services/emailService');
             await sendOtpEmail(contact, otpCode, customerName);
         } else {
-            console.log(`\n=========================================\n[TELEFON SİMÜLASYONU] ${contact} için SMS kodu: ${otpCode}\n=========================================\n`);
+            console.log(`[TELEFON SİMÜLASYONU] ${contact} için SMS kodu gönderildi (kod loglanmıyor).`);
         }
 
         res.status(200).json({ message: 'Doğrulama kodu gönderildi.', contact });
@@ -135,7 +162,7 @@ router.post('/register', async (req, res) => {
 
 // POST /api/customers/auth/verify
 // Step 2: Verify OTP and activate account
-router.post('/verify', async (req, res) => {
+router.post('/verify', otpLimiter, async (req, res) => {
     const { contact, otpCode } = req.body;
     
     if (!contact || !otpCode) {
@@ -182,7 +209,7 @@ router.post('/verify', async (req, res) => {
 
 // POST /api/customers/auth/login
 // Step 3: Login verified customer
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
     const { contact, password } = req.body;
 
     if (!contact || !password) {
@@ -223,7 +250,7 @@ router.post('/login', async (req, res) => {
             const { sendOtpEmail } = require('../services/emailService');
             await sendOtpEmail(contact, otpCode, user.CustomerName);
         } else {
-            console.log(`\n[TELEFON SİMÜLASYONU] ${contact} için SMS kodu (2FA): ${otpCode}\n`);
+            console.log(`[TELEFON SİMÜLASYONU] ${contact} için 2FA kodu gönderildi (kod loglanmıyor).`);
         }
         
         return res.json({ success: true, requires2FA: true, contact, message: 'Doğrulama kodu gönderildi.' });
@@ -569,7 +596,7 @@ router.post('/change-password', customerAuthMiddleware, async (req, res) => {
             return res.status(400).json({ success: false, message: 'Mevcut şifreniz yanlış.' });
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await bcrypt.hash(newPassword, 12); // Cost factor 12
         await db.query('UPDATE customers SET Password = ? WHERE Id = ?', [hashedPassword, customerId]);
 
         res.json({ success: true, message: 'Şifreniz başarıyla güncellendi.' });
@@ -580,7 +607,7 @@ router.post('/change-password', customerAuthMiddleware, async (req, res) => {
 });
 // POST /api/customers/auth/login-verify
 // Step 4: Verify 2FA OTP and issue token
-router.post('/login-verify', async (req, res) => {
+router.post('/login-verify', otpLimiter, async (req, res) => {
     const { contact, otpCode } = req.body;
     
     if (!contact || !otpCode) {

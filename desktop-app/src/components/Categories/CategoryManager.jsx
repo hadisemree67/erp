@@ -234,14 +234,14 @@ export default function CategoryManager() {
                             onUpload={f => upload(`${API}/main/${selMain}/image`, f, setUpMain)}
                             uploading={upMain}
                             aspect="16/5"
-                            description="Kategoriye tıklandığında sayfanın en üstünde büyük banner olarak gözükür."
+                            description="Kategoriye tıklandığında sayfanın en üstünde büyük banner olarak gözükür. (Önerilen: 1920x600 px)"
                         />
                     </Section>
 
                     {/* 2. Alt Kategori Fotoğrafları */}
                     {mainCat?.subcategories?.length > 0 && (
                         <Section title="🗂️ Alt Kategori Fotoğrafları" badge="2" open={openSec.subPhotos} onToggle={() => toggle('subPhotos')}>
-                            <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 14px' }}>Her alt kategorinin sayfa girişindeki kutu fotoğrafı.</p>
+                            <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 14px' }}>Her alt kategorinin sayfa girişindeki kutu fotoğrafı. (Önerilen: 600x600 px veya 1:1 oran)</p>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' }}>
                                 {mainCat.subcategories.map(sub => (
                                     <ThumbSlot key={sub.id} item={sub}
@@ -272,7 +272,7 @@ export default function CategoryManager() {
                                             onUpload={f => upload(`${API}/sub/${selSub}/image`, f, setUpSubBan)}
                                             uploading={upSubBan}
                                             aspect="16/5"
-                                            description="Bu alt kategoriye girildiğinde sayfanın üstünde gözükür."
+                                            description="Bu alt kategoriye girildiğinde sayfanın üstünde gözükür. (Önerilen: 1920x600 px)"
                                         />
                                     </div>
 
@@ -281,7 +281,7 @@ export default function CategoryManager() {
                                         <div>
                                             <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a', marginBottom: '10px' }}>🏷️ Başlıklar</div>
                                             <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 12px' }}>
-                                                Kutu fotoğrafı yüklemek için <strong>📤</strong>'e tıklayın. Başlığın kendi sayfa banner'ı için <strong>"Banner Ekle"</strong> butonuna basın.
+                                                Kutu fotoğrafı yüklemek için <strong>📤</strong>'e tıklayın (Önerilen: 600x600 px veya 1:1 oran). Başlığın kendi sayfa banner'ı için <strong>"Banner Ekle"</strong> butonuna basın (Önerilen: 1920x600 px).
                                             </p>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                 {subCat.subtitles.map(title => (
@@ -325,7 +325,7 @@ export default function CategoryManager() {
                                                                     onUpload={f => upload(`${API}/title/${title.id}/image`, f, setUpTitleBan)}
                                                                     uploading={upTitleBan}
                                                                     aspect="16/5"
-                                                                    description={`"${title.name}" başlığına tıklandığında sayfanın üstünde görünecek banner.`}
+                                                                    description={`"${title.name}" başlığına tıklandığında sayfanın üstünde görünecek banner. (Önerilen: 1920x600 px)`}
                                                                 />
                                                             </div>
                                                         )}
@@ -341,7 +341,7 @@ export default function CategoryManager() {
 
                     {/* 4. Reklam Bannerları */}
                     <Section title="🎯 Reklam Bannerları (3 Slot)" badge="4" open={openSec.adBanners} onToggle={() => toggle('adBanners')}>
-                        <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 14px' }}>Kategori ürün listesinin üstünde yan yana görünen 3 reklam alanı. İsteğe bağlı marka bağlayabilirsiniz.</p>
+                        <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 14px' }}>Kategori ürün listesinin üstünde yan yana görünen 3 reklam alanı. İsteğe bağlı marka bağlayabilirsiniz. (Önerilen: 750x300 px)</p>
                         <div style={{ display: 'flex', gap: '12px' }}>
                             {banners.map((banner, i) => (
                                 <BannerSlot key={i} slot={i + 1} banner={banner} categoryId={parseInt(selMain)} brands={brands} onUpdate={() => fetchBanners(selMain)} />

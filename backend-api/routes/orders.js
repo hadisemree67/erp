@@ -876,7 +876,8 @@ router.post('/webhook/kargo', async (req, res) => {
 
 // POST /api/orders/public/checkout - Public web sipariş oluşturma
 router.post('/public/checkout', async (req, res) => {
-    const { session_id, shippingAddress, customerInfo, paymentMethod, shipperId, idempotencyKey, items, discountAmount } = req.body;
+    const { session_id, shippingAddress, customerInfo, paymentMethod, shipperId, idempotencyKey, items, couponCode } = req.body;
+    // GÜVENLİK: discountAmount artık frontend'den alınmıyor — kupon kodu backend'de doğrulanıyor
 
     if (!session_id || !shippingAddress || !customerInfo || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, message: 'Geçersiz veya eksik parametre.' });
@@ -940,14 +941,49 @@ router.post('/public/checkout', async (req, res) => {
             });
         }
 
-        // --- KAMPANYA HESAPLAMASI (Backend) ---
-        // Güvenlik açısından frontend'in gönderdiği değeri kullanırken ekstra kontroller eklenebilir, 
-        // ancak şimdilik B2C akışının tutarlı işlemesi için frontend değerini kabul ediyoruz.
-        let totalDiscount = Number(discountAmount) || 0;
+        // --- KAMPANYA / KUPON HESAPLAMASI (Backend) ---
+        // GÜVENLİK: İndirim miktarı frontend'den alınmıyor; kupon kodu backend'de doğrulanıyor.
+        let totalDiscount = 0;
         let appliedCampaignNames = [];
-        
-        if (totalDiscount > 0) {
-            appliedCampaignNames.push("Web Sepet İndirimi");
+
+        if (couponCode && typeof couponCode === 'string' && couponCode.trim().length > 0) {
+            try {
+                const db = require('../db');
+                const [coupons] = await db.query(
+                    `SELECT * FROM coupons WHERE code = ? AND is_active = 1 AND (end_date IS NULL OR end_date >= CURDATE())`,
+                    [couponCode.trim()]
+                );
+                if (coupons.length > 0) {
+                    const coupon = coupons[0];
+                    if (!coupon.usage_limit || coupon.used_count < coupon.usage_limit) {
+                        const baseTotal = validatedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+                        if (!coupon.minimum_order_amount || baseTotal >= parseFloat(coupon.minimum_order_amount)) {
+                            if (coupon.discount_type === 'Percentage') {
+                                totalDiscount = baseTotal * (parseFloat(coupon.discount_value) / 100);
+                                if (coupon.maximum_discount_amount) {
+                                    totalDiscount = Math.min(totalDiscount, parseFloat(coupon.maximum_discount_amount));
+                                }
+                            } else if (coupon.discount_type === 'FixedAmount') {
+                                totalDiscount = parseFloat(coupon.discount_value);
+                            } else if (coupon.discount_type === 'FreeShipping') {
+                                // Kargo üretsiz: aşağıda hesaplanır
+                                totalDiscount = 0;
+                            }
+                            totalDiscount = Math.min(totalDiscount, baseTotal); // İndirim siparişten fazla olamaz
+                            appliedCampaignNames.push(coupon.code);
+                            // Kupon kullanımını artır
+                            await db.query('UPDATE coupons SET used_count = used_count + 1 WHERE id = ?', [coupon.id]);
+                        }
+                    }
+                }
+            } catch (couponErr) {
+                console.error('Kupon doğrulama hatası (checkout):', couponErr);
+                // Kupon hatası siparışi engellemesin, sadece indirimsiz devam et
+            }
+        }
+
+        if (appliedCampaignNames.length > 0) {
+            // do nothing extra, names already tracked
         }
 
         // Kargo kuralı: 2000 TL ve üstü ücretsiz, altı 50 TL

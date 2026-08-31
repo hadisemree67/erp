@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  erp_mysql:
+    image: mysql:8.0
+    container_name: erp_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  erp_backend:
+    build:
+      context: ./backend-api
+    container_name: erp_backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      erp_mysql:
+        condition: service_healthy
+    command: sh -c "npx prisma db push && npm start"
+
+  erp_frontend:
+    build:
+      context: ./web-app
+    container_name: erp_frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL}

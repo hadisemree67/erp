@@ -1,12 +1,5 @@
 node_modules/
-.env
-.DS_Store
 dist/
-build/
-.wwebjs_auth/
-.wwebjs_cache/
-backend-api/uploads/
-desktop-app/admin_scripts/
-backend-api/admin_scripts/
-backend-api/.wwebjs_auth/
-backend-api/.wwebjs_cache/
+.env
+.env.*
+!.env.example

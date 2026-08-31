@@ -105,8 +105,6 @@ router.get('/public', async (req, res) => {
 
         queryStr += ` ORDER BY Id DESC`;
 
-        console.log("EXECUTING QUERY:", queryStr, params);
-
         const [rows] = await db.query(queryStr, params);
         
         // ImagePath JSON parse

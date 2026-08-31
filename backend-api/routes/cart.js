@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: cart
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -9,6 +9,22 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const rateLimit = require('express-rate-limit');
+
+// GÜVENLİK: Sepet işlemleri için rate limiter (DoS + stok manipulasyonu önleme)
+const cartLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, message: 'Sepet işlemlerini çok hızlı yapıyorsunuz. Lütfen bekleyin.' }
+});
+
+// GÜVENLİK: session_id format doğrulama (UUID v4 formatı)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const isValidSessionId = (id) => typeof id === 'string' && UUID_REGEX.test(id);
+
+router.use(cartLimiter);
 
 // Yardımcı Fonksiyon: Süresi geçmiş rezervasyonları temizle
 async function cleanupExpiredReservations() {
@@ -26,7 +42,8 @@ router.post('/reserve', async (req, res) => {
     const quantityInt = parseInt(quantity, 10);
     const productIdInt = parseInt(product_id, 10);
 
-    if (!session_id || isNaN(productIdInt) || isNaN(quantityInt) || quantityInt < 0) {
+    // GÜVENLİK: session_id formatını doğrula (UUID zorunlu)
+    if (!isValidSessionId(session_id) || isNaN(productIdInt) || isNaN(quantityInt) || quantityInt < 0) {
         return res.status(400).json({ success: false, message: 'Eksik veya geçersiz parametre.' });
     }
 
@@ -99,7 +116,7 @@ router.post('/reserve', async (req, res) => {
 router.post('/release', async (req, res) => {
     const { session_id, product_id } = req.body;
 
-    if (!session_id || !product_id) {
+    if (!isValidSessionId(session_id) || !product_id) {
         return res.status(400).json({ success: false, message: 'Eksik parametre.' });
     }
 
@@ -116,7 +133,7 @@ router.post('/release', async (req, res) => {
 router.post('/clear', async (req, res) => {
     const { session_id } = req.body;
 
-    if (!session_id) {
+    if (!isValidSessionId(session_id)) {
         return res.status(400).json({ success: false, message: 'Eksik parametre.' });
     }
 
@@ -133,6 +150,7 @@ router.post('/clear', async (req, res) => {
 router.post('/ping', async (req, res) => {
     const { session_id } = req.body;
     if (!session_id) return res.json({ success: true });
+    if (!isValidSessionId(session_id)) return res.status(400).json({ success: false, message: 'Geçersiz session_id.' });
 
     try {
         const expiresAt = new Date(Date.now() + 10 * 60000);
@@ -147,7 +165,7 @@ router.post('/ping', async (req, res) => {
 // GET /api/cart/my-reservations - Oturumdaki aktif rezervasyonları getir
 router.get('/my-reservations', async (req, res) => {
     const { session_id } = req.query;
-    if (!session_id) return res.status(400).json({ success: false, message: 'Eksik parametre.' });
+    if (!isValidSessionId(session_id)) return res.status(400).json({ success: false, message: 'Eksik parametre.' });
 
     try {
         await cleanupExpiredReservations();
@@ -162,7 +180,7 @@ router.get('/my-reservations', async (req, res) => {
 // POST /api/cart/validate-stock - Sepetteki ürünlerin güncel stok durumunu kontrol et
 router.post('/validate-stock', async (req, res) => {
     const { session_id, items } = req.body;
-    if (!session_id || !Array.isArray(items)) {
+    if (!isValidSessionId(session_id) || !Array.isArray(items)) {
         return res.status(400).json({ success: false, message: 'Eksik parametre.' });
     }
 

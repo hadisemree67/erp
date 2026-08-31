@@ -10,7 +10,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "electron:dev": "cross-env NODE_ENV=development electron .",
-    "desktop": "concurrently \"vite\" \"wait-on http://localhost:3002 && cross-env NODE_ENV=development electron .\""
+    "desktop": "concurrently \"vite\" \"wait-on http://localhost:3002 && cross-env NODE_ENV=development electron . --no-sandbox\""
   },
   "dependencies": {
     "dompurify": "^3.4.14",
@@ -26,11 +26,11 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
-    "concurrently": "^10.0.3",
-    "cross-env": "^10.1.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "electron": "^43.1.1",
     "oxlint": "^1.71.0",
     "vite": "^8.1.1",
-    "wait-on": "^9.0.10"
+    "wait-on": "^7.2.0"
   }
 }

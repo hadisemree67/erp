@@ -31,6 +31,7 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
+      sandbox: true, // GÜVENLİK: Renderer process tamamen sandbox'ta çalışır (XSS'ten Node.js koruması)
       webSecurity: true, // GÜVENLİK: Chromium same-origin korumasını devrede tut
       backgroundThrottling: false // Arka planda donmayı ve uykuya geçmeyi engeller
     }

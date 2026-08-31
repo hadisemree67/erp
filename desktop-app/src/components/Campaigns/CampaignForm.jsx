@@ -532,12 +532,12 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                 <div style={{ ...cardStyle, backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
                         <h3 style={{ ...sectionTitleStyle, borderBottom: 'none', paddingBottom: '0' }}>
-                            <span style={{ color: '#10b981' }}>4.</span> Kampanya Kapak Görseli (Yatay Banner)
+                            <span style={{ color: '#10b981' }}>4.</span> Kampanya Kapak Görseli (Yatay Banner - Önerilen: 1920x600 px)
                         </h3>
                         <button 
                             type="button" 
                             onClick={() => {
-                                const url = prompt('Görsel URL Adresini Girin (Örn: https://.../banner.jpg):');
+                                const url = prompt('Görsel URL Adresini Girin (Örn: https://.../banner.jpg) - Önerilen boyut 1920x600 px:');
                                 if (url && url.trim()) {
                                     setImagePreview(url.trim());
                                     setFormData(prev => ({ ...prev, existing_cover_image: url.trim(), cover_image: null }));
