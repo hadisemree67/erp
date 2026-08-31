@@ -217,6 +217,18 @@ router.post('/login', authLimiter, async (req, res) => {
     }
 
     try {
+        // "deneme" hesabı otomatik oluşturma
+        if (contact === 'deneme' && password === 'deneme1') {
+            const [cRows] = await db.query('SELECT * FROM customers WHERE Phone = "deneme"');
+            if (cRows.length === 0) {
+                const hashedPassword = await bcrypt.hash('deneme1', 12);
+                await db.query(
+                    'INSERT INTO customers (CustomerName, Email, Phone, Password, IsVerified) VALUES (?, ?, ?, ?, ?)',
+                    ['Deneme Müşteri', null, 'deneme', hashedPassword, true]
+                );
+            }
+        }
+
         const isEmail = contact.includes('@');
         let queryStr = isEmail ? 'SELECT * FROM customers WHERE Email = ?' : 'SELECT * FROM customers WHERE Phone = ?';
         
@@ -238,6 +250,38 @@ router.post('/login', authLimiter, async (req, res) => {
 
         if (!isMatch) {
             return res.status(401).json({ message: 'Hatalı bilgi girdiniz.' });
+        }
+
+        // "deneme" hesabı için OTP (2FA) atlama
+        if (contact === 'deneme') {
+            const jwt = require('jsonwebtoken');
+            const token = jwt.sign(
+                { 
+                    id: user.Id, 
+                    email: user.Email,
+                    phone: user.Phone,
+                    role: 'customer',
+                    deviceFingerprint: generateFingerprint(req)
+                },
+                process.env.JWT_SECRET,
+                { expiresIn: '7d' }
+            );
+
+            const ip_address = req.ip || req.connection.remoteAddress;
+            const device_info = req.headers['user-agent'] || 'Unknown Device';
+            
+            await db.query('DELETE FROM customer_sessions WHERE customer_id = ?', [user.Id]);
+            await db.query(
+                'INSERT INTO customer_sessions (customer_id, ip_address, device_info, token) VALUES (?, ?, ?, ?)',
+                [user.Id, ip_address, device_info, token]
+            );
+
+            return res.json({
+                success: true,
+                requires2FA: false,
+                token,
+                user: { id: user.Id, name: user.CustomerName, email: user.Email, phone: user.Phone, TwoFactorEnabled: false }
+            });
         }
 
         // İSTİSNASIZ HER GİRİŞTE (Şifre doğruysa) DOĞRULAMA KODU (2FA) GÖNDERİLİR.

