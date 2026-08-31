@@ -576,6 +576,19 @@ app.post('/api/login', async (req, res) => {
                     'INSERT INTO users (username, name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?)',
                     ['deneme', 'Deneme Admin', 'admin@deneme.com', hashedPassword, 'admin', true]
                 );
+                
+                // Demo Ürünlerini Ekle (Eğer hiç ürün yoksa)
+                const [pRows] = await db.query('SELECT COUNT(*) as count FROM products');
+                if (pRows[0].count === 0) {
+                    await db.query(
+                        'INSERT INTO products (ProductName, Brand, Category, SalePrice, StockQuantity, ImagePath) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)',
+                        [
+                            'Örnek Nemlendirici Krem', 'DemoMarka', 'Kozmetik', 299.90, 50, '',
+                            'Örnek Mat Ruj', 'DemoMarka', 'Kozmetik', 149.90, 120, '',
+                            'Örnek Göz Farı Paleti', 'DemoMarka', 'Kozmetik', 399.90, 30, ''
+                        ]
+                    );
+                }
             }
         }
 
