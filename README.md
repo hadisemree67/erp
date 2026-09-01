@@ -1,54 +1,152 @@
-# Stok, Üretim ve Depo Yönetim Sistemi (WMS & ERP)
+<div align="center">
+  <img src="https://raw.githubusercontent.com/github/explore/80688e429a7d4ef2fca1e82350fe8e3517d3494d/topics/nodejs/nodejs.png" alt="Logo" width="80" height="80">
+  <h1 align="center">Stok, Üretim ve Depo Yönetim Sistemi (WMS & ERP)</h1>
+  
+  <p align="center">
+    Uçtan uca üretim, tedarik, depo yerleşimi ve sipariş yönetimi sağlayan kapsamlı sistem.
+    <br />
+    <a href="#-özellikler"><strong>Özellikleri Keşfet »</strong></a>
+    <br />
+    <br />
+    <a href="#-kurulum">Kurulum</a>
+    ·
+    <a href="#-temel-iş-akışı">İş Akışı</a>
+    ·
+    <a href="#-kullanılan-teknolojiler">Teknolojiler</a>
+  </p>
+</div>
 
-Bu proje; üretim, tedarik, depo yerleşimi, sipariş yönetimi ve raporlama süreçlerini tek bir merkezden uçtan uca yönetmeyi sağlayan kapsamlı bir sistemdir. Masaüstü (Electron/React), Mobil (React Native) ve Backend (Node.js/MySQL) olarak üç ana bileşenden oluşur.
+<!-- Badges -->
+<div align="center">
+  <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+  <img src="https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React Native" />
+  <img src="https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white" alt="Electron.js" />
+  <img src="https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL" />
+  <img src="https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white" alt="Prisma" />
+</div>
 
-## 🔄 Temel İş Akışı (Sistem Nasıl Çalışır?)
+---
 
-Sistem, bir üretim tesisinin veya e-ticaret deposunun günlük operasyon akışına göre tasarlanmıştır:
+## 📖 Proje Hakkında
 
-### 1. Malzeme ve Tedarikçi Tanımlamaları
-Her şeyin başlangıcı temel verilerin girilmesidir. Sisteme öncelikle hammadde tedarikçileri ve bu tedarikçilerden alınacak malzemeler (Hammaddeler, ambalajlar vb.) girilir. Hangi tedarikçiden hangi malzemenin kaç paraya ve kaç günde temin edildiği (Sözleşmeler ve PDF'ler dahil) sisteme işlenir.
+Bu proje; bir üretim tesisinin veya e-ticaret deposunun günlük operasyon akışını dijitalleştirmek ve otonom hale getirmek için tasarlanmıştır. **Web (E-Ticaret Platformu), Masaüstü (ERP Yönetim Paneli), Mobil (Depo Personeli Uygulaması) ve Backend (Sunucu API)** olarak dört ana bileşenden oluşur. Manuel hataları en aza indirir, süreçleri hızlandırır ve depo hacmini maksimum verimle kullanmanızı sağlar.
 
-### 2. Ürün Formülü (Reçete) Oluşturma
-Üretilecek nihai ürünler için "Formül / Reçete" tanımlanır. Örneğin, "Bir adet A ürünü üretmek için, X hammaddesinden 10 gram, Y ambalajından 1 adet gerekir" şeklinde ürün mimarisi sisteme tanıtılır.
+## ✨ Özellikler
 
-### 3. Depo ve Stok Girişleri (WMS Algoritmaları)
-Sisteme giren hammaddeler veya üretilen yeni ürünler için stok girişleri yapılır. Sistem bu aşamada çok akıllı davranır:
-* Ürünün hacmi (en, boy, derinlik, çap) ve ağırlığı otomatik hesaplanır.
-* Koli / Kutu kapasitesi ve "Üst üste konulabilir mi?" (İstifleme limiti) özellikleri okunur.
-* Depodaki rafların boş m³ hacimlerine ve taşıma kapasitelerine bakılarak personeline **"Bu ürünü A deposundaki 3 numaralı rafa yerleştir"** şeklinde otonom yönlendirme yapar.
+- 📦 **Gelişmiş WMS Algoritmaları:** Hacim ve ağırlık bazlı otonom raf yönlendirmesi.
+- 🏭 **Ürün Reçetesi (BOM):** Nihai ürünler için dinamik formül ve bileşen tanımlama.
+- 📉 **Akıllı Stok Takibi:** Kritik stok seviyelerinde otomatik üretim veya tedarik talebi.
+- 📧 **Otonom Satın Alma:** Tedarikçilere otomatik sipariş ve onay e-postaları.
+- 📱 **Mobil Barkod Okuma:** Hatalı paketlemeyi %100 engelleyen el terminali entegrasyonu.
+- 📊 **Detaylı Raporlama:** Demografik veri analizi ve tek tıkla Excel çıktıları.
+- 🛡️ **Acil Durum Kalkanı (Kill Switch):** Siber saldırı veya sayım anında sistemi güvenli dondurma.
 
-### 4. Akıllı Stok Takibi ve Üretim Talebi
-Satışlar oldukça veya üretim yapıldıkça stoklar anlık olarak sistemden düşer.
-* Bir nihai ürünün (Satılan ürünün) stoku, belirlenen **Kritik Stok Seviyesi**nin altına düştüğünde sistem bunu algılar ve hemen "Üretime Talep" oluşturur.
+---
 
-### 5. Otomatik Satın Alma ve Tedarikçi Mailleri (Purchasing)
-Eğer üretime talep oluşturulduğunda içeride yeterli "Hammadde" yoksa (hammadde kritik seviyenin altına düşmüşse), sistem Satın Alma döngüsünü tetikler.
-* Tedarikçiler arasından en uygun olanı (fiyat veya hıza göre) otomatik seçer.
-* Tedarikçiye onay linki içeren otonom e-postalar gönderir. Tedarikçi e-postadaki linke tıklayarak siparişi onayladığında ERP sistemine "Yola Çıktı" olarak düşer.
+## 🔄 Temel İş Akışı
 
-### 6. Sipariş ve Satış Yönetimi
-E-Ticaret veya B2B müşterilerinden gelen siparişler sisteme yansır.
-* Müşterilerin detaylı bilgileri (Cinsiyet, Yaş, Şehir gibi demografik veriler) tutulur.
-* Onaylanan siparişler doğrudan **Paketleme Sırasına** aktarılır.
+Sistem aşağıdaki adımları birbirine entegre bir şekilde yürütür:
 
-### 7. Mobil Uygulama ve El Terminalleri
-Paketleme sırasına giren siparişler deponun içinde personelin telefonuna (veya el terminaline) bildirim olarak düşer.
-* Personel mobil uygulama üzerinden siparişteki ürünlerin barkodlarını okutarak paketleme işlemini yapar. Hatalı ürün konulmasını %100 engeller.
-* Sevkiyat (Kargo) işlemi tamamlandığında stoklar sistemden kalıcı olarak düşer.
+### 1. 🏢 Malzeme ve Tedarikçi Tanımlamaları
+Her şeyin başlangıcı temel verilerin girilmesidir. Sisteme öncelikle hammadde tedarikçileri ve bu tedarikçilerden alınacak malzemeler (Hammaddeler, ambalajlar vb.) girilir. Hangi tedarikçiden hangi malzemenin kaç paraya ve kaç günde temin edildiği sisteme işlenir.
 
-### 8. Gelişmiş Raporlama (Excel Dışa Aktarım)
-Sistemdeki tüm hareketler; Müşteri, Sipariş, Stok ve Yaş/Cinsiyet/Şehir filtrelerine göre analiz edilip tek tıkla Excel formatında indirilebilir. İşletmenin anlık durumu (Nereden kim ne almış, hangi rafta ne var) en ince ayrıntısına kadar raporlanır.
+### 2. 🧪 Ürün Formülü (Reçete) Oluşturma
+Üretilecek nihai ürünler için "Formül / Reçete" tanımlanır. (Örn: *Bir adet A ürünü için X'ten 10g, Y'den 1 adet gerekir.*)
 
-### 9. Güvenli Sayım Modu / Acil Durum Kalkanı (Kill Switch)
-Depolarda genel sayım (Inventory Count) yapılacağı zaman veya **olası bir siber saldırı / iç sabotaj durumunda**, işlemlerin durdurulması için **Sistem Durdurma (Zamanı Dondurma)** özelliği devreye alınır.
-* Ayarlardan "Sistemi Durdur" butonuna basıldığı milisaniyede tüm sistemde çok güçlü bir güvenlik kalkanı (Global Middleware) aktif olur.
-* Sistem o saniyede donar; personel, dış API'ler veya hacker botları yeni ürün, stok ekleyemez ve en önemlisi **hiçbir veriyi SİLEMEZ** (Uygulama arka planda HTTP 503 güvenliğiyle tüm veritabanı yazma/silme isteklerini reddeder).
-* Sayım bittiğinde veya tehdit geçtiğinde kilit açılır ve sistem normal akışına sorunsuz devam eder. Hiçbir veri bozulması veya çakışma yaşanmaz.
+### 3. 🧩 Depo ve Stok Girişleri (Akıllı Yerleşim)
+Sisteme giren malzemeler için stok girişleri yapılır. Sistem:
+- Ürünün hacmi (en/boy/derinlik/çap) ve ağırlığını hesaplar.
+- İstifleme limitini kontrol eder.
+- Rafların boş m³ hacimlerine bakarak personele **"Bu ürünü A deposundaki 3 numaralı rafa yerleştir"** şeklinde otonom yönlendirme yapar.
+
+### 4. 📉 Akıllı Stok Takibi ve Üretim Talebi
+Satış oldukça veya üretim yapıldıkça stoklar anlık düşer. Stok, **Kritik Seviyenin** altına düştüğünde sistem otomatik "Üretime Talep" oluşturur.
+
+### 5. 🤝 Otomatik Satın Alma (Purchasing)
+Üretime talep oluşturulduğunda içeride yeterli hammadde yoksa sistem Satın Alma döngüsünü tetikler. Tedarikçiler arasından en uygununu seçer, otonom e-postalar gönderir ve onay bekler.
+
+### 6. 🛒 Sipariş ve Satış Yönetimi
+E-Ticaret veya B2B müşterilerinden gelen siparişler (demografik verilerle birlikte) sisteme yansır. Onaylanan siparişler doğrudan **Paketleme Sırasına** aktarılır.
+
+### 7. 📱 Mobil Uygulama ve El Terminalleri
+Paketleme sırasına giren siparişler deponun içinde personelin telefonuna (veya el terminaline) bildirim olarak düşer. Personel mobil üzerinden barkod okutarak paketleme yapar. Sevkiyat tamamlandığında stoklar kalıcı olarak düşer.
+
+### 8. 🛡️ Güvenli Sayım Modu / Acil Durum Kalkanı (Kill Switch)
+Depolarda genel sayım (Inventory Count) yapılacağı zaman veya **olası bir siber saldırı/iç sabotaj durumunda**, işlemlerin durdurulması için "Sistemi Durdur" özelliği devreye alınır. Tüm veritabanı yazma/silme işlemleri HTTP 503 güvenliğiyle reddedilir.
 
 ---
 
 ## 🛠 Kullanılan Teknolojiler
-* **Backend:** Node.js, Express.js, Prisma ORM, MySQL (Tamamen Parametrik Güvenli Sorgular).
-* **Masaüstü Frontend:** React.js, Vite, Electron.js, TailwindCSS.
-* **Mobil Frontend:** React Native, Expo (Barkod ve Kamera entegreli).
+
+Proje modern, ölçeklenebilir ve güvenli teknolojiler üzerine inşa edilmiştir:
+
+### Backend (Sunucu & Veritabanı)
+- **Node.js & Express.js:** Hızlı ve asenkron API sunucusu
+- **Prisma ORM:** Tip güvenli veritabanı sorguları
+- **MySQL:** İlişkisel veritabanı (Parametrik güvenlikli)
+
+### Web (E-Ticaret Sitesi) & Masaüstü (Yönetim Paneli)
+- **React.js (Vite):** Yüksek performanslı e-ticaret arayüzü ve yönetim paneli
+- **Electron.js:** Cross-platform masaüstü ERP uygulama yeteneği
+- **TailwindCSS:** Hızlı ve modern stillendirme
+
+### Mobil Uygulama (Depo Personeli İçin)
+- **React Native & Expo:** iOS ve Android uyumlu mobil uygulama (Barkod & Kamera entegreli)
+
+---
+
+## 🚀 Kurulum
+
+Projeyi kendi ortamınızda çalıştırmak için aşağıdaki adımları izleyebilirsiniz.
+
+### Ön Koşullar
+- [Node.js](https://nodejs.org/) (v16 veya üzeri)
+- [MySQL](https://www.mysql.com/) Veritabanı
+- Git
+
+### Adımlar
+
+1. **Repoyu klonlayın**
+   ```bash
+   git clone https://github.com/kullaniciadi/stokerpsistemi.git
+   cd stokerpsistemi
+   ```
+
+2. **Backend'i başlatın**
+   ```bash
+   cd backend-api
+   npm install
+   # .env.example dosyasını .env olarak kopyalayın ve veritabanı bilgilerinizi girin
+   cp .env.example .env
+   # Prisma veritabanı tablolarını oluşturun
+   npx prisma migrate dev
+   npm run dev
+   ```
+
+3. **E-Ticaret Sitesini (Web App) başlatın** (Yeni bir terminalde)
+   ```bash
+   cd ../web-app
+   npm install
+   npm run dev
+   ```
+
+4. **Mobil Uygulamayı (Expo) başlatın** (Yeni bir terminalde)
+   ```bash
+   cd ../mobile-app
+   npm install
+   npm start
+   ```
+
+5. **Masaüstü ERP Uygulamasını başlatın** (Yeni bir terminalde)
+   ```bash
+   cd ../desktop-app
+   npm install
+   npm run desktop
+   ```
+
+---
+
+<div align="center">
+  <p>Geliştirme ve tasarımla ilgili tüm sorularınız için Pull Request açabilir veya Issues kısmından ulaşabilirsiniz.</p>
+</div>
