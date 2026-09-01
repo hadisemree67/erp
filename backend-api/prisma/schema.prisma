@@ -757,6 +757,7 @@ enum orders_OrderStatus {
   Teslim_Edildi   @map("Teslim Edildi")
   ptal            @map("İptal")
   ptal_Edildi     @map("İptal Edildi")
+  ptal_Bekliyor   @map("İptal Bekliyor")
 }
 
 enum purchase_requests_status {

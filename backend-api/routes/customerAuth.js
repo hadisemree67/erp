@@ -434,6 +434,10 @@ router.get('/my-orders', customerAuthMiddleware, async (req, res) => {
     try {
         const userId = req.user.id;
         
+        // Geçici düzeltme: 'İptal Bekliyor' Prisma şemasında olmadığı için çökmeye sebep oluyor.
+        // npx prisma generate çalıştırılana kadar veritabanındaki bozuk veriyi düzelt.
+        await db.query("UPDATE orders SET OrderStatus = 'Beklemede' WHERE OrderStatus = 'İptal Bekliyor'");
+
         const orders = await prisma.orders.findMany({
             where: { CustomerId: userId },
             include: {
@@ -463,9 +467,15 @@ router.get('/my-orders', customerAuthMiddleware, async (req, res) => {
             const activeCancelRequest = allReturns.find(r => r.order_id === o.Id && r.status === 'Beklemede');
             let cancelledItemsList = [];
             if (activeCancelRequest && activeCancelRequest.items_json) {
-                cancelledItemsList = typeof activeCancelRequest.items_json === 'string' 
-                    ? JSON.parse(activeCancelRequest.items_json) 
-                    : activeCancelRequest.items_json;
+                try {
+                    cancelledItemsList = typeof activeCancelRequest.items_json === 'string' 
+                        ? JSON.parse(activeCancelRequest.items_json) 
+                        : activeCancelRequest.items_json;
+                    if (!Array.isArray(cancelledItemsList)) cancelledItemsList = [];
+                } catch(e) {
+                    console.error("activeCancelRequest.items_json parse hatası:", e);
+                    cancelledItemsList = [];
+                }
             }
 
             // İptal bekleyen ürünleri normal listeden çıkar veya miktarını düşür
@@ -507,9 +517,15 @@ router.get('/my-orders', customerAuthMiddleware, async (req, res) => {
             const approvedCancelRequest = allReturns.find(r => r.order_id === o.Id && r.status === 'Onaylandı');
             let cancelledItems = [];
             if (approvedCancelRequest && approvedCancelRequest.items_json) {
-                cancelledItems = typeof approvedCancelRequest.items_json === 'string'
-                    ? JSON.parse(approvedCancelRequest.items_json)
-                    : approvedCancelRequest.items_json;
+                try {
+                    cancelledItems = typeof approvedCancelRequest.items_json === 'string'
+                        ? JSON.parse(approvedCancelRequest.items_json)
+                        : approvedCancelRequest.items_json;
+                    if (!Array.isArray(cancelledItems)) cancelledItems = [];
+                } catch(e) {
+                    console.error("approvedCancelRequest.items_json parse hatası:", e);
+                    cancelledItems = [];
+                }
             }
 
             return {
@@ -523,7 +539,8 @@ router.get('/my-orders', customerAuthMiddleware, async (req, res) => {
         res.json({ success: true, data: formattedOrders });
     } catch (err) {
         console.error('Müşteri siparişleri getirilirken hata:', err);
-        res.status(500).json({ success: false, message: 'Siparişleriniz yüklenemedi.' });
+        require('fs').writeFileSync('error.log', err.stack || err.toString());
+        res.status(500).json({ success: false, message: 'Siparişleriniz yüklenemedi.', error: err.message, stack: err.stack });
     }
 });
 // GET /api/customers/auth/returns
@@ -562,11 +579,14 @@ router.post('/returns', customerAuthMiddleware, async (req, res) => {
         const decoded = req.user;
         const { order_id, request_type, reason, description, items } = req.body;
         
+        // XSS Önlemi: HTML taglerini temizle
+        const safeReason = reason ? reason.replace(/<[^>]*>?/gm, '') : reason;
+        const safeDescription = description ? description.replace(/<[^>]*>?/gm, '') : description;
         const itemsJson = JSON.stringify(items);
         
         const [result] = await db.query(
             'INSERT INTO order_returns (customer_id, order_id, request_type, reason, description, items_json) VALUES (?, ?, ?, ?, ?, ?)',
-            [decoded.id, order_id, request_type, reason, description, itemsJson]
+            [decoded.id, order_id, request_type, safeReason, safeDescription, itemsJson]
         );
         
         // Eğer iptal talebi ise, siparişi dondur (toplanmaması için)

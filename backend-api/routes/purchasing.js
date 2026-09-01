@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: purchasing
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -202,6 +202,16 @@ router.get('/orders/action', async (req, res) => {
         return res.status(400).send("Geçersiz durum güncellemesi.");
     }
 
+    // GÜVENLİK: Defense-in-depth — whitelist kontrolü yeterli olsa da
+    // HTML'e yazılan tüm değerler escape edilir (XSS önleme katmanı)
+    const escapeHtml = (str) => String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    const safeStatus = escapeHtml(status);
+
     try {
         const [result] = await db.query(`
             UPDATE purchase_orders 
@@ -225,7 +235,7 @@ router.get('/orders/action', async (req, res) => {
                 <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto;">
                     <h1 style="color: #059669; font-size: 48px; margin: 0;">✓</h1>
                     <h2 style="color: #0f172a;">Durum Başarıyla Güncellendi</h2>
-                    <p style="color: #64748b; font-size: 18px;">Siparişin durumu <strong>"${status}"</strong> olarak ERP sistemine kaydedildi.</p>
+                    <p style="color: #64748b; font-size: 18px;">Siparişin durumu <strong>"${safeStatus}"</strong> olarak ERP sistemine kaydedildi.</p>
                     <p style="color: #94a3b8; font-size: 14px; margin-top: 30px;">Bu pencereyi kapatabilirsiniz.</p>
                 </div>
             </body></html>

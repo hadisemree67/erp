@@ -10,6 +10,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
+const db = require('../db');
 const { toFrontendStatus, toPrismaStatus } = require('../utils/enumMapper');
 const authMiddleware = require('../middleware/auth');
 const { checkRole, checkPermission } = require('../middleware/rbac');
@@ -22,6 +23,9 @@ const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 // ===========================
 router.get('/', authMiddleware, checkPermission('view_orders'), async (req, res) => {
     try {
+        // Geçici düzeltme: 'İptal Bekliyor' Prisma şemasında olmadığı için çökmeye sebep oluyor.
+        await db.query("UPDATE orders SET OrderStatus = 'Beklemede' WHERE OrderStatus = 'İptal Bekliyor'");
+
         const orders = await prisma.orders.findMany({
             include: {
                 customers: true,
@@ -96,7 +100,8 @@ router.get('/', authMiddleware, checkPermission('view_orders'), async (req, res)
         res.json({ success: true, data: formattedOrders });
     } catch (err) {
         console.error('Siparişler çekilirken hata:', err);
-        res.status(500).json({ success: false, message: 'Siparişler yüklenemedi.' });
+        require('fs').writeFileSync('error.log', err.stack || err.toString());
+        res.status(500).json({ success: false, message: 'Siparişler yüklenemedi.', error: err.message, stack: err.stack });
     }
 });
 
@@ -1111,12 +1116,28 @@ router.post('/public/checkout', async (req, res) => {
 // GET /api/orders/returns - İade ve talepleri getir (Admin)
 router.get('/returns', authMiddleware, checkPermission('view_orders'), async (req, res) => {
     try {
-        const returns = await prisma.order_returns.findMany({
-            include: {
-                customers: true,
-                orders: true
-            },
-            orderBy: { created_at: 'desc' }
+        const [rows] = await db.query(`
+            SELECT r.*, 
+                   c.Id as c_Id, c.CustomerName, c.Email, c.Phone,
+                   o.Id as o_Id, o.OrderNumber, o.TotalAmount, o.OrderDate
+            FROM order_returns r
+            LEFT JOIN customers c ON r.customer_id = c.Id
+            LEFT JOIN orders o ON r.order_id = o.Id
+            ORDER BY r.created_at DESC
+        `);
+
+        const returns = rows.map(row => {
+            const ret = { ...row };
+            delete ret.c_Id; delete ret.CustomerName; delete ret.Email; delete ret.Phone;
+            delete ret.o_Id; delete ret.OrderNumber; delete ret.TotalAmount; delete ret.OrderDate;
+            
+            if (row.c_Id) {
+                ret.customers = { Id: row.c_Id, CustomerName: row.CustomerName, Email: row.Email, Phone: row.Phone };
+            }
+            if (row.o_Id) {
+                ret.orders = { Id: row.o_Id, OrderNumber: row.OrderNumber, TotalAmount: row.TotalAmount, OrderDate: row.OrderDate };
+            }
+            return ret;
         });
 
         // Eski kayıtlarda resim yoksa dinamik olarak çekelim
@@ -1155,9 +1176,8 @@ router.put('/returns/:id', authMiddleware, checkPermission('edit_orders'), async
         if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz İade/Talep ID.' });
         const { status } = req.body;
         
-        const returnRequest = await prisma.order_returns.findUnique({
-            where: { id: id }
-        });
+        const [returnRows] = await db.query('SELECT * FROM order_returns WHERE id = ?', [id]);
+        const returnRequest = returnRows.length > 0 ? returnRows[0] : null;
 
         if (!returnRequest) {
             return res.status(404).json({ success: false, message: 'Talep bulunamadı.' });
@@ -1168,7 +1188,13 @@ router.put('/returns/:id', authMiddleware, checkPermission('edit_orders'), async
             const orderId = returnRequest.order_id;
             
             if (status === 'Onaylandı') {
-                const cancelledItems = typeof returnRequest.items_json === 'string' ? JSON.parse(returnRequest.items_json) : (returnRequest.items_json || []);
+                let cancelledItems = [];
+                try {
+                    cancelledItems = typeof returnRequest.items_json === 'string' ? JSON.parse(returnRequest.items_json) : (returnRequest.items_json || []);
+                    if (!Array.isArray(cancelledItems)) cancelledItems = [];
+                } catch(e) {
+                    console.error("JSON Parse Error in returns:", e);
+                }
                 
                 const order = await prisma.orders.findUnique({
                     where: { Id: orderId },
@@ -1266,10 +1292,8 @@ router.put('/returns/:id', authMiddleware, checkPermission('edit_orders'), async
             }
         }
         
-        await prisma.order_returns.update({
-            where: { id: parseInt(id) },
-            data: { status }
-        });
+        await db.query('UPDATE order_returns SET status = ? WHERE id = ?', [status, parseInt(id)]);
+
         // Activity log
         logActivity(req.user.id, `İade/Talep güncellendi. ID: ${id}, Yeni Durum: ${status}`);
 
@@ -1281,3 +1305,5 @@ router.put('/returns/:id', authMiddleware, checkPermission('edit_orders'), async
 });
 
 module.exports = router;
+
+router.get('/test-crash', async (req, res) => { try { const response = await fetch('http://localhost:5000/api/orders'); const text = await response.text(); res.send(text); } catch(e) { res.send(e.toString()); } });

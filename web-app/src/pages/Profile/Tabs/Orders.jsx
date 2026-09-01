@@ -42,7 +42,7 @@ const Orders = () => {
       if (data.success) {
         setOrders(data.data);
       } else {
-        setError(data.message || 'Siparişler yüklenemedi.');
+        setError((data.message || 'Siparişler yüklenemedi.') + (data.error ? ' | Hata Detayı: ' + data.error : ''));
       }
     } catch (err) {
       setError('Sunucu bağlantı hatası: ' + err.message);
