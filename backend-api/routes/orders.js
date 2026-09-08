@@ -23,8 +23,6 @@ const { checkAndNotifyLowStock } = require('../utils/stockNotifier');
 // ===========================
 router.get('/', authMiddleware, checkPermission('view_orders'), async (req, res) => {
     try {
-        // Geçici düzeltme: 'İptal Bekliyor' Prisma şemasında olmadığı için çökmeye sebep oluyor.
-        await db.query("UPDATE orders SET OrderStatus = 'Beklemede' WHERE OrderStatus = 'İptal Bekliyor'");
 
         const orders = await prisma.orders.findMany({
             include: {

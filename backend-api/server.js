@@ -18,119 +18,13 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const db = require('./db');
-const bcrypt = require('bcrypt');
 const helmet = require('helmet');
-const { logActivity } = require('./utils/logger');
 const path = require('path');
-const multer = require('multer');
-const { generateFingerprint } = require('./utils/fingerprint');
-const authenticateToken = require('./middleware/auth');
-
-const brandStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, 'brand-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
-// GÜVENLİK: Marka görseli yüklemesi için dosya türü filtresi — sadece resimlere izin ver
-const brandFileFilter = (req, file, cb) => {
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowedMimeTypes.includes(file.mimetype) && allowedExtensions.includes(ext)) {
-        cb(null, true);
-    } else {
-        cb(new Error('Desteklenmeyen dosya formatı. Marka görseli için sadece resim dosyaları yüklenebilir (jpeg, png, webp, gif).'), false);
-    }
-};
-
-// GÜVENLİK: Magic bytes (dosya imzası) doğrulaması — MIME sahteciliğini önler
-const brandCheckMagicBytes = async (filePath, mimeType) => {
-    try {
-        const fs = require('fs');
-        const fd = await fs.promises.open(filePath, 'r');
-        const buffer = Buffer.alloc(4);
-        await fd.read(buffer, 0, 4, 0);
-        await fd.close();
-        const hex = buffer.toString('hex').toUpperCase();
-        if (mimeType === 'image/jpeg' && !hex.startsWith('FFD8FF')) return false;
-        if (mimeType === 'image/png'  && !hex.startsWith('89504E47')) return false;
-        if (mimeType === 'image/gif'  && !hex.startsWith('47494638')) return false;
-        // webp: ilk 4 byte RIFF, sonraki 4 WEBP — temel imzayı kontrol et
-        if (mimeType === 'image/webp' && !hex.startsWith('52494646')) return false;
-        return true;
-    } catch {
-        return false;
-    }
-};
-
-const brandUpload = multer({
-    storage: brandStorage,
-    fileFilter: brandFileFilter,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5 MB
-});
-
-
 
 const { checkUpcomingMaintenances } = require('./utils/machineNotifier');
 
 // Maaş ve mesai otomasyonunu başlat
 require('./utils/salaryCron');
-
-// Veritabanı tablolarını güncelle
-(async () => {
-    try {
-        await db.query('ALTER TABLE brands ADD COLUMN logo_url VARCHAR(255) NULL;');
-        console.log('brands tablosuna logo_url eklendi.');
-    } catch (err) {
-        if (err.code !== 'ER_DUP_FIELDNAME') console.error('Veritabanı güncellenirken hata (brands):', err.message);
-    }
-    
-    try {
-        await db.query('ALTER TABLE customers ADD COLUMN Password VARCHAR(255) NULL;');
-        await db.query('ALTER TABLE customers ADD COLUMN IsVerified BOOLEAN DEFAULT FALSE;');
-        await db.query('ALTER TABLE customers ADD COLUMN OtpCode VARCHAR(10) NULL;');
-        await db.query('ALTER TABLE customers ADD COLUMN OtpExpiry DATETIME NULL;');
-        
-        // Auto-run DB migrations
-        try {
-            await db.query("ALTER TABLE customers DROP COLUMN Age");
-            console.log("DROP COLUMN Age OK");
-        } catch (e) {
-            console.log("Age column might already be deleted.");
-        }
-        
-        try {
-            await db.query("ALTER TABLE customers ADD COLUMN BirthDate VARCHAR(20)");
-            console.log("ADD COLUMN BirthDate OK");
-        } catch (e) {
-            if (e.code !== 'ER_DUP_FIELDNAME') console.log("BirthDate column might already exist.");
-        }
-
-        try {
-            await db.query("ALTER TABLE customers ADD COLUMN WebAddresses JSON NULL");
-            console.log("ADD COLUMN WebAddresses OK");
-        } catch (e) {
-            if (e.code !== 'ER_DUP_FIELDNAME') console.log("WebAddresses column might already exist.");
-        }
-
-        console.log('customers tablosuna auth kolonları eklendi.');
-    } catch (err) {
-        if (err.code !== 'ER_DUP_FIELDNAME') console.error('Veritabanı güncellenirken hata (customers):', err.message);
-    }
-    try {
-        await db.query('ALTER TABLE products ADD COLUMN web_categories JSON NULL;');
-        await db.query('ALTER TABLE products ADD COLUMN web_subcategories JSON NULL;');
-        await db.query('ALTER TABLE products ADD COLUMN web_subtitles JSON NULL;');
-        console.log('products tablosuna web kategori kolonları eklendi.');
-    } catch (err) {
-        if (err.code !== 'ER_DUP_FIELDNAME') console.error('Veritabanı güncellenirken hata (products):', err.message);
-    }
-})();
 
 // 1. GLOBAL CRASH GUARDS (Sunucu Çökme Kalkanı)
 // Beklenmeyen / yakalanmayan hataların Node.js sürecini (process) sonlandırmasını engeller.
@@ -276,13 +170,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 
 
 
-// Yönlendirmeler
 // --- GLOBAL AUTHENTICATION (KİMLİK DOĞRULAMA) DUVARI ---
 const authMiddleware = require('./middleware/auth');
 const { checkRole } = require('./middleware/rbac');
 app.use((req, res, next) => {
-    // console.log(`[AUTH] Method: ${req.method}, Path: ${req.path}`);
-
     // CORS preflight isteklerine izin ver
     if (req.method === 'OPTIONS') {
         return next();
@@ -342,375 +233,125 @@ app.use(async (req, res, next) => {
 });
 // ----------------------------------------------------------------
 
+
+// ================================================================
+// ROUTE (YÖNLENDİRME) BAĞLANTILARI
+// Her modül kendi dosyasında tanımlıdır. Yeni modül eklemek için:
+//   const yeniRouter = require('./routes/yeniModul');
+//   app.use('/api/yeni-modul', yeniRouter);
+// ================================================================
+
+// Auth (Kimlik Doğrulama) — Login, Logout, Verify, Mobile Version
+const authRouter = require('./routes/auth');
+app.use('/api', authRouter);
+
+// Markalar
+const brandsRouter = require('./routes/brands');
+app.use('/api/brands', brandsRouter);
+
+// Kategoriler
+const categoriesRouter = require('./routes/categories');
+app.use('/api/categories', categoriesRouter);
+
+// Dashboard İstatistikleri
+const dashboardRouter = require('./routes/dashboard');
+app.use('/api/dashboard-stats', dashboardRouter);
+
+// Ürünler
 const productsRouter = require('./routes/products');
 app.use('/api/products', productsRouter);
 
+// Web Kategorileri
 const webCategoriesRouter = require('./routes/webCategories');
 app.use('/api/web-categories', webCategoriesRouter);
 
+// Sepet
 const cartRouter = require('./routes/cart');
 app.use('/api/cart', cartRouter);
 
+// Kullanıcılar (Personel Hesapları)
 const usersRouter = require('./routes/users');
 app.use('/api/users', usersRouter);
 
-
-
-
-
+// Aktivite Logları
 app.use('/api/activities', require('./routes/activities'));
 
-
-
+// Çalışanlar (İK)
 const employeesRouter = require('./routes/employees');
 app.use('/api/employees', employeesRouter);
 
+// WMS (Depo Yönetim Sistemi)
 const wmsRouter = require('./routes/wms');
 app.use('/api/wms', wmsRouter);
 
+// Depolar
 const warehousesRouter = require('./routes/warehouses');
 app.use('/api/warehouses', warehousesRouter);
 
+// Tedarikçiler
 const suppliersRouter = require('./routes/suppliers');
 app.use('/api/suppliers', suppliersRouter);
 
+// Kargo Firmaları
 const shippersRouter = require('./routes/shippers');
 app.use('/api/shippers', shippersRouter);
 
+// Müşteriler
 const customersRouter = require('./routes/customers');
 app.use('/api/customers', customersRouter);
 
+// Müşteri Kimlik Doğrulama
 const customerAuthRouter = require('./routes/customerAuth');
 app.use('/api/customers/auth', customerAuthRouter);
 
+// Üretim
 const productionRouter = require('./routes/production');
 app.use('/api/production', productionRouter);
 
+// Satın Alma
 const purchasingRouter = require('./routes/purchasing');
 app.use('/api/purchasing', purchasingRouter);
 
+// Kampanyalar
 const campaignsRouter = require('./routes/campaigns');
 app.use('/api/campaigns', campaignsRouter);
 
+// Finans
 const financeRouter = require('./routes/finance');
 app.use('/api/finance', financeRouter);
 
+// Raporlar
 const reportsRouter = require('./routes/reports');
 app.use('/api/reports', reportsRouter);
 
+// Veri Dışa Aktarma
 const dataExportRouter = require('./routes/data_export');
 app.use('/api/data-export', dataExportRouter);
 
+// Siparişler
 const ordersRouter = require('./routes/orders');
 app.use('/api/orders', ordersRouter);
 
+// Kutular / Ambalajlar
 const boxesRouter = require('./routes/boxes');
 app.use('/api/boxes', boxesRouter);
 
+// Mobil Uygulama
 const mobileRoutes = require('./routes/mobile');
-const pickingCartsRouter = require('./routes/picking_carts');
-const couponsRoute = require('./routes/coupons');
-
 app.use('/api/mobile', mobileRoutes);
+
+// Toplama Arabaları
+const pickingCartsRouter = require('./routes/picking_carts');
 app.use('/api/picking_carts', pickingCartsRouter);
+
+// Kuponlar
+const couponsRoute = require('./routes/coupons');
 app.use('/api/coupons', couponsRoute);
 
-// [GET] Tüm markaları listeleme işlemi
-// Sisteme kayıtlı olan tüm markaları isme göre alfabetik olarak sıralayıp getirir.
-app.get('/api/brands', async (req, res) => {
-    try {
-        const [rows] = await db.query('SELECT id, name, logo_url FROM brands ORDER BY name ASC');
-        res.json(rows);
-    } catch (error) {
-        console.error('Markalar çekilirken hata:', error);
-        res.status(500).json({ success: false, message: 'Markalar getirilirken hata oluştu.' });
-    }
-});
 
-// [POST] Yeni marka ekleme işlemi
-// Gelen marka adını kontrol eder, eğer aynı isimde bir marka yoksa veritabanına ekler ve aktivite loglarına kaydeder.
-app.post('/api/brands', authMiddleware, checkRole(['Depo', 'Üretim'], 'product_add'), async (req, res) => {
-    const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'Marka adı gereklidir.' });
-
-    try {
-        const [existing] = await db.query('SELECT id FROM brands WHERE name = ?', [name]);
-        if (existing.length > 0) {
-            return res.status(400).json({ success: false, message: 'Bu marka zaten var.' });
-        }
-        const [result] = await db.query('INSERT INTO brands (name) VALUES (?)', [name]);
-        await logActivity(req.user?.id, 'INSERT', 'brands', result.insertId, `"${name}" markasını ekledi.`, null);
-        res.status(201).json({ success: true, id: result.insertId, name });
-    } catch (error) {
-        console.error('Marka eklenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Marka eklenirken hata oluştu.' });
-    }
-});
-
-app.put('/api/brands/:id', authMiddleware, checkRole(['Depo', 'Üretim'], 'product_edit'), brandUpload.single('logo'), async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Marka ID.' });
-
-    try {
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'Logo dosyası bulunamadı.' });
-        }
-
-        // GÜVENLİK: Magic bytes doğrulaması — MIME sahteciliğini önler
-        const isValidFile = await brandCheckMagicBytes(req.file.path, req.file.mimetype);
-        if (!isValidFile) {
-            const fs = require('fs');
-            fs.unlink(req.file.path, () => {}); // Sahte dosyayı diskten sil
-            return res.status(400).json({ success: false, message: 'Dosya içeriği geçersiz. Gerçek bir resim dosyası yükleyin.' });
-        }
-        
-        const logoUrl = `/uploads/${req.file.filename}`;
-        
-        await db.query('UPDATE brands SET logo_url = ? WHERE id = ?', [logoUrl, id]);
-        await logActivity(req.user?.id, 'UPDATE', 'brands', id, `Marka (ID: ${id}) logosu güncellendi.`, null);
-        
-        res.json({ success: true, logo_url: logoUrl });
-    } catch (error) {
-        console.error('Marka logosu güncellenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Logo yüklenirken hata oluştu.' });
-    }
-});
-
-// [GET] Tüm ana kategorileri listeleme işlemi
-// Sisteme kayıtlı olan üst (ana) kategorileri alfabetik sıraya göre veritabanından çeker ve listeler.
-app.get('/api/categories', authMiddleware, checkRole(['Depo', 'Üretim'], 'view_products'), async (req, res) => {
-    try {
-        const [rows] = await db.query('SELECT id, name, image_url FROM kategori ORDER BY name ASC');
-        res.json(rows);
-    } catch (error) {
-        console.error('Kategoriler çekilirken hata:', error);
-        res.status(500).json({ success: false, message: 'Kategoriler getirilirken hata oluştu.' });
-    }
-});
-
-// [POST] Yeni bir kategori ekleme işlemi
-// Kullanıcının gönderdiği kategori adının daha önce eklenip eklenmediğine bakar, benzersiz ise kaydeder ve aktivite geçmişine yazar.
-app.post('/api/categories', authMiddleware, checkRole(['Depo', 'Üretim'], 'category_manage'), async (req, res) => {
-    const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'Kategori adı gereklidir.' });
-
-    try {
-        const [existing] = await db.query('SELECT id FROM kategori WHERE name = ?', [name]);
-        if (existing.length > 0) {
-            return res.status(400).json({ success: false, message: 'Bu kategori zaten var.' });
-        }
-        const [result] = await db.query('INSERT INTO kategori (name) VALUES (?)', [name]);
-        await logActivity(req.user?.id, 'INSERT', 'kategori', result.insertId, `"${name}" kategorisini ekledi.`, null);
-        res.status(201).json({ success: true, id: result.insertId, name });
-    } catch (error) {
-        console.error('Kategori eklenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Kategori eklenirken hata oluştu.' });
-    }
-});
-
-// [PUT] Kategori resmi güncelleme işlemi
-// İlgili kategoriye ait görseli (image) alır, dosya türünün gerçekten resim olup olmadığını (magic bytes) kontrol eder ve kaydeder.
-app.put('/api/categories/:id/image', authMiddleware, checkRole(['Depo', 'Üretim'], 'category_manage'), brandUpload.single('image'), async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Kategori ID.' });
-    
-    try {
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'Resim dosyası bulunamadı.' });
-        }
-
-        const isValidFile = await brandCheckMagicBytes(req.file.path, req.file.mimetype);
-        if (!isValidFile) {
-            const fs = require('fs');
-            fs.unlink(req.file.path, () => {});
-            return res.status(400).json({ success: false, message: 'Dosya içeriği geçersiz. Gerçek bir resim dosyası yükleyin.' });
-        }
-        
-        const imageUrl = `/uploads/${req.file.filename}`;
-        
-        await db.query('UPDATE kategori SET image_url = ? WHERE id = ?', [imageUrl, id]);
-        await logActivity(req.user?.id, 'UPDATE', 'kategori', id, `Kategori (ID: ${id}) resmi güncellendi.`, null);
-        
-        res.json({ success: true, image_url: imageUrl });
-    } catch (error) {
-        console.error('Kategori resmi güncellenirken hata:', error);
-        res.status(500).json({ success: false, message: 'Resim yüklenirken hata oluştu.' });
-    }
-});
-
-app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
-    try {
-        const [products] = await db.query("SELECT COUNT(Id) as count FROM products WHERE Category != 'Hammadde' OR Category IS NULL");
-        const [brands] = await db.query('SELECT COUNT(id) as count FROM brands');
-        const [categories] = await db.query('SELECT COUNT(id) as count FROM kategori');
-        const [lowStock] = await db.query('SELECT COUNT(Id) as count FROM products WHERE StockQuantity <= 10');
-
-        res.json({
-            success: true,
-            totalProducts: products[0].count,
-            totalBrands: brands[0].count,
-            totalCategories: categories[0].count,
-            lowStock: lowStock[0].count,
-            todayOrders: 0,
-            totalCustomers: 0
-        });
-    } catch (error) {
-        console.error('Dashboard stats error:', error);
-        res.status(500).json({ success: false });
-    }
-});
-
-// Mobil versiyon ve durum kontrolü
-app.get('/api/mobile-version', (req, res) => {
-    res.json({
-        success: true,
-        version: '1.0.0',
-        minVersion: '1.0.0',
-        forceUpdate: false,
-    });
-});
-
-app.post('/api/login', async (req, res) => {
-    const { username, password, role } = req.body;
-
-    if (!username || !password) {
-        return res.status(400).json({ success: false, message: 'Kullanıcı adı ve şifre gereklidir.' });
-    }
-
-    try {
-        // "deneme" admin hesabı otomatik oluşturma
-        if (username === 'deneme' && password === 'deneme1') {
-            const [dRows] = await db.query('SELECT * FROM users WHERE username = "deneme"');
-            if (dRows.length === 0) {
-                const hashedPassword = await bcrypt.hash('deneme1', 12);
-                await db.query(
-                    'INSERT INTO users (username, name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?)',
-                    ['deneme', 'Deneme Admin', 'admin@deneme.com', hashedPassword, 'admin', true]
-                );
-                
-                // Demo Ürünlerini Ekle (Eğer hiç ürün yoksa)
-                const [pRows] = await db.query('SELECT COUNT(*) as count FROM products');
-                if (pRows[0].count === 0) {
-                    await db.query(
-                        'INSERT INTO products (ProductName, Brand, Category, SalePrice, StockQuantity, ImagePath) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)',
-                        [
-                            'Örnek Nemlendirici Krem', 'DemoMarka', 'Kozmetik', 299.90, 50, '',
-                            'Örnek Mat Ruj', 'DemoMarka', 'Kozmetik', 149.90, 120, '',
-                            'Örnek Göz Farı Paleti', 'DemoMarka', 'Kozmetik', 399.90, 30, ''
-                        ]
-                    );
-                }
-            }
-        }
-
-        const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
-
-        if (rows.length === 0) {
-            // GÜVENLİK: User Enumeration önleme — Kullanıcı yokken bile bcrypt maliyeti simüle et
-            await bcrypt.compare(password, '$2b$10$invalidhashfortimingnnnnnnnnnnnnnnnnnnnnn');
-            return res.status(401).json({ success: false, message: 'Kullanıcı adı veya şifre hatalı.' });
-        }
-
-        const user = rows[0];
-
-        // GÜVENLİK: Pasif veya kovulmuş kullanıcı kontrolü
-        if (user.is_active === 0 || user.is_active === false || user.is_active === '0') {
-            return res.status(403).json({ success: false, message: 'Hesabınız askıya alınmış veya pasif duruma getirilmiştir.' });
-        }
-
-        const dbRole = user.role;
-        // Eğer giriş tipi admin ise ve kullanıcının veritabanı rolü admin değilse giriş reddedilir
-        if (role === 'admin' && dbRole !== 'admin') {
-            return res.status(401).json({ success: false, message: 'Kullanıcı adı veya şifre hatalı.' });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-
-        if (!isMatch) {
-            return res.status(401).json({ success: false, message: 'Kullanıcı adı veya şifre hatalı.' });
-        }
-
-        // Kullanıcının özel yetkilerini çek
-        const [permRows] = await db.query(`
-            SELECT p.permission_key 
-            FROM user_permissions up
-            JOIN permissions p ON up.permission_id = p.id
-            WHERE up.user_id = ?
-        `, [user.id]);
-        const permissions = permRows.map(r => r.permission_key);
-
-        const jwt = require('jsonwebtoken');
-        const jwtSecret = process.env.JWT_SECRET;
-        if (!jwtSecret) {
-            console.error('[KRİTİK] JWT_SECRET ortam değişkeni tanımlı değil!');
-            return res.status(500).json({ success: false, message: 'Sunucu yapılandırma hatası.' });
-        }
-        const token = jwt.sign(
-            { 
-                id: user.id, 
-                username: user.username, 
-                role: user.role, 
-                permissions,
-                deviceFingerprint: generateFingerprint(req)
-            },
-            jwtSecret,
-            { expiresIn: '8h' }
-        );
-
-        // TEKİL OTURUM (STRICT SINGLE SESSION): Eski oturumları sil ve yenisini ekle
-        const ip_address = req.ip || req.connection.remoteAddress;
-        const device_info = req.headers['user-agent'] || 'Unknown Device';
-        
-        await db.query('DELETE FROM user_sessions WHERE user_id = ?', [user.id]);
-        await db.query(
-            'INSERT INTO user_sessions (user_id, ip_address, device_info, token) VALUES (?, ?, ?, ?)',
-            [user.id, ip_address, device_info, token]
-        );
-
-        // Başarılı giriş
-        res.json({
-            success: true,
-            token: token,
-            user: {
-                id: user.id,
-                username: user.username,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                permissions: permissions
-            }
-        });
-
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu. Lütfen tekrar deneyin.' });
-    }
-});
-
-// --- OTURUM DOĞRULAMA (VERIFY) ---
-// Frontend (ERP) yüklendiğinde token'ın hala aktif (başka cihazdan girilmemiş) olduğunu doğrular.
-app.get('/api/auth/verify', authenticateToken, (req, res) => {
-    // authenticateToken'dan geçtiyse token sağlamdır ve veritabanında (user_sessions) tekil olarak aktiftir.
-    res.json({ success: true, message: 'Oturum geçerli.', user: req.user });
-});
-
-// --- ÇIKIŞ YAP (LOGOUT) ---
-// Frontend'den gelen istekle mevcut token'ı veritabanındaki kara listeye ekler.
-app.post('/api/logout', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.json({ success: true }); // Zaten token yoksa çıkış yapmış sayılır
-    }
-
-    const token = authHeader.split(' ')[1];
-    try {
-        await db.query('INSERT IGNORE INTO blacklisted_tokens (token) VALUES (?)', [token]);
-        res.json({ success: true, message: 'Çıkış yapıldı ve token iptal edildi.' });
-    } catch (error) {
-        console.error('Logout hatası:', error);
-        res.status(500).json({ success: false, message: 'Çıkış yapılırken bir hata oluştu.' });
-    }
-});
+// ================================================================
+// FRONTEND ENTEGRASYONU VE HATA YAKALAYICILARI
+// ================================================================
 
 // FRONTEND (VITE/REACT) ENTEGRASYONU: Tüm API istekleri dışındaki istekleri frontend'e yönlendir
 const frontendPath = path.join(__dirname, '../desktop-app/dist');
@@ -730,8 +371,6 @@ app.use((req, res) => {
 });
 
 // 3. GLOBAL API ERROR HANDLER (Merkezi Hata Yakalama Middleware'i)
-// 3. GLOBAL API ERROR HANDLER (Merkezi Hata Yakalama Middleware'i)
-
 // Rotalarda yakalanamayan veya next(err) ile iletilen hataların sunucuyu çökertmesini engeller
 // ve istemciye (frontend) veritabanı hatalarını net Türkçeleştirerek döner.
 app.use((err, req, res, next) => {
@@ -754,9 +393,10 @@ app.use((err, req, res, next) => {
         return res.status(400).json({ success: false, message: 'Eksik veya tanımsız parametre gönderildi.' });
     }
 
-    // Genel Hata Dönüşü
+    // Hata dosyasına yaz (asenkron)
     try {
-        require('fs').appendFileSync('error.log', new Date().toISOString() + ' [API HATASI] ' + req.url + ' : ' + (err.stack || err.message || err) + '\n');
+        const fs = require('fs');
+        fs.appendFile('error.log', new Date().toISOString() + ' [API HATASI] ' + req.url + ' : ' + (err.stack || err.message || err) + '\n', () => {});
     } catch (e) { }
 
     // GÜVENLİK: Production'da iç hata detaylarını (stack trace vb.) asla istemciye sızdırma
@@ -772,18 +412,12 @@ app.use((err, req, res, next) => {
 });
 
 
-
 const PORT = process.env.PORT || 3000;
-// Otomatik seed işlemi (Eğer web_categories boşsa web uygulamasının menü verilerini doldurur)
-// seedWebCategories(); (Modül silindiği için devre dışı bırakıldı)
 
 app.listen(PORT, '0.0.0.0', () => {
-    // Nodemon tetikleyici 4
     console.log(`Sunucu http://0.0.0.0:${PORT} portunda çalışıyor`);
 
     // Arka plan otomatik bakım hatırlatması kontrolü (İlk açılışta ve her 6 saatte bir)
     setTimeout(checkUpcomingMaintenances, 5000);
     setInterval(checkUpcomingMaintenances, 1000 * 60 * 60 * 6);
 });
-
-// triggered restart
