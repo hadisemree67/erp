@@ -291,6 +291,7 @@ app.use((req, res, next) => {
     if (
         !req.path.startsWith('/api/') || 
         req.path === '/api/login' || req.path === '/api/login/' ||
+        req.path === '/api/mobile-version' || req.path === '/api/mobile-version/' ||
         req.path === '/api/settings/status' || req.path === '/api/settings/status/' ||
         req.path.startsWith('/api/customers/auth') ||
         (req.path === '/api/brands' && req.method === 'GET') ||
@@ -557,6 +558,16 @@ app.get('/api/dashboard-stats', authMiddleware, async (req, res) => {
         console.error('Dashboard stats error:', error);
         res.status(500).json({ success: false });
     }
+});
+
+// Mobil versiyon ve durum kontrolü
+app.get('/api/mobile-version', (req, res) => {
+    res.json({
+        success: true,
+        version: '1.0.0',
+        minVersion: '1.0.0',
+        forceUpdate: false,
+    });
 });
 
 app.post('/api/login', async (req, res) => {

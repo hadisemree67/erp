@@ -14,8 +14,17 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Use 192.168.10.165 for physical device on same WiFi or ngrok URL
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.20.10.3:3000/api';
+// Bilgisayarın yerel ağ IP adresi (Wi-Fi)
+const DEFAULT_URL = 'http://192.168.10.186:3000/api';
+let configuredUrl = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
+
+// URL'in sonunun /api ile bittiğinden emin ol
+if (!configuredUrl.endsWith('/api')) {
+    configuredUrl = configuredUrl.replace(/\/+$/, '') + '/api';
+}
+
+const API_URL = configuredUrl;
+console.log('[Mobile API] Base URL:', API_URL);
 
 /**
  * Axios Instance Oluşturma

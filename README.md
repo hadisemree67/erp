@@ -1,152 +1,397 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/github/explore/80688e429a7d4ef2fca1e82350fe8e3517d3494d/topics/nodejs/nodejs.png" alt="Logo" width="80" height="80">
-  <h1 align="center">Stok, Üretim ve Depo Yönetim Sistemi (WMS & ERP)</h1>
-  
-  <p align="center">
-    Uçtan uca üretim, tedarik, depo yerleşimi ve sipariş yönetimi sağlayan kapsamlı sistem.
-    <br />
+  <h1>🏭 Stok, Üretim ve Depo Yönetim Sistemi</h1>
+  <h3>WMS & ERP — Full-Stack Enterprise Solution</h3>
+
+  <p>
+    Uçtan uca üretim, tedarik zinciri, depo yerleşimi ve sipariş yönetimi sağlayan<br/>
+    kapsamlı kurumsal kaynak planlama sistemi.
+  </p>
+
+  <p>
     <a href="#-özellikler"><strong>Özellikleri Keşfet »</strong></a>
     <br />
-    <br />
-    <a href="#-kurulum">Kurulum</a>
+    <a href="#-hızlı-başlangıç">Kurulum</a>
     ·
-    <a href="#-temel-iş-akışı">İş Akışı</a>
+    <a href="#-iş-akışı">İş Akışı</a>
     ·
-    <a href="#-kullanılan-teknolojiler">Teknolojiler</a>
+    <a href="#-api-yapısı">API Dökümantasyonu</a>
+    ·
+    <a href="#-mimari">Mimari</a>
   </p>
 </div>
 
 <!-- Badges -->
 <div align="center">
-  <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
-  <img src="https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React Native" />
-  <img src="https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white" alt="Electron.js" />
-  <img src="https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL" />
-  <img src="https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white" alt="Prisma" />
+
+  ![Node.js](https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white)
+  ![Express.js](https://img.shields.io/badge/Express.js-404D59?style=for-the-badge&logo=express&logoColor=white)
+  ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+  ![React Native](https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+  ![Electron](https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white)
+  ![MySQL](https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white)
+  ![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
+  ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+  ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+  ![Expo](https://img.shields.io/badge/Expo-000020?style=for-the-badge&logo=expo&logoColor=white)
+
 </div>
 
 ---
 
 ## 📖 Proje Hakkında
 
-Bu proje; bir üretim tesisinin veya e-ticaret deposunun günlük operasyon akışını dijitalleştirmek ve otonom hale getirmek için tasarlanmıştır. **Web (E-Ticaret Platformu), Masaüstü (ERP Yönetim Paneli), Mobil (Depo Personeli Uygulaması) ve Backend (Sunucu API)** olarak dört ana bileşenden oluşur. Manuel hataları en aza indirir, süreçleri hızlandırır ve depo hacmini maksimum verimle kullanmanızı sağlar.
+Bu proje; bir üretim tesisinin veya e-ticaret deposunun günlük operasyon akışını **dijitalleştirmek ve otonom hale getirmek** için tasarlanmış kapsamlı bir kurumsal kaynak planlama (ERP) ve depo yönetim sistemidir (WMS).
 
-## ✨ Özellikler
+Sistem **dört ana bileşenden** oluşur:
 
-- 📦 **Gelişmiş WMS Algoritmaları:** Hacim ve ağırlık bazlı otonom raf yönlendirmesi.
-- 🏭 **Ürün Reçetesi (BOM):** Nihai ürünler için dinamik formül ve bileşen tanımlama.
-- 📉 **Akıllı Stok Takibi:** Kritik stok seviyelerinde otomatik üretim veya tedarik talebi.
-- 📧 **Otonom Satın Alma:** Tedarikçilere otomatik sipariş ve onay e-postaları.
-- 📱 **Mobil Barkod Okuma:** Hatalı paketlemeyi %100 engelleyen el terminali entegrasyonu.
-- 📊 **Detaylı Raporlama:** Demografik veri analizi ve tek tıkla Excel çıktıları.
-- 🛡️ **Acil Durum Kalkanı (Kill Switch):** Siber saldırı veya sayım anında sistemi güvenli dondurma.
+| Bileşen | Teknoloji | Açıklama |
+|---------|-----------|----------|
+| **Backend API** | Node.js, Express, Prisma, MySQL | RESTful API sunucusu, iş mantığı ve veritabanı katmanı |
+| **Web App** | React (Vite) | E-Ticaret platformu — müşteri arayüzü |
+| **Desktop App** | React (Vite) + Electron | ERP yönetim paneli — masaüstü uygulaması |
+| **Mobile App** | React Native (Expo) | Depo personeli uygulaması — barkod okuma ve paketleme |
+
+Manuel hataları en aza indirir, süreçleri hızlandırır ve depo hacmini maksimum verimle kullanmanızı sağlar.
 
 ---
 
-## 🔄 Temel İş Akışı
+## ✨ Özellikler
 
-Sistem aşağıdaki adımları birbirine entegre bir şekilde yürütür:
+### 📦 Depo Yönetim Sistemi (WMS)
+- Hacim ve ağırlık bazlı **otonom raf yönlendirmesi**
+- Gerçek zamanlı depo doluluk takibi (m³ hesaplama)
+- İstifleme limiti ve ağırlık kontrolü
+- Akıllı yerleşim optimizasyonu
 
-### 1. 🏢 Malzeme ve Tedarikçi Tanımlamaları
-Her şeyin başlangıcı temel verilerin girilmesidir. Sisteme öncelikle hammadde tedarikçileri ve bu tedarikçilerden alınacak malzemeler (Hammaddeler, ambalajlar vb.) girilir. Hangi tedarikçiden hangi malzemenin kaç paraya ve kaç günde temin edildiği sisteme işlenir.
+### 🏭 Üretim Yönetimi
+- **Ürün Reçetesi (BOM):** Dinamik formül ve bileşen tanımlama
+- Üretim planlama ve takip
+- Makine bakım bildirimleri
+- Hammadde gereksinim hesaplama
 
-### 2. 🧪 Ürün Formülü (Reçete) Oluşturma
-Üretilecek nihai ürünler için "Formül / Reçete" tanımlanır. (Örn: *Bir adet A ürünü için X'ten 10g, Y'den 1 adet gerekir.*)
+### 📉 Akıllı Stok Takibi
+- Kritik stok seviyelerinde **otomatik üretim veya tedarik talebi**
+- Anlık stok izleme ve raporlama
+- Stok hareket geçmişi
 
-### 3. 🧩 Depo ve Stok Girişleri (Akıllı Yerleşim)
-Sisteme giren malzemeler için stok girişleri yapılır. Sistem:
-- Ürünün hacmi (en/boy/derinlik/çap) ve ağırlığını hesaplar.
-- İstifleme limitini kontrol eder.
-- Rafların boş m³ hacimlerine bakarak personele **"Bu ürünü A deposundaki 3 numaralı rafa yerleştir"** şeklinde otonom yönlendirme yapar.
+### 🤝 Satın Alma (Purchasing)
+- Tedarikçi yönetimi ve karşılaştırma
+- **Otomatik sipariş e-postaları** (Nodemailer ile)
+- Fiyat teklifi ve onay süreçleri
 
-### 4. 📉 Akıllı Stok Takibi ve Üretim Talebi
-Satış oldukça veya üretim yapıldıkça stoklar anlık düşer. Stok, **Kritik Seviyenin** altına düştüğünde sistem otomatik "Üretime Talep" oluşturur.
+### 🛒 E-Ticaret & Sipariş Yönetimi
+- Tam kapsamlı e-ticaret platformu (web)
+- Sepet, ödeme, kupon ve kampanya yönetimi
+- Sipariş durumu takibi ve demografik analiz
+- Cilt analizi ve ürün önerisi
 
-### 5. 🤝 Otomatik Satın Alma (Purchasing)
-Üretime talep oluşturulduğunda içeride yeterli hammadde yoksa sistem Satın Alma döngüsünü tetikler. Tedarikçiler arasından en uygununu seçer, otonom e-postalar gönderir ve onay bekler.
+### 📱 Mobil Depo Operasyonları
+- **Barkod okutarak paketleme** — hatalı paketlemeyi %100 engeller
+- Toplama (picking) ve sevkiyat süreçleri
+- Gerçek zamanlı bildirimler
 
-### 6. 🛒 Sipariş ve Satış Yönetimi
-E-Ticaret veya B2B müşterilerinden gelen siparişler (demografik verilerle birlikte) sisteme yansır. Onaylanan siparişler doğrudan **Paketleme Sırasına** aktarılır.
+### 👥 İnsan Kaynakları & Finans
+- Çalışan yönetimi ve maaş hesaplama (otomatik cron)
+- Rol bazlı erişim kontrolü (RBAC)
+- Finansal raporlama
 
-### 7. 📱 Mobil Uygulama ve El Terminalleri
-Paketleme sırasına giren siparişler deponun içinde personelin telefonuna (veya el terminaline) bildirim olarak düşer. Personel mobil üzerinden barkod okutarak paketleme yapar. Sevkiyat tamamlandığında stoklar kalıcı olarak düşer.
+### 📊 Raporlama & Veri Çıkışı
+- Demografik veri analizi
+- **Tek tıkla Excel çıktıları** (ExcelJS)
+- Detaylı iş zekası raporları
 
-### 8. 🛡️ Güvenli Sayım Modu / Acil Durum Kalkanı (Kill Switch)
-Depolarda genel sayım (Inventory Count) yapılacağı zaman veya **olası bir siber saldırı/iç sabotaj durumunda**, işlemlerin durdurulması için "Sistemi Durdur" özelliği devreye alınır. Tüm veritabanı yazma/silme işlemleri HTTP 503 güvenliğiyle reddedilir.
+### 🛡️ Güvenlik
+- **Kill Switch:** Siber saldırı veya sayım anında sistemi güvenli dondurma (HTTP 503)
+- JWT tabanlı kimlik doğrulama
+- Rate limiting ve Helmet güvenliği
+- XSS koruması (DOMPurify)
+- RBAC (Rol Bazlı Erişim Kontrolü)
+
+---
+
+## 🔄 İş Akışı
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
+│  1. Malzeme &    │────▶│  2. Ürün Reçetesi │────▶│  3. Depo Girişleri │
+│  Tedarikçi Tanım │     │  (BOM) Oluşturma  │     │  (Akıllı Yerleşim) │
+└─────────────────┘     └──────────────────┘     └────────────────────┘
+                                                           │
+         ┌─────────────────────────────────────────────────┘
+         ▼
+┌─────────────────┐     ┌──────────────────┐     ┌────────────────────┐
+│  4. Akıllı Stok  │────▶│  5. Otomatik      │────▶│  6. Sipariş &      │
+│  Takibi          │     │  Satın Alma       │     │  Satış Yönetimi    │
+└─────────────────┘     └──────────────────┘     └────────────────────┘
+                                                           │
+         ┌─────────────────────────────────────────────────┘
+         ▼
+┌─────────────────┐     ┌──────────────────┐
+│  7. Mobil App    │────▶│  8. Kill Switch   │
+│  Paketleme       │     │  (Acil Durdurma)  │
+└─────────────────┘     └──────────────────┘
+```
+
+### Adım Adım:
+
+1. **🏢 Malzeme & Tedarikçi Tanımlamaları** — Hammadde, tedarikçi ve fiyat bilgileri girilir
+2. **🧪 Ürün Reçetesi Oluşturma** — Nihai ürünler için formül/reçete tanımlanır
+3. **🧩 Akıllı Depo Yerleşimi** — Sistem hacim/ağırlık hesaplayarak raf önerir
+4. **📉 Stok Takibi** — Stok kritik seviyeye düşünce otomatik talep oluşur
+5. **🤝 Otomatik Satın Alma** — Hammadde eksikliğinde tedarikçiye otomatik sipariş
+6. **🛒 Sipariş Yönetimi** — E-Ticaret veya B2B siparişleri sisteme yansır
+7. **📱 Mobil Paketleme** — Personel barkod okutarak hatasız paketleme yapar
+8. **🛡️ Kill Switch** — Acil durumlarda tüm yazma işlemlerini dondurur
+
+---
+
+## 🏗 Mimari
+
+```
+stokerpsistemi/
+├── backend-api/              # 🖥️  Node.js + Express API Sunucusu
+│   ├── middleware/            #     Auth, RBAC middleware'leri
+│   ├── routes/                #     24 adet modüler API route dosyası
+│   ├── services/              #     E-posta servisi (Nodemailer)
+│   ├── utils/                 #     Logger, WMS hesaplama, cron job'lar
+│   ├── prisma/                #     Veritabanı şeması (schema.prisma)
+│   ├── server.js              #     Ana sunucu dosyası
+│   └── db.js                  #     MySQL bağlantı havuzu
+│
+├── web-app/                   # 🌐 React E-Ticaret Sitesi (Vite)
+│   └── src/
+│       ├── pages/             #     13 sayfa (Home, Cart, Checkout vb.)
+│       ├── components/        #     Yeniden kullanılabilir bileşenler
+│       ├── context/           #     React context (Auth, Cart)
+│       └── layouts/           #     Sayfa düzenleri
+│
+├── desktop-app/               # 🖥️  Electron ERP Yönetim Paneli
+│   ├── electron/              #     Electron ana süreç dosyaları
+│   └── src/
+│       └── components/        #     18 modül (WMS, Üretim, Finans vb.)
+│
+├── mobile-app/                # 📱 React Native Depo Uygulaması (Expo)
+│   └── src/
+│       └── screens/           #     9 ekran (Picking, Packaging vb.)
+│
+├── docker-compose.yml         # 🐳 Docker orkestrasyon dosyası
+├── e_ticaret_depo_full.sql    # 🗃️  Veritabanı şema dosyası
+└── .env.example               # ⚙️  Ortam değişkenleri şablonu
+```
 
 ---
 
 ## 🛠 Kullanılan Teknolojiler
 
-Proje modern, ölçeklenebilir ve güvenli teknolojiler üzerine inşa edilmiştir:
+### Backend
+| Teknoloji | Sürüm | Açıklama |
+|-----------|-------|----------|
+| Node.js | v16+ | Asenkron çalışma ortamı |
+| Express.js | v5.x | Web framework |
+| Prisma ORM | v5.x | Tip güvenli veritabanı sorguları |
+| MySQL | v8.0 | İlişkisel veritabanı |
+| Nodemailer | v9.x | E-posta gönderimi |
+| Helmet | v8.x | HTTP güvenlik başlıkları |
+| JWT | v9.x | Kimlik doğrulama |
+| Multer | v2.x | Dosya yükleme |
 
-### Backend (Sunucu & Veritabanı)
-- **Node.js & Express.js:** Hızlı ve asenkron API sunucusu
-- **Prisma ORM:** Tip güvenli veritabanı sorguları
-- **MySQL:** İlişkisel veritabanı (Parametrik güvenlikli)
+### Frontend (Web & Desktop)
+| Teknoloji | Sürüm | Açıklama |
+|-----------|-------|----------|
+| React | v19.x | UI kütüphanesi |
+| Vite | v8.x | Build aracı ve dev server |
+| Electron | v43.x | Masaüstü uygulama çatısı |
+| ExcelJS | v4.x | Excel dosyası oluşturma |
+| Lucide React | v1.x | İkon kütüphanesi |
+| React Router | v7.x | İstemci tarafı yönlendirme |
 
-### Web (E-Ticaret Sitesi) & Masaüstü (Yönetim Paneli)
-- **React.js (Vite):** Yüksek performanslı e-ticaret arayüzü ve yönetim paneli
-- **Electron.js:** Cross-platform masaüstü ERP uygulama yeteneği
-- **TailwindCSS:** Hızlı ve modern stillendirme
+### Mobil
+| Teknoloji | Sürüm | Açıklama |
+|-----------|-------|----------|
+| React Native | v0.81 | Mobil uygulama çatısı |
+| Expo | v54.x | Geliştirme platformu |
+| Expo Camera | v17.x | Barkod ve kamera erişimi |
 
-### Mobil Uygulama (Depo Personeli İçin)
-- **React Native & Expo:** iOS ve Android uyumlu mobil uygulama (Barkod & Kamera entegreli)
+### DevOps
+| Teknoloji | Açıklama |
+|-----------|----------|
+| Docker & Docker Compose | Konteyner orkestrasyonu |
+| Nodemon | Geliştirme ortamı otomatik yenileme |
 
 ---
 
-## 🚀 Kurulum
-
-Projeyi kendi ortamınızda çalıştırmak için aşağıdaki adımları izleyebilirsiniz.
+## 🚀 Hızlı Başlangıç
 
 ### Ön Koşullar
-- [Node.js](https://nodejs.org/) (v16 veya üzeri)
-- [MySQL](https://www.mysql.com/) Veritabanı
-- Git
 
-### Adımlar
+- [Node.js](https://nodejs.org/) v16 veya üzeri
+- [MySQL](https://www.mysql.com/) v8.0
+- [Git](https://git-scm.com/)
+- [Docker](https://www.docker.com/) (opsiyonel — Docker ile çalıştırmak istiyorsanız)
 
-1. **Repoyu klonlayın**
-   ```bash
-   git clone https://github.com/kullaniciadi/stokerpsistemi.git
-   cd stokerpsistemi
-   ```
+### 📋 Yöntem 1: Docker ile Kurulum (Önerilen)
 
-2. **Backend'i başlatın**
-   ```bash
-   cd backend-api
-   npm install
-   # .env.example dosyasını .env olarak kopyalayın ve veritabanı bilgilerinizi girin
-   cp .env.example .env
-   # Prisma veritabanı tablolarını oluşturun
-   npx prisma migrate dev
-   npm run dev
-   ```
+```bash
+# 1. Repoyu klonlayın
+git clone https://github.com/hadisemree67/erp.git
+cd erp
 
-3. **E-Ticaret Sitesini (Web App) başlatın** (Yeni bir terminalde)
-   ```bash
-   cd ../web-app
-   npm install
-   npm run dev
-   ```
+# 2. Ortam değişkenlerini ayarlayın
+cp .env.example .env
+# .env dosyasını düzenleyin ve gerçek değerleri girin
 
-4. **Mobil Uygulamayı (Expo) başlatın** (Yeni bir terminalde)
-   ```bash
-   cd ../mobile-app
-   npm install
-   npm start
-   ```
+# 3. Docker ile tüm servisleri ayağa kaldırın
+docker-compose up -d
 
-5. **Masaüstü ERP Uygulamasını başlatın** (Yeni bir terminalde)
-   ```bash
-   cd ../desktop-app
-   npm install
-   npm run desktop
-   ```
+# ✅ Backend:  http://localhost:3000
+# ✅ Web App:  http://localhost:5173
+```
+
+### 📋 Yöntem 2: Manuel Kurulum
+
+```bash
+# 1. Repoyu klonlayın
+git clone https://github.com/hadisemree67/erp.git
+cd erp
+```
+
+**Backend API:**
+```bash
+cd backend-api
+npm install
+
+# .env dosyasını oluşturun (.env.example'dan)
+cp .env.example .env
+# .env dosyasını düzenleyin: veritabanı, SMTP ve JWT bilgilerinizi girin
+
+# Prisma şemasını veritabanına uygulayın
+npx prisma db push
+
+# Sunucuyu başlatın
+npm run dev
+# ✅ http://localhost:3000
+```
+
+**Web App (E-Ticaret):**
+```bash
+cd web-app
+npm install
+npm run dev
+# ✅ http://localhost:5173
+```
+
+**Desktop App (ERP Paneli):**
+```bash
+cd desktop-app
+npm install
+npm run desktop
+```
+
+**Mobile App (Depo Uygulaması):**
+```bash
+cd mobile-app
+npm install
+npm start
+# Expo Go uygulaması ile telefonunuzda açın
+```
+
+---
+
+## 🔌 API Yapısı
+
+Backend API 24 adet modüler route dosyasından oluşur:
+
+| Route | Endpoint | Açıklama |
+|-------|----------|----------|
+| `products` | `/api/products` | Ürün CRUD ve formül yönetimi |
+| `orders` | `/api/orders` | Sipariş yönetimi ve durumu |
+| `warehouses` | `/api/warehouses` | Depo ve raf yönetimi |
+| `wms` | `/api/wms` | WMS — akıllı raf yönlendirme |
+| `production` | `/api/production` | Üretim planlama ve takip |
+| `purchasing` | `/api/purchasing` | Satın alma süreçleri |
+| `suppliers` | `/api/suppliers` | Tedarikçi yönetimi |
+| `customers` | `/api/customers` | Müşteri yönetimi |
+| `customerAuth` | `/api/customer-auth` | Müşteri kimlik doğrulama |
+| `cart` | `/api/cart` | Sepet işlemleri |
+| `coupons` | `/api/coupons` | Kupon yönetimi |
+| `campaigns` | `/api/campaigns` | Kampanya yönetimi |
+| `employees` | `/api/employees` | Çalışan ve İK yönetimi |
+| `finance` | `/api/finance` | Finansal işlemler |
+| `reports` | `/api/reports` | Raporlama |
+| `data_export` | `/api/data-export` | Veri dışa aktarma (Excel) |
+| `activities` | `/api/activities` | Aktivite logları |
+| `users` | `/api/users` | Kullanıcı yönetimi |
+| `settings` | `/api/settings` | Sistem ayarları |
+| `mobile` | `/api/mobile` | Mobil uygulama endpoint'leri |
+| `boxes` | `/api/boxes` | Kutu/ambalaj yönetimi |
+| `picking_carts` | `/api/picking-carts` | Toplama arabaları |
+| `shippers` | `/api/shippers` | Kargo firmaları |
+| `webCategories` | `/api/web-categories` | E-Ticaret kategorileri |
+
+---
+
+## ⚙️ Ortam Değişkenleri
+
+Projeyi çalıştırmak için aşağıdaki ortam değişkenlerini `.env` dosyasında tanımlamanız gerekir:
+
+```env
+# Veritabanı
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_password
+DB_NAME=e_ticaret_depo
+DATABASE_URL="mysql://root:your_password@localhost:3306/e_ticaret_depo"
+
+# Sunucu
+PORT=3000
+BASE_URL=http://localhost:3000
+
+# Güvenlik
+JWT_SECRET=your_jwt_secret_key
+
+# E-posta (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+
+# Docker (docker-compose için)
+MYSQL_ROOT_PASSWORD=your_password
+MYSQL_DATABASE=erp_db
+VITE_API_URL=http://localhost:3000
+```
+
+> ⚠️ **Güvenlik Uyarısı:** `.env` dosyasını asla Git'e commit etmeyin. `.env.example` şablonunu kullanın.
+
+---
+
+## 🤝 Katkıda Bulunma
+
+Katkılarınızı memnuniyetle karşılıyoruz! Detaylar için [CONTRIBUTING.md](CONTRIBUTING.md) dosyasına göz atın.
+
+1. Bu repoyu **fork** edin
+2. Yeni bir **feature branch** oluşturun (`git checkout -b feature/yeni-ozellik`)
+3. Değişikliklerinizi **commit** edin (`git commit -m 'feat: yeni özellik eklendi'`)
+4. Branch'inizi **push** edin (`git push origin feature/yeni-ozellik`)
+5. Bir **Pull Request** açın
+
+---
+
+## 📄 Lisans
+
+Bu proje [MIT](LICENSE) lisansı altında dağıtılmaktadır.
+
+---
+
+## 📬 İletişim
+
+Proje hakkında sorularınız veya önerileriniz için:
+- **GitHub Issues:** [Issues](https://github.com/hadisemree67/erp/issues)
+- **Pull Requests:** [Pull Requests](https://github.com/hadisemree67/erp/pulls)
 
 ---
 
 <div align="center">
-  <p>Geliştirme ve tasarımla ilgili tüm sorularınız için Pull Request açabilir veya Issues kısmından ulaşabilirsiniz.</p>
+  <sub>⭐ Bu projeyi beğendiyseniz yıldız vermeyi unutmayın!</sub>
 </div>

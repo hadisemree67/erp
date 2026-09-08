@@ -1,7 +1,82 @@
+# ────────────────────────────────────────────────
+# Node / JavaScript
+# ────────────────────────────────────────────────
 node_modules/
-dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ────────────────────────────────────────────────
+# Ortam Değişkenleri (Gizli bilgiler)
+# ────────────────────────────────────────────────
 .env
-.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 !.env.example
+
+# ────────────────────────────────────────────────
+# Build Çıktıları
+# ────────────────────────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ────────────────────────────────────────────────
+# IDE & Editör Dosyaları
+# ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ────────────────────────────────────────────────
+# WhatsApp Web JS (otomatik oluşturulan)
+# ────────────────────────────────────────────────
 .wwebjs_auth/
 .wwebjs_cache/
+
+# ────────────────────────────────────────────────
+# Expo / React Native
+# ────────────────────────────────────────────────
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# ────────────────────────────────────────────────
+# Yüklenen Dosyalar (runtime'da oluşan)
+# ────────────────────────────────────────────────
+backend-api/uploads/*
+!backend-api/uploads/.gitkeep
+
+# ────────────────────────────────────────────────
+# Scratch / Geçici Dosyalar
+# ────────────────────────────────────────────────
+**/scratch_*.js
+
+# ────────────────────────────────────────────────
+# AI / Agents Yapılandırma
+# ────────────────────────────────────────────────
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# ────────────────────────────────────────────────
+# Diğer
+# ────────────────────────────────────────────────
+*.log
+logs/
+coverage/
+.nyc_output/
+.cache/
+.antigravityignore
