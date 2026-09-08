@@ -380,7 +380,7 @@ Katkılarınızı memnuniyetle karşılıyoruz! Detaylar için [CONTRIBUTING.md]
 
 ## 📄 Lisans
 
-Bu proje [MIT](LICENSE) lisansı altında dağıtılmaktadır.
+Bu projenin tüm hakları saklıdır. Detaylar için [LICENSE](LICENSE) dosyasına bakın. İzinsiz kopyalama, dağıtma ve kullanma yasaktır.
 
 ---
 
