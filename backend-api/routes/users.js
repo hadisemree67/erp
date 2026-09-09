@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: users
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -32,21 +32,33 @@ router.get('/permissions', authMiddleware, checkPermission('staff_manage'), asyn
     }
 });
 
-// GET: Tüm personelleri getir (şifreler hariç) ve atanmış yetkilerini al
+// GET: Tüm personelleri getir (şifreler hariç) ve atanmış yetkilerini al (Tekil LEFT JOIN ile optimize edildi)
 router.get('/', authMiddleware, checkPermission('staff_manage'), async (req, res) => {
     try {
-        const [users] = await db.query('SELECT id, username, name, email, role, is_active, created_at FROM users');
+        const [rows] = await db.query(`
+            SELECT 
+                u.id, 
+                u.username, 
+                u.name, 
+                u.email, 
+                u.role, 
+                u.is_active, 
+                u.created_at,
+                GROUP_CONCAT(DISTINCT p.permission_key SEPARATOR '|||') as permissions_str
+            FROM users u
+            LEFT JOIN user_permissions up ON u.id = up.user_id
+            LEFT JOIN permissions p ON up.permission_id = p.id
+            GROUP BY u.id
+            ORDER BY u.id ASC
+        `);
 
-        // Her kullanıcı için yetkilerini çek (daha optimize bir JOIN de yazılabilir ama basitlik için loop)
-        for (let user of users) {
-            const [perms] = await db.query(`
-                SELECT p.permission_key, p.id
-                FROM user_permissions up
-                JOIN permissions p ON up.permission_id = p.id
-                WHERE up.user_id = ?
-            `, [user.id]);
-            user.permissions = perms.map(p => p.permission_key);
-        }
+        const users = rows.map(u => {
+            const { permissions_str, ...userData } = u;
+            return {
+                ...userData,
+                permissions: permissions_str ? permissions_str.split('|||') : []
+            };
+        });
 
         res.json(users);
     } catch (error) {

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: settings
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -17,11 +17,29 @@ const db = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rbac');
 
+const redisClient = require('../services/redisService');
+
 const requireAdmin = (req, res, next) => {
     if (req.user && req.user.role === 'admin') return next();
     return res.status(403).json({ success: false, message: 'Bu ayarları sadece admin değiştirebilir.' });
 };
 
+// GET /api/settings/status - Genel sistem bakım/duraklatma durumunu sorgulama (Public)
+router.get('/status', async (req, res) => {
+    try {
+        let isPaused = req.app.locals.system_paused || false;
+        let pausedAt = req.app.locals.paused_at || null;
+        if (redisClient.isReady) {
+            const redisVal = await redisClient.get('system_paused');
+            if (redisVal !== null) isPaused = (redisVal === 'true');
+            const redisAt = await redisClient.get('system_paused_at');
+            if (redisAt) pausedAt = redisAt;
+        }
+        res.json({ success: true, system_paused: isPaused, paused_at: pausedAt });
+    } catch (e) {
+        res.json({ success: true, system_paused: req.app.locals.system_paused || false, paused_at: req.app.locals.paused_at || null });
+    }
+});
 
 // GET /api/settings
 router.get('/', authMiddleware, checkPermission('staff_manage'), async (req, res) => {
@@ -50,14 +68,23 @@ router.post('/', authMiddleware, checkPermission('staff_manage'), requireAdmin, 
             const strValue = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
             await db.query('UPDATE system_settings SET setting_value = ? WHERE setting_key = ?', [strValue, key]);
             
-            // Eğer system_paused değişiyorsa in-memory cache'i de güncelle
+            // Eğer system_paused değişiyorsa in-memory cache'i ve Redis'i güncelle
             if (key === 'system_paused') {
-                req.app.locals.system_paused = (strValue === 'true');
-                
-                if (strValue === 'true') {
-                    req.app.locals.paused_at = new Date().toISOString();
-                } else {
-                    req.app.locals.paused_at = null;
+                const isPaused = (strValue === 'true');
+                req.app.locals.system_paused = isPaused;
+                req.app.locals.paused_at = isPaused ? new Date().toISOString() : null;
+
+                try {
+                    if (redisClient.isReady) {
+                        await redisClient.set('system_paused', strValue);
+                        if (isPaused) {
+                            await redisClient.set('system_paused_at', req.app.locals.paused_at);
+                        } else {
+                            await redisClient.del('system_paused_at');
+                        }
+                    }
+                } catch (redisErr) {
+                    console.warn('[REDIS] system_paused sync error:', redisErr.message);
                 }
             }
         }

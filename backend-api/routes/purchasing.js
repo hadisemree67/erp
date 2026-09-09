@@ -190,7 +190,7 @@ router.post('/requests/:id/send-order', authMiddleware, checkPermission('procure
     }
 });
 
-// GET /api/purchasing/orders/action - Tedarikçi işlem webhook'u
+// GET /api/purchasing/orders/action - Tedarikçi onay sayfası (Antivirüs botlarının otomatik tetiklemesini engeller)
 router.get('/orders/action', async (req, res) => {
     const { token, status } = req.query;
 
@@ -202,8 +202,104 @@ router.get('/orders/action', async (req, res) => {
         return res.status(400).send("Geçersiz durum güncellemesi.");
     }
 
-    // GÜVENLİK: Defense-in-depth — whitelist kontrolü yeterli olsa da
-    // HTML'e yazılan tüm değerler escape edilir (XSS önleme katmanı)
+    const escapeHtml = (str) => String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    const safeStatus = escapeHtml(status);
+    const safeToken = escapeHtml(token);
+
+    try {
+        const [orders] = await db.query(`
+            SELECT po.*, s.SupplierName
+            FROM purchase_orders po
+            LEFT JOIN suppliers s ON po.supplier_id = s.Id
+            WHERE po.action_token = ?
+        `, [token]);
+
+        if (orders.length === 0) {
+            return res.status(404).send(`
+                <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sipariş Bulunamadı</title></head>
+                <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 50px; background-color: #f8fafc;">
+                    <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto;">
+                        <h1 style="color: #dc2626; margin-top: 0;">⚠️ Sipariş Bulunamadı</h1>
+                        <p style="color: #64748b; font-size: 16px;">Bu onay bağlantısı geçersiz veya süresi dolmuş olabilir.</p>
+                    </div>
+                </body></html>
+            `);
+        }
+
+        const order = orders[0];
+        const safeProductName = escapeHtml(order.product_name);
+        const safeQuantity = escapeHtml(order.quantity);
+        const safeCurrentStatus = escapeHtml(order.status);
+
+        // Eğer zaten bu durumdaysa doğrudan bilgi ver
+        if (order.status === status) {
+            return res.send(`
+                <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bilgi</title></head>
+                <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 50px; background-color: #f8fafc;">
+                    <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto;">
+                        <h1 style="color: #0284c7; font-size: 40px; margin: 0;">ℹ️</h1>
+                        <h2 style="color: #0f172a; margin-top: 10px;">Sipariş Zaten "${safeStatus}"</h2>
+                        <p style="color: #64748b; font-size: 16px;"><strong>${safeProductName}</strong> (${safeQuantity} adet) için durum zaten kaydedilmiş.</p>
+                        <p style="color: #94a3b8; font-size: 14px; margin-top: 25px;">Bu pencereyi kapatabilirsiniz.</p>
+                    </div>
+                </body></html>
+            `);
+        }
+
+        // Onay formu (Botların otomatik tıklamasını engeller, insan onayını zorunlu kılar)
+        let btnColor = '#2563eb';
+        if (status === 'Hazırlandı') btnColor = '#059669';
+        if (status === 'Kargoya Verildi') btnColor = '#d97706';
+
+        res.send(`
+            <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sipariş Onayı</title></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 50px; background-color: #f8fafc;">
+                <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; text-align: left;">
+                    <h2 style="color: #0f172a; margin-top: 0; text-align: center;">Sipariş Durumu Onayı</h2>
+                    <p style="color: #64748b; font-size: 15px; text-align: center;">Aşağıdaki siparişin durumunu güncellemek üzeresiniz:</p>
+                    
+                    <div style="background: #f1f5f9; padding: 18px; border-radius: 8px; margin: 20px 0; font-size: 15px; color: #334155; line-height: 1.8;">
+                        <div><strong>📦 Ürün:</strong> ${safeProductName}</div>
+                        <div><strong>🔢 Miktar:</strong> ${safeQuantity} Adet</div>
+                        <div><strong>📍 Mevcut Durum:</strong> <span style="background: #e2e8f0; padding: 2px 8px; border-radius: 4px;">${safeCurrentStatus}</span></div>
+                        <div><strong>🚀 Yeni Durum:</strong> <strong style="color: ${btnColor}; font-size: 16px;">${safeStatus}</strong></div>
+                    </div>
+
+                    <form method="POST" action="/api/purchasing/orders/action" style="margin-top: 25px;">
+                        <input type="hidden" name="token" value="${safeToken}" />
+                        <input type="hidden" name="status" value="${safeStatus}" />
+                        <button type="submit" style="background-color: ${btnColor}; color: white; border: none; padding: 14px 28px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            Siparişi "${safeStatus}" Olarak Güncelle
+                        </button>
+                    </form>
+                    <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 15px;">Bu işlem sistemde otomatik olarak kaydedilecektir.</p>
+                </div>
+            </body></html>
+        `);
+    } catch (err) {
+        console.error('Error in GET /orders/action:', err);
+        res.status(500).send("Sunucu hatası.");
+    }
+});
+
+// POST /api/purchasing/orders/action - Gerçek durum güncelleme (Form veya API ile)
+router.post('/orders/action', async (req, res) => {
+    const token = req.body.token || req.query.token;
+    const status = req.body.status || req.query.status;
+
+    if (!token || !status) {
+        return res.status(400).send("Geçersiz istek.");
+    }
+
+    if (!['Hazırlanıyor', 'Hazırlandı', 'Kargoya Verildi'].includes(status)) {
+        return res.status(400).send("Geçersiz durum güncellemesi.");
+    }
+
     const escapeHtml = (str) => String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -221,7 +317,7 @@ router.get('/orders/action', async (req, res) => {
 
         if (result.affectedRows === 0) {
             return res.status(404).send(`
-                <html><head><meta charset="UTF-8"><title>Hata</title></head>
+                <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Hata</title></head>
                 <body style="font-family: sans-serif; text-align: center; padding: 50px;">
                     <h1 style="color: #dc2626;">Sipariş Bulunamadı veya Link Geçersiz</h1>
                 </body></html>
@@ -230,7 +326,7 @@ router.get('/orders/action', async (req, res) => {
 
         // Return nice HTML page
         res.send(`
-            <html><head><meta charset="UTF-8"><title>Durum Güncellendi</title></head>
+            <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Durum Güncellendi</title></head>
             <body style="font-family: sans-serif; text-align: center; padding: 50px; background-color: #f8fafc;">
                 <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto;">
                     <h1 style="color: #059669; font-size: 48px; margin: 0;">✓</h1>
@@ -241,7 +337,7 @@ router.get('/orders/action', async (req, res) => {
             </body></html>
         `);
     } catch (err) {
-        console.error('Error updating status from token:', err);
+        console.error('Error in POST /orders/action:', err);
         res.status(500).send("Sunucu hatası.");
     }
 });
@@ -307,13 +403,17 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
         return res.status(400).json({ success: false, message: 'Miktar, depo ve raf bilgileri zorunludur.' });
     }
 
+    let conn = null;
     try {
-        await db.query('BEGIN'); // Start transaction
+        conn = await db.getConnection();
+        await conn.beginTransaction();
 
         // 1. Get the purchase order
-        const [orders] = await db.query('SELECT * FROM purchase_orders WHERE id = ? AND status != "İptal"', [id]);
+        const [orders] = await conn.query('SELECT * FROM purchase_orders WHERE id = ? AND status != "İptal"', [id]);
         if (orders.length === 0) {
-            await db.query('ROLLBACK');
+            await conn.rollback();
+            conn.release();
+            conn = null;
             return res.status(404).json({ success: false, message: 'Geçerli sipariş bulunamadı veya iptal edilmiş.' });
         }
         const order = orders[0];
@@ -328,18 +428,22 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
         const remainingQty = Math.max(0, orderQty - alreadyReceived);
 
         if (checkTotal > remainingQty) {
-            await db.query('ROLLBACK');
+            await conn.rollback();
+            conn.release();
+            conn = null;
             return res.status(400).json({ success: false, message: `Hata: Girilen miktar (${checkTotal} Adet), kalan sipariş miktarını (${remainingQty} Adet) aşamaz!` });
         }
 
         // 2. We need the product ID from products table matching order.product_name
-        const [products] = await db.query('SELECT Id FROM products WHERE ProductName = ?', [order.product_name]);
+        const [products] = await conn.query('SELECT Id FROM products WHERE ProductName = ?', [order.product_name]);
         if (products.length === 0) {
-            await db.query('ROLLBACK');
+            await conn.rollback();
+            conn.release();
+            conn = null;
             return res.status(404).json({ success: false, message: 'Siparişteki ürün, malzeme listesinde bulunamadı.' });
         }
         const productId = products[0].Id;
-        const [uRows] = await db.query('SELECT id FROM users LIMIT 1');
+        const [uRows] = await conn.query('SELECT id FROM users LIMIT 1');
         const fallbackUserId = uRows.length > 0 ? uRows[0].id : 1;
         const finalUserId = user_id || order.employee_id || fallbackUserId;
 
@@ -359,18 +463,18 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
             const uPrice = order.unit_price || null;
 
             // Update or Insert into wms_stock_balances matching shelf and batch
-            const [existingBalance] = await db.query(
+            const [existingBalance] = await conn.query(
                 'SELECT id, quantity FROM wms_stock_balances WHERE product_id = ? AND warehouse_id = ? AND shelf_code = ? AND COALESCE(batch_number, "") = ? AND (expiration_date = ? OR (expiration_date IS NULL AND ? IS NULL)) AND (supplier_id = ? OR (supplier_id IS NULL AND ? IS NULL))',
                 [productId, whId, shCode, bNum, expDate, expDate, suppId, suppId]
             );
 
             if (existingBalance.length > 0) {
-                await db.query(
+                await conn.query(
                     'UPDATE wms_stock_balances SET quantity = quantity + ?, batch_number = ?, expiration_date = COALESCE(expiration_date, ?), supplier_id = COALESCE(supplier_id, ?), unit_price = COALESCE(unit_price, ?) WHERE id = ?',
                     [qty, bNum, expDate, suppId, uPrice, existingBalance[0].id]
                 );
             } else {
-                await db.query(
+                await conn.query(
                     'INSERT INTO wms_stock_balances (product_id, warehouse_id, shelf_code, batch_number, expiration_date, quantity, supplier_id, unit_price) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                     [productId, whId, shCode, bNum, expDate, qty, suppId, uPrice]
                 );
@@ -380,7 +484,7 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
             const validLocationId = null;
 
             // Insert into stockmovements
-            await db.query(`
+            await conn.query(`
                 INSERT INTO stockmovements 
                 (ProductId, UserId, MovementType, Quantity, location_id, warehouse_id, shelf_code, batch_number, expiration_date, RelatedId, Description, supplier_id, unit_price)
                 VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -407,13 +511,13 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
         const isCompleted = newTotalReceived >= totalOrderQty;
 
         if (isCompleted) {
-            await db.query(`
+            await conn.query(`
                 UPDATE purchase_orders 
                 SET status = 'Depoya Alındı', received_quantity = ? 
                 WHERE id = ?
             `, [newTotalReceived, id]);
         } else {
-            await db.query(`
+            await conn.query(`
                 UPDATE purchase_orders 
                 SET received_quantity = ? 
                 WHERE id = ?
@@ -425,24 +529,24 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
             const totalCost = parseFloat(order.unit_price) * totalReceived;
             let supplierName = 'Bilinmeyen Tedarikçi';
             if (order.supplier_id) {
-                const [supRows] = await db.query('SELECT SupplierName FROM suppliers WHERE Id = ?', [order.supplier_id]);
+                const [supRows] = await conn.query('SELECT SupplierName FROM suppliers WHERE Id = ?', [order.supplier_id]);
                 if (supRows.length > 0) supplierName = supRows[0].SupplierName;
             }
             const desc = `${order.product_name} ürünü için ${supplierName} adlı tedarikçiden ${totalReceived} adet mal kabul yapıldı.`;
 
-            await db.query(`
+            await conn.query(`
                 INSERT INTO finance_transactions 
                 (type, amount, category, description, transaction_date) 
                 VALUES ('GİDER', ?, 'Hammadde / Ürün Alımı', ?, CURDATE())
             `, [totalCost, desc]);
         }
 
-        await db.query('COMMIT'); // Commit transaction
+        if (conn) { await conn.commit(); conn.release(); conn = null; }
         await logActivity(req.user?.id, 'UPDATE', 'purchase_orders', id, `${totalReceived} adet ${order.product_name} için depo mal kabulü yapıldı.`);
         res.json({ success: true, message: isCompleted ? 'Mal kabul başarıyla yapıldı ve sipariş tamamlandı.' : `Kısmi mal kabul yapıldı (${newTotalReceived}/${totalOrderQty} Adet alındı). Kalan ürünler mal kabul bekliyor.` });
 
     } catch (err) {
-        await db.query('ROLLBACK');
+        if (conn) { await conn.rollback(); conn.release(); conn = null; }
         console.error('Error receiving goods:', err);
         res.status(500).json({ success: false, message: 'Mal kabul işlemi sırasında sunucu hatası oluştu.' });
     }

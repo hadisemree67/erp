@@ -1,3 +1,4 @@
+const redisClient = require('../services/redisService');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
@@ -21,8 +22,15 @@ const customerAuthMiddleware = async (req, res, next) => {
         }
 
         // GÜVENLİK: Token kara listede mi kontrol et
-        const [blacklistRows] = await db.query('SELECT token FROM blacklisted_tokens WHERE token = ?', [token]);
-        if (blacklistRows.length > 0) {
+        let isBlacklisted = false;
+        try {
+            if (redisClient.isReady) isBlacklisted = await redisClient.get(`bl_${token}`);
+            else {
+                const [dbBl] = await db.query('SELECT token FROM blacklisted_tokens WHERE token = ?', [token]);
+                isBlacklisted = dbBl.length > 0;
+            }
+        } catch(e) {}
+        if (isBlacklisted) {
             return res.status(401).json({ success: false, message: 'Bu oturum kapatılmış (Geçersiz Token). Lütfen tekrar giriş yapın.' });
         }
 

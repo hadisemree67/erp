@@ -22,14 +22,17 @@ router.get('/', authMiddleware, async (req, res) => {
         const [categories] = await db.query('SELECT COUNT(id) as count FROM kategori');
         const [lowStock] = await db.query('SELECT COUNT(Id) as count FROM products WHERE StockQuantity <= 10');
 
+        const [todayOrders] = await db.query("SELECT COUNT(Id) as count FROM orders WHERE DATE(OrderDate) = CURDATE()");
+        const [customers] = await db.query("SELECT COUNT(Id) as count FROM customers");
+
         res.json({
             success: true,
             totalProducts: products[0].count,
             totalBrands: brands[0].count,
             totalCategories: categories[0].count,
             lowStock: lowStock[0].count,
-            todayOrders: 0,
-            totalCustomers: 0
+            todayOrders: todayOrders[0].count,
+            totalCustomers: customers[0].count
         });
     } catch (error) {
         console.error('Dashboard stats error:', error);

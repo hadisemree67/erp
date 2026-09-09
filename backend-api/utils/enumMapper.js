@@ -4,51 +4,59 @@
  * MODÜL / KATMAN: Arkayüz Yardımcısı (Utility) - Veri Dönüşümü (Mapping)
  * 
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Veritabanında tutulan karmaşık veya bozuk karakterli durum (status) metinlerini,
- *   kullanıcı arayüzünde (Frontend) gösterilecek düzgün Türkçe metinlere dönüştürür.
- *   Aynı şekilde, UI'dan gelen düzgün metinleri veritabanı formatına geri çevirir.
+ *   Veritabanındaki durum (status) değerlerini frontend label'larına dönüştürür.
+ *   Veritabanı artık düzgün Türkçe ENUM değerleri kullandığından,
+ *   toPrismaStatus sadece gerekli label→DB eşlemelerini yapar.
+ * 
+ * DB ENUM değerleri (orders.OrderStatus):
+ *   'Beklemede','Onaylandı','Hazırlanıyor','Toplamada','Hazır',
+ *   'Paketleniyor','Paketlendi','Kargoya Verildi','Teslim Edildi',
+ *   'İptal','İptal Edildi','İptal Bekliyor'
  * ============================================================================
  */
 
 /**
- * Veritabanı formatından (Prisma/MySQL) Frontend (Kullanıcı Arayüzü) formatına dönüştürür.
- * @param {string} status - Veritabanındaki durum metni (örn: 'Haz_rlan_yor')
- * @returns {string} - UI'da gösterilecek temiz metin (örn: 'Toplanıyor')
+ * Veritabanı formatından Frontend (Kullanıcı Arayüzü) label'ına dönüştürür.
+ * Veritabanı düzgün Türkçe kullandığı için sadece UI label farklılıklarını eşler.
+ * @param {string} status - Veritabanındaki durum metni (örn: 'Toplamada')
+ * @returns {string} - UI'da gösterilecek label (örn: 'Toplanacaklar')
  */
 const toFrontendStatus = (status) => {
     const map = {
-        'Onayland_': 'Onaylandı',
+        // DB değeri → UI label'ı (sadece farklı olanlar)
         'Toplamada': 'Toplanacaklar',
+        'Hazırlanıyor': 'Toplanıyor',
+        'Hazır': 'Toplandı',
+        // Eski bozuk formatlar için geriye dönük uyumluluk
+        'Onayland_': 'Onaylandı',
         'Haz_rlan_yor': 'Toplanıyor',
         'Haz_r': 'Toplandı',
         'Kargoya_Verildi': 'Kargoya Verildi',
         'Teslim_Edildi': 'Teslim Edildi',
         'ptal': 'İptal',
         'ptal_Edildi': 'İptal Edildi',
-        'ptal_Bekliyor': 'İptal Bekliyor',
-        'İptal Bekliyor': 'İptal Bekliyor'
+        'ptal_Bekliyor': 'İptal Bekliyor'
     };
     return map[status] || status;
 };
 
 /**
- * Frontend (Kullanıcı Arayüzü) formatından Veritabanı (Prisma/MySQL) formatına dönüştürür.
- * @param {string} status - UI'dan gelen temiz metin (örn: 'Toplanıyor')
- * @returns {string} - Veritabanına yazılacak durum metni (örn: 'Haz_rlan_yor')
+ * Frontend (Kullanıcı Arayüzü) label'ından Veritabanı ENUM değerine dönüştürür.
+ * Veritabanı düzgün Türkçe kullandığı için sadece UI label farklılıklarını eşler.
+ * @param {string} status - UI'dan gelen label (örn: 'Toplanıyor')
+ * @returns {string} - Veritabanına yazılacak ENUM değeri (örn: 'Hazırlanıyor')
  */
-const toPrismaStatus = (status) => {
+const toDbStatus = (status) => {
     const map = {
-        'Onaylandı': 'Onayland_',
+        // UI label → DB ENUM değeri (sadece farklı olanlar)
         'Toplanacaklar': 'Toplamada',
-        'Toplanıyor': 'Haz_rlan_yor',
-        'Toplandı': 'Haz_r',
-        'Kargoya Verildi': 'Kargoya_Verildi',
-        'Teslim Edildi': 'Teslim_Edildi',
-        'İptal': 'ptal',
-        'İptal Edildi': 'ptal_Edildi',
-        'İptal Bekliyor': 'ptal_Bekliyor'
+        'Toplanıyor': 'Hazırlanıyor',
+        'Toplandı': 'Hazır'
     };
     return map[status] || status;
 };
 
-module.exports = { toFrontendStatus, toPrismaStatus };
+// Geriye dönük tam uyumluluk için alias
+const toPrismaStatus = toDbStatus;
+
+module.exports = { toFrontendStatus, toPrismaStatus, toDbStatus };

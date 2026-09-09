@@ -102,10 +102,10 @@ const CheckoutPage = () => {
     const handleAddressSelect = (id, addressesList = savedAddresses) => {
         setSelectedAddressId(id);
         if (id === 'new') {
-            setFormData(prev => ({ 
-                ...prev, 
-                address: '', 
-                name: currentUser?.CustomerName || prev.name, 
+            setFormData(prev => ({
+                ...prev,
+                address: '',
+                name: currentUser?.CustomerName || prev.name,
                 phone: currentUser?.Phone || prev.phone,
                 email: currentUser?.Email || prev.email
             }));
@@ -148,9 +148,15 @@ const CheckoutPage = () => {
             // Ödeme simülasyonu
             await new Promise(resolve => setTimeout(resolve, 2000));
 
+            const token = localStorage.getItem('customerToken');
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
             const response = await fetch(import.meta.env.VITE_API_URL + '/api/orders/public/checkout', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
                     session_id: sid,
                     shippingAddress: formData.address,
@@ -189,17 +195,17 @@ const CheckoutPage = () => {
         <div className={styles.checkoutContainer}>
             <div className={styles.checkoutLeft}>
                 <h1 className={styles.pageTitle}>Ödeme ve Teslimat</h1>
-                
+
                 <form className={styles.checkoutForm} onSubmit={handleSubmit}>
                     <div className={styles.formSection}>
                         <h2>1. Teslimat Adresi</h2>
-                        
+
                         {savedAddresses.length > 0 && (
                             <div className={styles.inputGroup} style={{ marginBottom: '24px' }}>
                                 <label>Kayıtlı Adreslerimden Seç</label>
-                                <select 
+                                <select
                                     className={styles.addressSelect}
-                                    value={selectedAddressId} 
+                                    value={selectedAddressId}
                                     onChange={(e) => handleAddressSelect(e.target.value)}
                                     style={{ padding: '12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '15px' }}
                                 >
@@ -236,9 +242,9 @@ const CheckoutPage = () => {
                     <div className={styles.formSection}>
                         <h2>2. Kargo Firması</h2>
                         <div className={styles.inputGroup}>
-                            <select 
-                                name="shipperId" 
-                                value={formData.shipperId} 
+                            <select
+                                name="shipperId"
+                                value={formData.shipperId}
                                 onChange={handleChange}
                                 required
                                 style={{ padding: '12px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '15px', width: '100%' }}
@@ -307,9 +313,9 @@ const CheckoutPage = () => {
                         <span className={styles.totalPrice}>{finalTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} TL</span>
                     </div>
 
-                    <button 
-                        className={styles.completeBtn} 
-                        onClick={handleSubmit} 
+                    <button
+                        className={styles.completeBtn}
+                        onClick={handleSubmit}
                         disabled={isProcessing}
                     >
                         {isProcessing ? 'İŞLENİYOR...' : 'ÖDEMEYİ TAMAMLA'}

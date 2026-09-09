@@ -1,26 +1,18 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: mobile
  * GÖREV VE AKIŞ AÇIKLAMASI:
  *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
  * ============================================================================
  */
-/*
- * ÖZET:
- * Bu modül, depo personelinin el terminalleri (mobil cihazlar) üzerinden sipariş 
- * toplama (picking), barkod okutma, sipariş atama ve kutu/kargo süreçlerini 
- * yönettiği API uç noktalarını barındırır.
- * (Prisma ORM ile yeniden yazılmıştır)
- */
-
 const express = require('express');
 const router = express.Router();
-const prisma = require('../prisma');
 const db = require('../db');
 const { toFrontendStatus, toPrismaStatus } = require('../utils/enumMapper');
 const authMiddleware = require('../middleware/auth');
 const { checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
+const { notifyCustomerOrderStatus } = require('../utils/orderNotifier');
 
 function sortLocation(a, b) {
     const locA = a.Location ? String(a.Location) : '';
@@ -32,37 +24,68 @@ function sortLocation(a, b) {
 }
 
 async function getOrderItemsWithRoute(orderId) {
-    const rawItems = await prisma.orderitems.findMany({
-        where: { OrderId: orderId },
-        include: { products: { include: { product_barcodes: true } } }
-    });
+    const [rawItems] = await db.query(`
+        SELECT oi.*, p.Id as p_Id, p.ProductName, p.Weight, p.Width, p.Height, p.Depth, p.Volume, p.ImagePath, p.Location,
+               (SELECT JSON_ARRAYAGG(pb.barcode) FROM product_barcodes pb WHERE pb.product_id = p.Id) as Barcode
+        FROM orderitems oi
+        LEFT JOIN products p ON oi.ProductId = p.Id
+        WHERE oi.OrderId = ?
+    `, [orderId]);
+
+    if (!rawItems || rawItems.length === 0) return [];
+
+    // PERFORMANS OPTİMİZASYONU: N+1 veritabanı döngüsünü engelle.
+    // Siparişteki tüm ürünlerin stoklarını tek bir SQL batch sorgusunda çekip hafızada grupla.
+    const productIds = [...new Set(rawItems.map(i => i.p_Id).filter(Boolean))];
+    const stocksByProduct = {};
+
+    if (productIds.length > 0) {
+        const placeholders = productIds.map(() => '?').join(',');
+        const [allStocks] = await db.query(`
+            SELECT * FROM wms_stock_balances 
+            WHERE product_id IN (${placeholders}) AND quantity > 0 
+            ORDER BY expiration_date ASC, id ASC
+        `, productIds);
+
+        for (const stock of allStocks) {
+            if (!stocksByProduct[stock.product_id]) {
+                stocksByProduct[stock.product_id] = [];
+            }
+            stocksByProduct[stock.product_id].push({
+                ...stock,
+                availableQty: Number(stock.quantity)
+            });
+        }
+    }
 
     let routeSteps = [];
 
     for (const item of rawItems) {
         let remainingQty = item.Quantity;
-        const product = item.products;
-        if (!product) continue;
+        if (!item.p_Id) continue;
 
-        const stocks = await prisma.wms_stock_balances.findMany({
-            where: { product_id: product.Id, quantity: { gt: 0 } },
-            orderBy: [{ expiration_date: 'asc' }, { id: 'asc' }]
-        });
+        const stocks = stocksByProduct[item.p_Id] || [];
 
         for (const stock of stocks) {
             if (remainingQty <= 0) break;
-            const takeQty = Math.min(remainingQty, Number(stock.quantity));
+            if (stock.availableQty <= 0) continue;
+            const takeQty = Math.min(remainingQty, stock.availableQty);
+            stock.availableQty -= takeQty;
             remainingQty -= takeQty;
 
             routeSteps.push({
                 OrderItemId: item.Id,
                 Quantity: takeQty,
-                ProductId: product.Id,
-                ProductName: product.ProductName,
-                Barcode: product.product_barcodes ? JSON.stringify(product.product_barcodes.map(pb => pb.barcode)) : '[]',
-                Weight: product.Weight,
-                ImagePath: product.ImagePath,
-                DefaultLocation: product.Location,
+                ProductId: item.p_Id,
+                ProductName: item.ProductName,
+                Barcode: item.Barcode || '[]',
+                Weight: item.Weight,
+                Width: item.Width,
+                Height: item.Height,
+                Depth: item.Depth,
+                Volume: item.Volume,
+                ImagePath: item.ImagePath,
+                DefaultLocation: item.Location,
                 Location: stock.shelf_code,
                 StockBalanceId: stock.id
             });
@@ -72,13 +95,17 @@ async function getOrderItemsWithRoute(orderId) {
             routeSteps.push({
                 OrderItemId: item.Id,
                 Quantity: remainingQty,
-                ProductId: product.Id,
-                ProductName: product.ProductName,
-                Barcode: product.product_barcodes ? JSON.stringify(product.product_barcodes.map(pb => pb.barcode)) : '[]',
-                Weight: product.Weight,
-                ImagePath: product.ImagePath,
-                DefaultLocation: product.Location,
-                Location: product.Location || 'Raf Belirsiz'
+                ProductId: item.p_Id,
+                ProductName: item.ProductName,
+                Barcode: item.Barcode || '[]',
+                Weight: item.Weight,
+                Width: item.Width,
+                Height: item.Height,
+                Depth: item.Depth,
+                Volume: item.Volume,
+                ImagePath: item.ImagePath,
+                DefaultLocation: item.Location,
+                Location: item.Location || 'Raf Belirsiz'
             });
         }
     }
@@ -92,28 +119,26 @@ router.get('/orders/pending', authMiddleware, checkPermission('view_wms'), async
     try {
         const userId = req.user?.id;
         
-        const orders = await prisma.orders.findMany({
-            where: {
-                OR: [
-                    { OrderStatus: 'Onayland_', PickerId: null },
-                    { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
-                ]
-            },
-            include: { shippers: true },
-        });
+        const [orders] = await db.query(`
+            SELECT o.Id, o.OrderNumber, o.OrderStatus, s.CompanyName as CargoCompanyName
+            FROM orders o
+            LEFT JOIN shippers s ON o.ShipperId = s.Id
+            WHERE (o.OrderStatus = 'Onaylandı' AND o.PickerId IS NULL)
+               OR (o.OrderStatus = 'Hazırlanıyor' AND o.PickerId = ?)
+               OR (o.OrderStatus = 'Onayland_' AND o.PickerId IS NULL)
+               OR (o.OrderStatus = 'Haz_rlan_yor' AND o.PickerId = ?)
+        `, [userId, userId]);
         
-        // IsMyOngoing sorting logic
         const formattedOrders = orders.map(o => ({
             Id: o.Id,
             OrderNumber: o.OrderNumber,
-            CargoCompanyName: o.shippers?.CompanyName || null,
+            CargoCompanyName: o.CargoCompanyName || null,
             IsMyOngoing: toFrontendStatus(o.OrderStatus) === 'Hazırlanıyor' ? 1 : 0
         })).sort((a, b) => b.IsMyOngoing - a.IsMyOngoing || a.Id - b.Id);
         
         res.json({ success: true, data: formattedOrders });
     } catch (error) {
         console.error('Bekleyen siparişleri alma hatası:', error);
-        try { require('fs').appendFileSync('error.log', new Date().toISOString() + ' [MOBILE API HATASI] ' + (error.stack || error) + '\n'); } catch(e) {}
         res.status(500).json({ success: false, message: 'Siparişler getirilemedi.' });
     }
 });
@@ -123,21 +148,23 @@ router.post('/orders/assign/:id', authMiddleware, checkPermission('wms_transfer'
     const id = Number(req.params.id);
     if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
-    
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
 
+    const conn = await db.getConnection();
     try {
-        const orderToUpdate = await prisma.orders.findFirst({
-            where: {
-                Id: id,
-                OR: [
-                    { OrderStatus: 'Onayland_', PickerId: null },
-                    { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
-                ]
-            }
-        });
+        await conn.query('START TRANSACTION');
 
-        if (!orderToUpdate) {
+        const [orders] = await conn.query(`
+            SELECT * FROM orders 
+            WHERE Id = ? AND (
+                (OrderStatus IN ('Onaylandı', 'Onayland_') AND PickerId IS NULL) OR 
+                (OrderStatus IN ('Hazırlanıyor', 'Haz_rlan_yor') AND PickerId = ?)
+            ) FOR UPDATE
+        `, [id, userId]);
+
+        if (orders.length === 0) {
+            await conn.query('ROLLBACK');
+            conn.release();
             return res.json({ success: false, message: 'Bu sipariş zaten alınmış veya bulunamıyor.' });
         }
 
@@ -147,107 +174,110 @@ router.post('/orders/assign/:id', authMiddleware, checkPermission('wms_transfer'
 
         if (section_barcodes && Array.isArray(section_barcodes) && section_barcodes.length > 0) {
             if (section_barcodes.length === 1 && section_barcodes[0] === 'ELDEN_TESLIM') {
-                // Arabasız toplama durumu: CartId ve CartSectionIds null olarak kalacak
+                // Arabasız toplama durumu
             } else {
-                // Find sections first
-                const sections = await prisma.picking_cart_sections.findMany({
-                where: {
-                    barcode: { in: section_barcodes }
-                },
-                include: { cart: true } // Need to get cart info
-            });
+                const [sections] = await conn.query(`
+                    SELECT s.*, c.is_active, c.barcode as cartBarcode, c.status as cartStatus 
+                    FROM picking_cart_sections s
+                    JOIN picking_carts c ON s.cart_id = c.id
+                    WHERE s.barcode IN (?)
+                `, [section_barcodes]);
 
-            if (sections.length !== section_barcodes.length) {
-                return res.status(400).json({ success: false, message: 'Bazı bölüm barkodları bulunamadı veya geçersiz.' });
-            }
-
-            // Verify all sections belong to the same active cart
-            const firstCartId = sections[0].cart_id;
-            const allSameCart = sections.every(s => s.cart_id === firstCartId);
-            
-            if (!allSameCart) {
-                return res.status(400).json({ success: false, message: 'Seçilen bölümler aynı taşıma arabasına ait olmalıdır.' });
-            }
-
-            const cart = sections[0].cart;
-            if (!cart.is_active) {
-                return res.status(400).json({ success: false, message: 'Bu taşıma arabası aktif değil.' });
-            }
-
-            // Verify cart_barcode matches if it was provided (for backward compatibility)
-            if (cart_barcode && cart.barcode !== cart_barcode) {
-                 return res.status(400).json({ success: false, message: 'Bölümler belirtilen taşıma arabasına ait değil.' });
-            }
-
-            cartId = cart.id;
-            cartSectionIds = sections.map(s => s.id);
-
-            // GÜVENLİK: Bölüm (Section) Müsaitlik Kontrolü (Race condition / Çakışma önleme)
-            const activeOrdersInCart = await prisma.orders.findMany({
-                where: {
-                    CartId: cart.id,
-                    OrderStatus: {
-                        in: ['Haz_rlan_yor', 'Toplamada', 'Haz_r']
-                    }
+                if (sections.length !== section_barcodes.length) {
+                    await conn.query('ROLLBACK');
+                    conn.release();
+                    return res.status(400).json({ success: false, message: 'Bazı bölüm barkodları bulunamadı veya geçersiz.' });
                 }
-            });
 
-            for (const activeOrder of activeOrdersInCart) {
-                if (activeOrder.Id === id) continue; // Mevcut siparişi yoksay
-                if (activeOrder.CartSectionIds && Array.isArray(activeOrder.CartSectionIds)) {
-                    for (const section of sections) {
-                        if (activeOrder.CartSectionIds.includes(section.id)) {
-                             return res.status(400).json({ 
-                                 success: false, 
-                                 message: `Bu bölüm zaten Sipariş #${activeOrder.OrderNumber || activeOrder.Id} için kullanılıyor. Lütfen başka bir bölüm seçin.` 
-                             });
+                const firstCartId = sections[0].cart_id;
+                const allSameCart = sections.every(s => s.cart_id === firstCartId);
+                
+                if (!allSameCart) {
+                    await conn.query('ROLLBACK');
+                    conn.release();
+                    return res.status(400).json({ success: false, message: 'Seçilen bölümler aynı taşıma arabasına ait olmalıdır.' });
+                }
+
+                if (!sections[0].is_active) {
+                    await conn.query('ROLLBACK');
+                    conn.release();
+                    return res.status(400).json({ success: false, message: 'Bu taşıma arabası aktif değil.' });
+                }
+
+                if (cart_barcode && sections[0].cartBarcode !== cart_barcode) {
+                    await conn.query('ROLLBACK');
+                    conn.release();
+                    return res.status(400).json({ success: false, message: 'Bölümler belirtilen taşıma arabasına ait değil.' });
+                }
+
+                cartId = firstCartId;
+                const sectionIdsArr = sections.map(s => s.id);
+                cartSectionIds = JSON.stringify(sectionIdsArr);
+
+                const [activeOrders] = await conn.query(`
+                    SELECT Id, OrderNumber, CartSectionIds FROM orders 
+                    WHERE CartId = ? AND OrderStatus IN ('Hazırlanıyor', 'Haz_rlan_yor', 'Toplamada', 'Hazır', 'Haz_r')
+                `, [firstCartId]);
+
+                for (const activeOrder of activeOrders) {
+                    if (activeOrder.Id === id) continue;
+                    let activeSecIds = [];
+                    try { activeSecIds = JSON.parse(activeOrder.CartSectionIds) || []; } catch(e){}
+                    if (Array.isArray(activeSecIds)) {
+                        for (const sec of sections) {
+                            if (activeSecIds.includes(sec.id)) {
+                                await conn.query('ROLLBACK');
+                                conn.release();
+                                return res.status(400).json({ 
+                                    success: false, 
+                                    message: `Bu bölüm zaten Sipariş #${activeOrder.OrderNumber || activeOrder.Id} için kullanılıyor. Lütfen başka bir bölüm seçin.` 
+                                });
+                            }
                         }
                     }
                 }
-            }
 
-            // Update cart status to PICKING if it's IDLE
-            if (cart.status === 'IDLE') {
-                await prisma.picking_carts.update({
-                    where: { id: cart.id },
-                    data: { status: 'PICKING' }
-                });
+                if (sections[0].cartStatus === 'IDLE') {
+                    await conn.query('UPDATE picking_carts SET status = ? WHERE id = ?', ['PICKING', firstCartId]);
                 }
             }
         }
 
-        await prisma.orders.update({
-            where: { Id: id },
-            data: { 
-                OrderStatus: 'Haz_rlan_yor', 
-                PickerId: userId,
-                CartId: cartId !== undefined ? cartId : undefined,
-                CartSectionIds: cartSectionIds !== undefined ? cartSectionIds : undefined
-            }
-        });
+        let updates = ['OrderStatus = "Hazırlanıyor"', 'PickerId = ?'];
+        let params = [userId];
+
+        if (cartId !== null) {
+            updates.push('CartId = ?', 'CartSectionIds = ?');
+            params.push(cartId, cartSectionIds);
+        }
+        params.push(id);
+
+        await conn.query(`UPDATE orders SET ${updates.join(', ')} WHERE Id = ?`, params);
+        await conn.query('COMMIT');
+        conn.release();
 
         await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi toplamaya başladı.`, null);
 
-        const order = await prisma.orders.findUnique({
-            where: { Id: id },
-            include: { customers: true }
-        });
+        const [finalOrderRows] = await db.query(`
+            SELECT o.*, c.CustomerName 
+            FROM orders o LEFT JOIN customers c ON o.CustomerId = c.Id WHERE o.Id = ?
+        `, [id]);
+        
+        if (finalOrderRows.length > 0 && typeof finalOrderRows[0].CartSectionIds === 'string') {
+            try { finalOrderRows[0].CartSectionIds = JSON.parse(finalOrderRows[0].CartSectionIds); } catch(e){}
+        }
 
-        const formattedOrder = {
-            ...order,
-            CustomerName: order.customers?.CustomerName
-        };
-
-        const items = await getOrderItemsWithRoute(order.Id);
+        const items = await getOrderItemsWithRoute(id);
 
         res.json({
             success: true,
             message: 'Sipariş başarıyla atandı.',
-            order: formattedOrder,
+            order: finalOrderRows[0],
             items: items
         });
 
     } catch (error) {
+        if(conn) { await conn.query('ROLLBACK'); conn.release(); }
         console.error('Sipariş atama hatası:', error);
         res.status(500).json({ success: false, message: 'Sipariş atanamadı.' });
     }
@@ -264,17 +294,14 @@ router.post('/orders/:id/add-section', authMiddleware, checkPermission('wms_tran
     if (!section_barcode) return res.status(400).json({ success: false, message: 'Bölüm barkodu gerekli.' });
 
     try {
-        const order = await prisma.orders.findUnique({
-            where: { Id: id }
-        });
+        const [orders] = await db.query('SELECT * FROM orders WHERE Id = ?', [id]);
+        const order = orders[0];
 
-        if (!order || order.PickerId !== userId || order.OrderStatus !== 'Haz_rlan_yor') {
-            // GÜVENLİK: Şüpheli İşlem - Başkasının siparişine müdahale girişimi
+        if (!order || order.PickerId !== userId || (order.OrderStatus !== 'Hazırlanıyor' && order.OrderStatus !== 'Haz_rlan_yor')) {
             if (order && order.PickerId && order.PickerId !== userId) {
-                await prisma.users.update({ where: { id: userId }, data: { is_active: false } });
-                const authMiddleware = require('../middleware/auth');
-                authMiddleware.clearAuthCache(userId);
-                console.error(`[SECURITY ALERT] User ${userId} tried to access order ${id} belonging to user ${order.PickerId}. Account suspended.`);
+                await db.query('UPDATE users SET is_active = 0 WHERE id = ?', [userId]);
+                const authMiddlewareLocal = require('../middleware/auth');
+                authMiddlewareLocal.clearAuthCache(userId);
                 return res.status(403).json({ success: false, message: 'Şüpheli işlem tespit edildi. Güvenlik ihlali nedeniyle hesabınız askıya alındı.' });
             }
             return res.json({ success: false, message: 'Sipariş size atanmamış veya durumu uygun değil.' });
@@ -283,48 +310,37 @@ router.post('/orders/:id/add-section', authMiddleware, checkPermission('wms_tran
             return res.json({ success: false, message: 'Bu sipariş henüz bir taşıma arabasına atanmamış.' });
         }
 
-        // Find the section by barcode and cart_id
-        const section = await prisma.picking_cart_sections.findFirst({
-            where: {
-                cart_id: order.CartId,
-                barcode: section_barcode
-            }
-        });
+        const [sections] = await db.query('SELECT * FROM picking_cart_sections WHERE cart_id = ? AND barcode = ?', [order.CartId, section_barcode]);
+        const section = sections[0];
 
         if (!section) {
             return res.json({ success: false, message: 'Bu bölüm, bulunduğunuz arabaya ait değil veya bulunamadı.' });
         }
 
-        // GÜVENLİK: Bölüm (Section) Müsaitlik Kontrolü
-        const activeOrdersInCart = await prisma.orders.findMany({
-            where: {
-                CartId: order.CartId,
-                OrderStatus: {
-                    in: ['Haz_rlan_yor', 'Toplamada', 'Haz_r']
-                }
-            }
-        });
+        const [activeOrdersInCart] = await db.query(`
+            SELECT Id, OrderNumber, CartSectionIds FROM orders 
+            WHERE CartId = ? AND OrderStatus IN ('Hazırlanıyor', 'Haz_rlan_yor', 'Toplamada', 'Hazır', 'Haz_r')
+        `, [order.CartId]);
 
         for (const activeOrder of activeOrdersInCart) {
-            if (activeOrder.Id === id) continue; // Kendi siparişimizi atla
-            if (activeOrder.CartSectionIds && Array.isArray(activeOrder.CartSectionIds)) {
-                if (activeOrder.CartSectionIds.includes(section.id)) {
-                    return res.status(400).json({ 
-                        success: false, 
-                        message: `Bu bölüm zaten Sipariş #${activeOrder.OrderNumber || activeOrder.Id} için kullanılıyor.` 
-                    });
-                }
+            if (activeOrder.Id === id) continue;
+            let activeSecIds = [];
+            try { activeSecIds = JSON.parse(activeOrder.CartSectionIds) || []; } catch(e){}
+            if (Array.isArray(activeSecIds) && activeSecIds.includes(section.id)) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `Bu bölüm zaten Sipariş #${activeOrder.OrderNumber || activeOrder.Id} için kullanılıyor.` 
+                });
             }
         }
 
-        // Append to CartSectionIds
-        let currentSections = Array.isArray(order.CartSectionIds) ? order.CartSectionIds : [];
+        let currentSections = [];
+        try { currentSections = JSON.parse(order.CartSectionIds) || []; } catch(e){}
+        if (!Array.isArray(currentSections)) currentSections = [];
+        
         if (!currentSections.includes(section.id)) {
             currentSections.push(section.id);
-            await prisma.orders.update({
-                where: { Id: id },
-                data: { CartSectionIds: currentSections }
-            });
+            await db.query('UPDATE orders SET CartSectionIds = ? WHERE Id = ?', [JSON.stringify(currentSections), id]);
         }
 
         res.json({
@@ -343,68 +359,69 @@ router.post('/orders/:id/add-section', authMiddleware, checkPermission('wms_tran
 // GET: Sonraki rastgele siparişi al
 router.get('/orders/next', authMiddleware, checkPermission('view_wms'), async (req, res) => {
     const userId = req.user?.id;
-    
     if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
 
     try {
-        let order = await prisma.orders.findFirst({
-            where: { OrderStatus: 'Haz_rlan_yor', PickerId: userId },
-            include: { customers: true }
-        });
+        const [existingOrders] = await db.query(`
+            SELECT o.*, c.CustomerName 
+            FROM orders o LEFT JOIN customers c ON o.CustomerId = c.Id 
+            WHERE o.OrderStatus IN ('Hazırlanıyor', 'Haz_rlan_yor') AND o.PickerId = ? LIMIT 1
+        `, [userId]);
+
+        let order = existingOrders[0];
 
         if (!order) {
             let assignedOrder = null;
             let attempts = 0;
-            const MAX_ATTEMPTS = 5; // En fazla 5 kere sıradaki siparişi kapmaya çalış
-
-            while (!assignedOrder && attempts < MAX_ATTEMPTS) {
+            
+            while (!assignedOrder && attempts < 5) {
                 attempts++;
+                const [availableOrders] = await db.query(`
+                    SELECT Id FROM orders 
+                    WHERE OrderStatus IN ('Onaylandı', 'Onayland_') AND PickerId IS NULL 
+                    ORDER BY Id ASC LIMIT 1
+                `);
                 
-                const availableOrder = await prisma.orders.findFirst({
-                    where: { OrderStatus: 'Onayland_', PickerId: null },
-                    orderBy: { Id: 'asc' }
-                });
-
-                if (!availableOrder) {
+                if (availableOrders.length === 0) {
                     return res.json({ success: false, message: 'Şu an toplanacak boşta sipariş bulunmuyor.' });
                 }
-
-                const updated = await prisma.orders.updateMany({
-                    where: { Id: availableOrder.Id, OrderStatus: 'Onayland_', PickerId: null },
-                    data: { OrderStatus: 'Haz_rlan_yor', PickerId: userId }
-                });
-
-                if (updated.count > 0) {
-                    assignedOrder = availableOrder; // Başarıyla kilitlendi!
+                
+                const availableOrderId = availableOrders[0].Id;
+                
+                const [updateResult] = await db.query(`
+                    UPDATE orders SET OrderStatus = 'Hazırlanıyor', PickerId = ? 
+                    WHERE Id = ? AND OrderStatus IN ('Onaylandı', 'Onayland_') AND PickerId IS NULL
+                `, [userId, availableOrderId]);
+                
+                if (updateResult.affectedRows > 0) {
+                    assignedOrder = availableOrderId;
                 }
-                // Eğer count === 0 ise (başkası bizden 1 salise önce aldıysa), döngü devam eder ve bir sonraki siparişi dener.
             }
 
             if (!assignedOrder) {
-                 return res.json({ success: false, message: 'Sistem şu an çok yoğun, tüm siparişler kapışılıyor. Lütfen tekrar deneyin.' });
+                return res.json({ success: false, message: 'Sistem şu an çok yoğun, lütfen tekrar deneyin.' });
             }
 
-            order = await prisma.orders.findUnique({
-                where: { Id: assignedOrder.Id },
-                include: { customers: true }
-            });
+            const [assignedRows] = await db.query(`
+                SELECT o.*, c.CustomerName 
+                FROM orders o LEFT JOIN customers c ON o.CustomerId = c.Id WHERE o.Id = ?
+            `, [assignedOrder]);
+            order = assignedRows[0];
 
             await logActivity(userId, 'UPDATE', 'orders', order.Id, `Mobil uygulama "Sıradakini Al" butonu ile #${order.Id} numaralı siparişi toplamaya başladı.`, null);
         }
 
-        const formattedOrder = {
-            ...order,
-            CustomerName: order.customers?.CustomerName
-        };
+        if (typeof order.CartSectionIds === 'string') {
+            try { order.CartSectionIds = JSON.parse(order.CartSectionIds); } catch(e){}
+        }
 
         const items = await getOrderItemsWithRoute(order.Id);
 
         res.json({
             success: true,
-            order: formattedOrder,
+            order: order,
             items: items
         });
-
     } catch (error) {
         console.error('Mobil sipariş alma hatası:', error);
         res.status(500).json({ success: false, message: 'Sipariş getirilemedi.' });
@@ -414,23 +431,20 @@ router.get('/orders/next', authMiddleware, checkPermission('view_wms'), async (r
 // POST: Toplama işlemini iptal et (Geri Dön)
 router.post('/orders/cancel/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
-
-    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
+    if (isNaN(id) || !userId) return res.status(400).json({ success: false, message: 'Geçersiz veri.' });
 
     try {
-        const updated = await prisma.orders.updateMany({
-            where: { Id: id, PickerId: userId, OrderStatus: 'Haz_rlan_yor' },
-            data: { OrderStatus: 'Onayland_', PickerId: null }
-        });
+        const [updateResult] = await db.query(`
+            UPDATE orders SET OrderStatus = 'Onaylandı', PickerId = NULL 
+            WHERE Id = ? AND PickerId = ? AND OrderStatus IN ('Hazırlanıyor', 'Haz_rlan_yor')
+        `, [id, userId]);
 
-        if (updated.count === 0) {
-            return res.status(400).json({ success: false, message: 'İptal edilemedi. Bu sipariş size atanmamış veya zaten iptal edilmiş olabilir.' });
+        if (updateResult.affectedRows === 0) {
+            return res.status(400).json({ success: false, message: 'İptal edilemedi. Bu sipariş size atanmamış.' });
         }
 
-        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişin toplama işlemini iptal etti.`, null);
-
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden toplama işlemini iptal etti.`, null);
         res.json({ success: true, message: 'Sipariş başarıyla iptal edildi ve geri alındı.' });
     } catch (error) {
         console.error('İptal hatası:', error);
@@ -441,150 +455,116 @@ router.post('/orders/cancel/:id', authMiddleware, checkPermission('wms_transfer'
 // POST: Siparişi tamamla
 router.post('/orders/complete/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
+    if (isNaN(id) || !userId) return res.status(400).json({ success: false, message: 'Geçersiz veri.' });
 
-    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
-
+    const conn = await db.getConnection();
     try {
-        const result = await prisma.$transaction(async (tx) => {
-            const updated = await tx.orders.updateMany({
-                where: { Id: id, PickerId: userId, OrderStatus: 'Haz_rlan_yor' },
-                data: { OrderStatus: 'Haz_r', PickedDate: new Date() }
-            });
+        await conn.query('START TRANSACTION');
 
-            if (updated.count === 0) {
-                return { success: false, updated: 0 };
+        const [updateResult] = await conn.query(`
+            UPDATE orders SET OrderStatus = 'Hazır', PickedDate = NOW() 
+            WHERE Id = ? AND PickerId = ? AND OrderStatus IN ('Hazırlanıyor', 'Haz_rlan_yor')
+        `, [id, userId]);
+
+        if (updateResult.affectedRows === 0) {
+            const [existing] = await conn.query('SELECT Id FROM orders WHERE Id = ? AND PickerId = ? AND OrderStatus IN ("Hazır", "Haz_r")', [id, userId]);
+            if (existing.length > 0) {
+                await conn.query('ROLLBACK');
+                conn.release();
+                return res.json({ success: true, message: 'Sipariş zaten başarıyla toplanmış.' });
             }
-
-            // Siparişteki ürünleri getir ve stoktan (WMS) düş
-            const orderItems = await tx.orderitems.findMany({
-                where: { OrderId: id }
-            });
-
-            for (const item of orderItems) {
-                let remainingToDeduct = item.Quantity;
-                const availableBalances = await tx.wms_stock_balances.findMany({
-                    where: { product_id: item.ProductId, quantity: { gt: 0 } },
-                    orderBy: { quantity: 'desc' }
-                });
-
-                for (const bal of availableBalances) {
-                    if (remainingToDeduct <= 0) break;
-                    let toDeduct = Math.min(bal.quantity, remainingToDeduct);
-                    await tx.wms_stock_balances.update({
-                        where: { id: bal.id },
-                        data: { quantity: { decrement: toDeduct } }
-                    });
-                    remainingToDeduct -= toDeduct;
-                }
-
-                // Eğer yeterli fiziki bakiye yoksa (eksiye düşme durumu) herhangi bir rafa eksi yaz
-                if (remainingToDeduct > 0) {
-                    const firstBal = await tx.wms_stock_balances.findFirst({
-                        where: { product_id: item.ProductId }
-                    });
-                    if (firstBal) {
-                        await tx.wms_stock_balances.update({
-                            where: { id: firstBal.id },
-                            data: { quantity: { decrement: remainingToDeduct } }
-                        });
-                    } else {
-                        await tx.wms_stock_balances.create({
-                            data: { product_id: item.ProductId, quantity: -remainingToDeduct, warehouse_id: 1, location_id: 1, shelf_code: 'WMS_TOPLAMA' }
-                        });
-                    }
-                }
-
-                // 3. Stok Hareketi (StockMovements) oluştur
-                await tx.stockmovements.create({
-                    data: {
-                        ProductId: item.ProductId,
-                        MovementType: 'OUT',
-                        Quantity: item.Quantity,
-                        MovementDate: new Date(),
-                        Description: `Sipariş #${id} toplayıcı tarafından raftan toplandı.`,
-                        warehouse_id: 1
-                    }
-                });
-            }
-
-            return { success: true, updated: 1 };
-        });
-
-        if (!result.success && result.updated === 0) {
-            // Check if it's already completed by this user
-            const existing = await prisma.orders.findFirst({
-                where: { Id: id, PickerId: userId, OrderStatus: 'Haz_r' }
-            });
-            if (existing) {
-                return res.json({
-                    success: true,
-                    message: 'Sipariş zaten başarıyla toplanmış.'
-                });
-            }
-            return res.status(400).json({ success: false, message: 'Sipariş tamamlanamadı. Size atanmamış olabilir veya durumu uygun değil.' });
+            throw new Error('Sipariş tamamlanamadı. Size atanmamış olabilir.');
         }
 
-        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi topladı ve WMS (raf) stokları düşüldü.`, null);
+        const [orderItems] = await conn.query('SELECT * FROM orderitems WHERE OrderId = ?', [id]);
 
-        res.json({
-            success: true,
-            message: 'Sipariş başarıyla toplandı ve ürünler stoktan düşüldü.'
-        });
+        for (const item of orderItems) {
+            let remainingToDeduct = Number(item.Quantity);
+            const [availableBalances] = await conn.query(`
+                SELECT * FROM wms_stock_balances 
+                WHERE product_id = ? AND quantity > 0 
+                ORDER BY quantity DESC
+            `, [item.ProductId]);
+
+            for (const bal of availableBalances) {
+                if (remainingToDeduct <= 0) break;
+                let toDeduct = Math.min(bal.quantity, remainingToDeduct);
+                await conn.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [toDeduct, bal.id]);
+                remainingToDeduct -= toDeduct;
+            }
+
+            if (remainingToDeduct > 0) {
+                const [firstBal] = await conn.query('SELECT id FROM wms_stock_balances WHERE product_id = ? LIMIT 1', [item.ProductId]);
+                if (firstBal.length > 0) {
+                    await conn.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [remainingToDeduct, firstBal[0].id]);
+                } else {
+                    await conn.query(`
+                        INSERT INTO wms_stock_balances (product_id, quantity, warehouse_id, location_id, shelf_code) 
+                        VALUES (?, ?, 1, 1, 'WMS_TOPLAMA')
+                    `, [item.ProductId, -remainingToDeduct]);
+                }
+            }
+
+            await conn.query(`
+                INSERT INTO stockmovements (ProductId, MovementType, Quantity, MovementDate, Description, warehouse_id) 
+                VALUES (?, 'OUT', ?, NOW(), ?, 1)
+            `, [item.ProductId, item.Quantity, `Sipariş #${id} toplayıcı tarafından raftan toplandı.`]);
+        }
+
+        await conn.query('COMMIT');
+        conn.release();
+
+        await notifyCustomerOrderStatus(id, 'Toplandı');
+
+        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden siparişi topladı ve stoklar düşüldü.`, null);
+        res.json({ success: true, message: 'Sipariş başarıyla toplandı ve ürünler stoktan düşüldü.' });
 
     } catch (error) {
+        if(conn) { await conn.query('ROLLBACK'); conn.release(); }
         console.error('Mobil sipariş tamamlama hatası:', error);
-        res.status(500).json({ success: false, message: 'Sipariş tamamlanamadı.' });
+        res.status(500).json({ success: false, message: error.message || 'Sipariş tamamlanamadı.' });
     }
 });
 
 // POST: Siparişi paketle (Kargo etiketini oluştur ve doğrula)
 router.post('/orders/package/complete/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
-    const { scannedBarcode, boxBarcode } = req.body; // Yeni üretilen kargo barkodu ve kutu barkodu
     const userId = req.user?.id;
+    const { scannedBarcode, boxBarcode } = req.body;
+    
+    if (isNaN(id) || !userId || !scannedBarcode) return res.status(400).json({ success: false, message: 'Geçersiz veya eksik veri.' });
 
-    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
-    if (!scannedBarcode) return res.status(400).json({ success: false, message: 'Barkod bilgisi eksik.' });
     try {
-        const order = await prisma.orders.findUnique({ where: { Id: id } });
-        if (!order) return res.status(404).json({ success: false, message: 'Sipariş bulunamadı.' });
+        const [orders] = await db.query('SELECT ShippingAddress FROM orders WHERE Id = ?', [id]);
+        if (orders.length === 0) return res.status(404).json({ success: false, message: 'Sipariş bulunamadı.' });
 
         let boxId = null;
         if (boxBarcode) {
-            // Kutu barkodunu doğrula ve ilgili kutuyu bul
             const [barcodes] = await db.query('SELECT box_id FROM box_barcodes WHERE barcode = ?', [boxBarcode]);
-            if (barcodes.length === 0) {
-                return res.status(400).json({ success: false, message: 'Geçersiz kutu barkodu okutuldu.' });
-            }
+            if (barcodes.length === 0) return res.status(400).json({ success: false, message: 'Geçersiz kutu barkodu okutuldu.' });
             boxId = barcodes[0].box_id;
         }
 
-        const isEldenTeslim = order.ShippingAddress === 'Elden Teslim';
+        const isEldenTeslim = orders[0].ShippingAddress === 'Elden Teslim';
         
-        const updated = await prisma.orders.updateMany({
-            where: { Id: id, PackerId: userId, OrderStatus: 'Paketleniyor' },
-            data: { 
-                OrderStatus: isEldenTeslim ? 'Teslim_Edildi' : 'Paketlendi', 
-                CargoBarcode: scannedBarcode,
-                PackedDate: new Date() 
-            }
-        });
+        const [updateResult] = await db.query(`
+            UPDATE orders SET OrderStatus = ?, CargoBarcode = ?, PackedDate = NOW() 
+            WHERE Id = ? AND PackerId = ? AND OrderStatus = 'Paketleniyor'
+        `, [isEldenTeslim ? 'Teslim Edildi' : 'Paketlendi', scannedBarcode, id, userId]);
 
-        if (updated.count === 0) {
-            return res.status(400).json({ success: false, message: 'Paketleme tamamlanamadı. Sipariş size atanmamış veya yanlış durumda olabilir.' });
+        if (updateResult.affectedRows === 0) {
+            return res.status(400).json({ success: false, message: 'Paketleme tamamlanamadı. Sipariş size atanmamış veya yanlış durumda.' });
         }
 
         if (boxId) {
-            // Kutu stoğunu düş
             await db.query('UPDATE packaging_boxes SET StockQuantity = StockQuantity - 1 WHERE Id = ?', [boxId]);
-            await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketledi, ${scannedBarcode} kargo barkodunu oluşturdu ve ${boxBarcode} barkodlu kutuyu kullandı.`, null);
-            await logActivity(userId, 'UPDATE', 'packaging_boxes', boxId, `Sipariş #${id} için ${boxBarcode} barkodu okutularak 1 adet kutu stoktan düşüldü.`, null);
+            await logActivity(userId, 'UPDATE', 'orders', id, `Kargo barkodu: ${scannedBarcode}, Kutu: ${boxBarcode}`, null);
         } else {
-            await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi kutusuz (Elden Teslim) olarak paketledi ve ${scannedBarcode} kargo barkodunu oluşturdu.`, null);
+            await logActivity(userId, 'UPDATE', 'orders', id, `Kutusuz (Elden Teslim) paketlendi. Barkod: ${scannedBarcode}`, null);
         }
+
+        await notifyCustomerOrderStatus(id, isEldenTeslim ? 'Teslim Edildi' : 'Paketlendi');
 
         res.json({ success: true, message: 'Sipariş başarıyla paketlendi.' });
 
@@ -598,43 +578,33 @@ router.post('/orders/package/complete/:id', authMiddleware, checkPermission('wms
 router.post('/orders/ship', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const { cargoBarcode } = req.body;
     const userId = req.user?.id;
-
-    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
-    if (!cargoBarcode) return res.status(400).json({ success: false, message: 'Barkod okutulmadı.' });
+    if (!userId || !cargoBarcode) return res.status(400).json({ success: false, message: 'Eksik veri.' });
 
     try {
-        const order = await prisma.orders.findFirst({
-            where: { CargoBarcode: cargoBarcode }
-        });
-
-        if (!order) {
-            return res.status(404).json({ success: false, message: 'Bu barkoda ait sipariş bulunamadı.' });
-        }
-
-        if (order.OrderStatus === 'Kargoya_Verildi') {
+        const [orders] = await db.query('SELECT * FROM orders WHERE CargoBarcode = ?', [cargoBarcode]);
+        if (orders.length === 0) return res.status(404).json({ success: false, message: 'Bu barkoda ait sipariş bulunamadı.' });
+        
+        const order = orders[0];
+        if (order.OrderStatus === 'Kargoya Verildi' || order.OrderStatus === 'Kargoya_Verildi') {
             return res.status(400).json({ success: false, message: 'Bu sipariş zaten kargoya verilmiş.' });
         }
-
         if (order.OrderStatus !== 'Paketlendi') {
-            return res.status(400).json({ success: false, message: 'Bu sipariş henüz paketlenmemiş. Şu anki durumu: ' + order.OrderStatus });
+            return res.status(400).json({ success: false, message: 'Bu sipariş henüz paketlenmemiş.' });
         }
 
-        await prisma.orders.update({
-            where: { Id: order.Id },
-            data: { 
-                OrderStatus: 'Kargoya_Verildi', 
-                ShipUserId: userId,
-                ShippedDate: new Date()
-            }
-        });
+        await db.query(`
+            UPDATE orders SET OrderStatus = 'Kargoya Verildi', ShipUserId = ?, ShippedDate = NOW() 
+            WHERE Id = ?
+        `, [userId, order.Id]);
 
-        await logActivity(userId, 'UPDATE', 'orders', order.Id, `Mobil uygulama üzerinden kargo barkodu (${cargoBarcode}) okutularak kargoya verildi.`, null);
+        await notifyCustomerOrderStatus(order.Id, 'Kargoya Verildi');
 
+        await logActivity(userId, 'UPDATE', 'orders', order.Id, `Mobil kargo teslim: ${cargoBarcode}`, null);
         res.json({ success: true, message: 'Sipariş başarıyla kargoya verildi.', orderId: order.Id, orderNumber: order.OrderNumber });
 
     } catch (error) {
         console.error('Kargoya verme hatası:', error);
-        res.status(500).json({ success: false, message: 'Kargoya verme işlemi başarısız oldu.' });
+        res.status(500).json({ success: false, message: 'Kargoya verme başarısız oldu.' });
     }
 });
 
@@ -642,39 +612,24 @@ router.post('/orders/ship', authMiddleware, checkPermission('wms_transfer'), asy
 router.get('/stats', authMiddleware, checkPermission('view_wms'), async (req, res) => {
     const range = req.query.range || 'daily';
     try {
-        let stats;
-        
-        if (range === 'weekly') {
-            stats = await prisma.$queryRaw`
-                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
-                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
-                WHERE YEARWEEK(o.PickedDate, 1) = YEARWEEK(CURDATE(), 1) AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
-                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
-            `;
-        } else if (range === 'monthly') {
-            stats = await prisma.$queryRaw`
-                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
-                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
-                WHERE YEAR(o.PickedDate) = YEAR(CURDATE()) AND MONTH(o.PickedDate) = MONTH(CURDATE()) AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
-                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
-            `;
-        } else if (range === 'yearly') {
-            stats = await prisma.$queryRaw`
-                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
-                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
-                WHERE YEAR(o.PickedDate) = YEAR(CURDATE()) AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
-                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
-            `;
-        } else {
-            // daily
-            stats = await prisma.$queryRaw`
-                SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
-                FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
-                WHERE DATE(o.PickedDate) = CURDATE() AND o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi')
-                GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC
-            `;
-        }
+        let queryStr = `
+            SELECT u.id as UserId, u.name as UserName, COUNT(DISTINCT o.Id) as TotalOrdersPicked, COALESCE(SUM(oi.Quantity), 0) as TotalProductsPicked
+            FROM users u JOIN orders o ON u.id = o.PickerId JOIN orderitems oi ON o.Id = oi.OrderId
+            WHERE o.OrderStatus IN ('Paketleniyor', 'Paketlendi', 'Kargoya Verildi', 'Teslim Edildi', 'Kargoya_Verildi', 'Teslim_Edildi')
+        `;
 
+        if (range === 'weekly') {
+            queryStr += " AND YEARWEEK(o.PickedDate, 1) = YEARWEEK(CURDATE(), 1)";
+        } else if (range === 'monthly') {
+            queryStr += " AND YEAR(o.PickedDate) = YEAR(CURDATE()) AND MONTH(o.PickedDate) = MONTH(CURDATE())";
+        } else if (range === 'yearly') {
+            queryStr += " AND YEAR(o.PickedDate) = YEAR(CURDATE())";
+        } else {
+            queryStr += " AND DATE(o.PickedDate) = CURDATE()";
+        }
+        queryStr += " GROUP BY u.id, u.name ORDER BY TotalProductsPicked DESC";
+
+        const [stats] = await db.query(queryStr);
         const serializedStats = stats.map(s => ({
             ...s,
             TotalOrdersPicked: Number(s.TotalOrdersPicked),
@@ -694,43 +649,35 @@ router.get('/orders/ready-for-packaging', authMiddleware, checkPermission('view_
         const userId = req.user?.id;
         const { searchQuery } = req.query;
 
-        let whereClause = {};
+        let queryStr = `
+            SELECT o.*, c.CustomerName 
+            FROM orders o LEFT JOIN customers c ON o.CustomerId = c.Id
+            WHERE 
+        `;
+        let params = [];
 
         if (searchQuery && searchQuery.trim().length > 0) {
-            whereClause = {
-                OrderNumber: { contains: searchQuery.trim() },
-                OR: [
-                    { OrderStatus: 'Haz_r' },
-                    { OrderStatus: 'Paketleniyor', PackerId: userId },
-                    { ShippingAddress: { contains: 'Elden Teslim' } }
-                ]
-            };
+            queryStr += `
+                (o.OrderNumber LIKE ? AND (
+                    o.OrderStatus IN ('Hazır', 'Haz_r') OR 
+                    (o.OrderStatus = 'Paketleniyor' AND o.PackerId = ?) OR 
+                    o.ShippingAddress LIKE '%Elden Teslim%'
+                ))
+            `;
+            params.push(`%${searchQuery.trim()}%`, userId);
         } else {
-            // Arama yoksa sadece paketlemeye hazır olanları VEYA elden teslimleri (durumdan bağımsız) getir
-            whereClause = {
-                OR: [
-                    { OrderStatus: 'Haz_r' },
-                    { OrderStatus: 'Paketleniyor', PackerId: userId },
-                    { 
-                        ShippingAddress: { contains: 'Elden Teslim' },
-                        OrderStatus: { in: ['Bekliyor', 'Haz_r', 'Paketleniyor'] } // Elden teslimler toplanmaya girmez
-                    }
-                ]
-            };
+            queryStr += `
+                (o.OrderStatus IN ('Hazır', 'Haz_r')) OR 
+                (o.OrderStatus = 'Paketleniyor' AND o.PackerId = ?) OR 
+                (o.ShippingAddress LIKE '%Elden Teslim%' AND o.OrderStatus IN ('Bekliyor', 'Beklemede', 'Hazır', 'Haz_r', 'Paketleniyor'))
+            `;
+            params.push(userId);
         }
 
-        const orders = await prisma.orders.findMany({
-            where: whereClause,
-            include: { customers: true },
-            orderBy: { PickedDate: 'asc' }
-        });
-        
-        const formattedOrders = orders.map(o => ({
-            ...o,
-            CustomerName: o.customers?.CustomerName
-        }));
+        queryStr += " ORDER BY o.PickedDate ASC";
+        const [orders] = await db.query(queryStr, params);
 
-        res.json({ success: true, data: formattedOrders });
+        res.json({ success: true, data: orders });
     } catch (error) {
         console.error('Paketlenecek siparişleri getirme hatası:', error);
         res.status(500).json({ success: false, message: 'Siparişler getirilemedi.' });
@@ -740,38 +687,27 @@ router.get('/orders/ready-for-packaging', authMiddleware, checkPermission('view_
 // POST: Paketleme görevini al (Assign)
 router.post('/orders/package/assign/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ success: false, message: 'Oturum verisi bulunamadı.' });
+    if (isNaN(id) || !userId) return res.status(400).json({ success: false, message: 'Geçersiz veri.' });
 
     try {
-        const updated = await prisma.orders.updateMany({
-            where: {
-                Id: id,
-                OR: [
-                    { OrderStatus: 'Haz_r', PackerId: null },
-                    { OrderStatus: 'Paketleniyor', PackerId: userId }
-                ]
-            },
-            data: { OrderStatus: 'Paketleniyor', PackerId: userId }
-        });
+        const [updateResult] = await db.query(`
+            UPDATE orders SET OrderStatus = 'Paketleniyor', PackerId = ? 
+            WHERE Id = ? AND (
+                (OrderStatus IN ('Hazır', 'Haz_r') AND PackerId IS NULL) OR 
+                (OrderStatus = 'Paketleniyor' AND PackerId = ?)
+            )
+        `, [userId, id, userId]);
 
-        if (updated.count === 0) {
-            return res.json({ success: false, message: 'Bu sipariş zaten başkası tarafından paketleniyor veya bulunamadı.' });
+        if (updateResult.affectedRows === 0) {
+            return res.json({ success: false, message: 'Bu sipariş başkası tarafından paketleniyor veya bulunamadı.' });
         }
 
-        await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketlemeye başladı.`, null);
-
-        const order = await prisma.orders.findUnique({
-            where: { Id: id },
-            include: { customers: true }
-        });
-        
+        const [orders] = await db.query('SELECT o.*, c.CustomerName FROM orders o LEFT JOIN customers c ON o.CustomerId = c.Id WHERE o.Id = ?', [id]);
         const items = await getOrderItemsWithRoute(id);
         
-        res.json({ success: true, message: 'Paketleme görevi alındı.', order: { ...order, CustomerName: order.customers?.CustomerName }, items: items });
+        res.json({ success: true, message: 'Paketleme görevi alındı.', order: orders[0], items: items });
     } catch (error) {
-        console.error('Paketleme atama hatası:', error);
         res.status(500).json({ success: false, message: 'Atama işlemi başarısız.' });
     }
 });
@@ -779,17 +715,12 @@ router.post('/orders/package/assign/:id', authMiddleware, checkPermission('wms_t
 // POST: Paketlemeyi iptal et (Geri bırak)
 router.post('/orders/package/cancel/:id', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
     const id = Number(req.params.id);
-    if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const userId = req.user?.id;
     try {
-        const updated = await prisma.orders.updateMany({
-            where: { Id: id, PackerId: userId, OrderStatus: 'Paketleniyor' },
-            data: { OrderStatus: 'Haz_r', PackerId: null }
-        });
-        
-        if (updated.count > 0) {
-            await logActivity(userId, 'UPDATE', 'orders', id, `Mobil uygulama üzerinden #${id} numaralı siparişi paketlemeyi iptal etti.`, null);
-        }
+        await db.query(`
+            UPDATE orders SET OrderStatus = 'Hazır', PackerId = NULL 
+            WHERE Id = ? AND PackerId = ? AND OrderStatus = 'Paketleniyor'
+        `, [id, userId]);
         res.json({ success: true, message: 'Paketleme iptal edildi.' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'İptal işlemi başarısız.' });
@@ -802,27 +733,13 @@ router.post('/picking_carts/finish-picking', authMiddleware, checkPermission('wm
     if (!cart_barcode) return res.status(400).json({ success: false, message: 'Araba barkodu gerekli.' });
 
     try {
-        const cart = await prisma.picking_carts.findFirst({
-            where: { barcode: cart_barcode, is_active: true }
-        });
-
-        if (!cart) {
-            return res.status(404).json({ success: false, message: 'Araba bulunamadı.' });
-        }
-
-        await prisma.picking_carts.update({
-            where: { id: cart.id },
-            data: { status: 'READY_FOR_PACKAGING' }
-        });
-
+        const [updateResult] = await db.query('UPDATE picking_carts SET status = "READY_FOR_PACKAGING" WHERE barcode = ? AND is_active = 1', [cart_barcode]);
+        if (updateResult.affectedRows === 0) return res.status(404).json({ success: false, message: 'Araba bulunamadı.' });
         res.json({ success: true, message: 'Taşıma arabası paketlemeye gönderildi.' });
     } catch (error) {
-        console.error('Araba bitirme hatası:', error);
         res.status(500).json({ success: false, message: 'İşlem başarısız.' });
     }
 });
-
-
 
 // POST: Arabanın tüm siparişleri paketlendi, arabayı boşa çıkar
 router.post('/picking_carts/empty-cart', authMiddleware, checkPermission('wms_transfer'), async (req, res) => {
@@ -830,22 +747,10 @@ router.post('/picking_carts/empty-cart', authMiddleware, checkPermission('wms_tr
     if (!cart_id) return res.status(400).json({ success: false, message: 'Araba kimliği gerekli.' });
 
     try {
-        const cart = await prisma.picking_carts.findUnique({
-            where: { id: parseInt(cart_id) }
-        });
-
-        if (!cart) {
-            return res.status(404).json({ success: false, message: 'Araba bulunamadı.' });
-        }
-
-        await prisma.picking_carts.update({
-            where: { id: parseInt(cart_id) },
-            data: { status: 'IDLE' }
-        });
-
+        const [updateResult] = await db.query('UPDATE picking_carts SET status = "IDLE" WHERE id = ?', [parseInt(cart_id)]);
+        if (updateResult.affectedRows === 0) return res.status(404).json({ success: false, message: 'Araba bulunamadı.' });
         res.json({ success: true, message: 'Araba başarıyla boşaltıldı.' });
     } catch (error) {
-        console.error('Araba boşaltma hatası:', error);
         res.status(500).json({ success: false, message: 'Araba boşaltılamadı.' });
     }
 });
@@ -856,56 +761,33 @@ router.get('/picking_carts/scan-for-packaging', authMiddleware, checkPermission(
     if (!cart_barcode) return res.status(400).json({ success: false, message: 'Araba barkodu gerekli.' });
 
     try {
-        // Try finding by cart barcode first
-        let cart = await prisma.picking_carts.findFirst({
-            where: { barcode: cart_barcode, is_active: true },
-            include: {
-                sections: true,
-                orders: {
-                    where: { OrderStatus: 'Haz_r' }, // Picked and ready to pack
-                    include: { customers: true }
-                }
-            }
-        });
+        let [carts] = await db.query('SELECT * FROM picking_carts WHERE barcode = ? AND is_active = 1', [cart_barcode]);
+        let cart = carts.length > 0 ? carts[0] : null;
 
-        // If not found, try finding by section barcode
         if (!cart) {
-            const section = await prisma.picking_cart_sections.findFirst({
-                where: { barcode: cart_barcode }
-            });
-            if (section) {
-                cart = await prisma.picking_carts.findFirst({
-                    where: { id: section.cart_id, is_active: true },
-                    include: {
-                        sections: true,
-                        orders: {
-                            where: { OrderStatus: 'Haz_r' }, // Picked and ready to pack
-                            include: { customers: true }
-                        }
-                    }
-                });
+            const [sections] = await db.query('SELECT cart_id FROM picking_cart_sections WHERE barcode = ?', [cart_barcode]);
+            if (sections.length > 0) {
+                const [c] = await db.query('SELECT * FROM picking_carts WHERE id = ? AND is_active = 1', [sections[0].cart_id]);
+                if (c.length > 0) cart = c[0];
             }
         }
 
-        if (!cart) {
-            return res.status(404).json({ success: false, message: 'Geçerli bir araba veya bölüm barkodu bulunamadı.' });
-        }
+        if (!cart) return res.status(404).json({ success: false, message: 'Araba bulunamadı.' });
 
-        // Group orders by their exact CartSectionIds combination
+        const [cartSections] = await db.query('SELECT * FROM picking_cart_sections WHERE cart_id = ?', [cart.id]);
+        const [orders] = await db.query('SELECT o.*, c.CustomerName FROM orders o LEFT JOIN customers c ON o.CustomerId = c.Id WHERE o.OrderStatus IN ("Hazır", "Haz_r") AND o.CartId = ?', [cart.id]);
+
         const orderGroups = {};
-        
-        cart.orders.forEach(order => {
-            if (!order.CartSectionIds || !Array.isArray(order.CartSectionIds) || order.CartSectionIds.length === 0) return;
+        orders.forEach(order => {
+            let sectionIds = [];
+            try { sectionIds = JSON.parse(order.CartSectionIds) || []; } catch(e){}
+            if (!Array.isArray(sectionIds) || sectionIds.length === 0) return;
             
-            // Sort to ensure same combination yields same key
-            const sortedIds = [...order.CartSectionIds].sort();
+            const sortedIds = [...sectionIds].sort();
             const groupKey = sortedIds.join('_');
             
             if (!orderGroups[groupKey]) {
-                orderGroups[groupKey] = {
-                    sectionIds: sortedIds,
-                    orders: []
-                };
+                orderGroups[groupKey] = { sectionIds: sortedIds, orders: [] };
             }
             orderGroups[groupKey].orders.push(order);
         });
@@ -913,10 +795,8 @@ router.get('/picking_carts/scan-for-packaging', authMiddleware, checkPermission(
         const mergedSections = [];
         const usedSectionIds = new Set();
 
-        // Create virtual sections for each order group
         Object.values(orderGroups).forEach(group => {
-            const groupSections = cart.sections.filter(s => group.sectionIds.includes(s.id));
-            
+            const groupSections = cartSections.filter(s => group.sectionIds.includes(s.id));
             if (groupSections.length > 0) {
                 mergedSections.push({
                     id: group.sectionIds.join('_'),
@@ -924,26 +804,17 @@ router.get('/picking_carts/scan-for-packaging', authMiddleware, checkPermission(
                     barcode: groupSections.map(s => s.barcode).join(' + '),
                     orders: group.orders
                 });
-                
                 group.sectionIds.forEach(id => usedSectionIds.add(id));
             }
         });
 
-        // Add the remaining empty sections
-        cart.sections.forEach(section => {
+        cartSections.forEach(section => {
             if (!usedSectionIds.has(section.id)) {
-                mergedSections.push({
-                    ...section,
-                    orders: []
-                });
+                mergedSections.push({ ...section, orders: [] });
             }
         });
 
-        res.json({ 
-            success: true, 
-            cart: { id: cart.id, name: cart.name, barcode: cart.barcode },
-            sections: mergedSections
-        });
+        res.json({ success: true, cart: { id: cart.id, name: cart.name, barcode: cart.barcode }, sections: mergedSections });
     } catch (error) {
         console.error('Araba okutma hatası:', error);
         res.status(500).json({ success: false, message: 'Araba bilgileri alınamadı.' });
@@ -951,4 +822,3 @@ router.get('/picking_carts/scan-for-packaging', authMiddleware, checkPermission(
 });
 
 module.exports = router;
-

@@ -6,6 +6,7 @@
  * ============================================================================
  */
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import styles from './SkinAnalysisPage.module.css';
 
 const questions = [
@@ -143,9 +144,27 @@ const SkinAnalysisPage = () => {
             <h3 className={styles.routineTitle}>Size Özel Ürün Önerileri:</h3>
             <ul className={styles.productList}>
               {result.products.map((p, i) => (
-                <li key={i} className={styles.productItem}>
-                  <span className={styles.checkIcon}>✓</span>
-                  {p}
+                <li key={i} className={styles.productItem} style={{ padding: 0 }}>
+                  <Link 
+                    to={`/arama?q=${encodeURIComponent(p)}`} 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      width: '100%', 
+                      justifyContent: 'space-between', 
+                      padding: '12px 16px', 
+                      color: 'inherit', 
+                      textDecoration: 'none' 
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span className={styles.checkIcon}>✓</span>
+                      <span style={{ fontWeight: '500' }}>{p}</span>
+                    </div>
+                    <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--primary, #00A896)', background: 'var(--secondary, #e8f5f2)', padding: '4px 10px', borderRadius: '12px' }}>
+                      Ürünleri Gör →
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>

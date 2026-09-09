@@ -19,6 +19,7 @@ import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePreventRemove, useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { triggerSuccessFeedback, triggerErrorFeedback } from '../utils/feedback';
 
 const { width } = Dimensions.get('window');
 
@@ -148,12 +149,14 @@ export default function PickingScreen({ route, navigation }) {
         });
 
         if (found) {
+            triggerSuccessFeedback();
             setPickingList(newList);
             setTimeout(() => {
                 setScanned(false);
                 isScanningRef.current = false;
             }, 1500);
         } else {
+            triggerErrorFeedback();
             const exists = pickingList.find(i => isMatch(i, scannedCode));
             if (exists) {
                 Alert.alert('Uyarı', 'Bu üründen siparişte istenen miktarı zaten topladınız.', [

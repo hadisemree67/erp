@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from '../components/Header/Header';
 import Navbar from '../components/Navbar/Navbar';
+import Footer from '../components/Footer/Footer';
 import styles from './MainLayout.module.css';
 
 const MainLayout = () => {
@@ -47,6 +48,9 @@ const MainLayout = () => {
       <main>
         <Outlet />
       </main>
+
+      {/* Sitenin kurumsal alt bilgi alanı (Footer) */}
+      <Footer />
     </div>
   );
 };

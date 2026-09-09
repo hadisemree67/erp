@@ -16,7 +16,7 @@ import { useCart } from '../../context/CartContext';
 import { useFavorites } from '../../context/FavoritesContext';
 import styles from './ProductCarousel.module.css';
 
-const ProductCarousel = ({ title = "Ürünler", products = [] }) => {
+const ProductCarousel = ({ title = "Ürünler", products = [], linkTo = null }) => {
   const { addToCart } = useCart();
   const { toggleFavorite, isFavorite } = useFavorites();
   const [addingId, setAddingId] = React.useState(null);
@@ -63,9 +63,15 @@ const ProductCarousel = ({ title = "Ürünler", products = [] }) => {
     <div className={`container ${styles.carouselWrapper}`}>
       <div className={styles.sectionHeader}>
         <div className={styles.sectionTitle}>{title}</div>
-        <button className={styles.viewAll}>
-          Tümünü Gör <ArrowRight size={16} />
-        </button>
+        {linkTo ? (
+          <Link to={linkTo} className={styles.viewAll} style={{ textDecoration: 'none' }}>
+            Tümünü Gör <ArrowRight size={16} />
+          </Link>
+        ) : (
+          <button className={styles.viewAll}>
+            Tümünü Gör <ArrowRight size={16} />
+          </button>
+        )}
       </div>
       
       <div className={styles.productGridContainer}>

@@ -94,11 +94,12 @@ router.get('/accounts', authMiddleware, checkPermission('view_finance'), async (
                 WHERE e.work_status IN ('Çalışıyor', 'Aktif', 'İzinli') AND e.salary > 0
                 GROUP BY e.id
             `);
+            const multiplier = period === 'last_3_months' ? 3 : period === 'last_6_months' ? 6 : period === 'this_year' ? (new Date().getMonth() + 1) : 1;
             let salaryTotal = 0;
             const salaryExpenses = empRows.map(emp => {
                 const baseSalary = safeNum(emp.salary);
                 const overtime = safeNum(emp.current_month_overtime);
-                const amt = baseSalary + overtime;
+                const amt = (baseSalary + overtime) * multiplier;
                 salaryTotal += amt;
                 
                 let subtitleStr = `${emp.department || 'Genel'} — ${emp.position || 'Personel'} (Maaş: ${baseSalary.toLocaleString('tr-TR')} ₺`;

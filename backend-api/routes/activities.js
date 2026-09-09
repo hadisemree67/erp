@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: activities
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -16,7 +16,7 @@ const router = express.Router();
 const db = require('../db');
 const { logActivity } = require('../utils/logger');
 const authMiddleware = require('../middleware/auth');
-const { checkPermission } = require('../middleware/rbac');
+const { checkRole, checkPermission } = require('../middleware/rbac');
 
 const formatDatesForMySQL = (data) => {
     const formatted = { ...data };
@@ -47,6 +47,28 @@ router.get('/', authMiddleware, checkPermission('view_activity_log'), async (req
     }
 });
 
+// Tablonun birincil anahtarını (Primary Key: 'Id' veya 'id') dinamik tespit eden yardımcı fonksiyon
+const getPrimaryKeyColumn = async (connection, tableName) => {
+    try {
+        const [columns] = await connection.query(`
+            SELECT COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+            WHERE TABLE_SCHEMA = DATABASE() 
+              AND TABLE_NAME = ? 
+              AND CONSTRAINT_NAME = 'PRIMARY'
+            LIMIT 1
+        `, [tableName]);
+        if (columns.length > 0 && columns[0].COLUMN_NAME) {
+            return columns[0].COLUMN_NAME;
+        }
+    } catch (err) {
+        console.warn(`[ACTIVITIES] Primary key tespit edilemedi (${tableName}):`, err.message);
+    }
+    // Bilinen büyük harf tablolar için güvenli varsayılan
+    const upperIdTables = ['products', 'customers', 'orders', 'orderitems'];
+    return upperIdTables.includes(tableName) ? 'Id' : 'id';
+};
+
 const ALLOWED_TABLES = [
     'products', 'inventory', 'warehouses', 'stock_movements',
     'categories', 'brands', 'kategori', 'campaigns', 'employees',
@@ -54,8 +76,8 @@ const ALLOWED_TABLES = [
 ];
 
 // POST: Geri Al (Undo)
-// GÜVENLİK İYİLEŞTİRMESİ: Tekrarlayan checkPermission kaldırıldı.
-router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'), async (req, res) => {
+// GÜVENLİK: Yalnızca sistem yöneticisi (admin) geri alma yapabilir
+router.post('/:id/undo', authMiddleware, checkRole(['admin']), async (req, res) => {
     const logId = parseInt(req.params.id, 10);
 
     // GÜVENLİK DÜZELTMESİ: logId numerik olmalı
@@ -100,9 +122,12 @@ router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'), a
             try { oldData = JSON.parse(oldData); } catch (e) { oldData = null; }
         }
 
+        // Tablonun birincil anahtar sütununu dinamik al ('Id' veya 'id')
+        const pkCol = await getPrimaryKeyColumn(connection, log.target_table);
+
         // 1. INSERT işlemini geri alma -> DELETE
         if (log.action_type === 'INSERT') {
-            await connection.query(`DELETE FROM ?? WHERE id = ?`, [log.target_table, log.target_id]);
+            await connection.query(`DELETE FROM ?? WHERE ?? = ?`, [log.target_table, pkCol, log.target_id]);
         }
         // 2. DELETE işlemini geri alma -> INSERT
         else if (log.action_type === 'DELETE') {
@@ -164,9 +189,9 @@ router.post('/:id/undo', authMiddleware, checkPermission('view_activity_log'), a
 
             // GÜVENLİK İYİLEŞTİRMESİ: Sütun isimlerindeki backtick'ler temizlenerek SQL Injection engellendi
             const setClause = keys.map(k => `\`${k.replace(/`/g, '')}\` = ?`).join(', ');
-            const idValue = data.Id || data.id || log.target_id;
+            const idValue = data[pkCol] || data.Id || data.id || log.target_id;
 
-            await connection.query(`UPDATE ?? SET ${setClause} WHERE id = ?`, [log.target_table, ...values, idValue]);
+            await connection.query(`UPDATE ?? SET ${setClause} WHERE ?? = ?`, [log.target_table, ...values, pkCol, idValue]);
         }
 
         // İşlem durumunu güncelleyin

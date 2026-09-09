@@ -1,59 +1,43 @@
-const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
-
-const prisma = new PrismaClient();
+const db = require('./db');
 
 async function main() {
     try {
         const hashedPassword = await bcrypt.hash('deneme1', 12);
         
         // 1. ERP Yöneticisi (users tablosu)
-        const adminExists = await prisma.users.findUnique({ where: { username: 'deneme' }});
-        if (adminExists) {
-            await prisma.users.update({
-                where: { username: 'deneme' },
-                data: { password: hashedPassword, role: 'manager' }
-            });
+        const [adminRows] = await db.query('SELECT id FROM users WHERE username = ?', ['deneme']);
+        
+        if (adminRows.length > 0) {
+            await db.query('UPDATE users SET password = ?, role = ? WHERE username = ?', [hashedPassword, 'manager', 'deneme']);
             console.log('ERP yöneticisi güncellendi.');
         } else {
-            await prisma.users.create({
-                data: {
-                    username: 'deneme',
-                    name: 'Deneme Yönetici',
-                    email: 'admin@deneme.com',
-                    password: hashedPassword,
-                    role: 'manager'
-                }
-            });
+            await db.query(`
+                INSERT INTO users (username, name, email, password, role)
+                VALUES (?, ?, ?, ?, ?)
+            `, ['deneme', 'Deneme Yönetici', 'admin@deneme.com', hashedPassword, 'manager']);
             console.log('ERP yöneticisi oluşturuldu.');
         }
 
         // 2. Web Sitesi Müşterisi (customers tablosu)
-        // prisma.customers schema'sında Email field var mı bakalım, yes unique değil ama var.
-        const customers = await prisma.customers.findMany({ where: { Email: 'deneme' }});
-        if (customers.length > 0) {
-            await prisma.customers.update({
-                where: { Id: customers[0].Id },
-                data: { Password: hashedPassword, IsVerified: true }
-            });
+        const [customerRows] = await db.query('SELECT Id FROM customers WHERE Email = ?', ['deneme']);
+        
+        if (customerRows.length > 0) {
+            await db.query('UPDATE customers SET Password = ?, IsVerified = ? WHERE Id = ?', [hashedPassword, true, customerRows[0].Id]);
             console.log('Web müşterisi güncellendi.');
         } else {
-            await prisma.customers.create({
-                data: {
-                    CustomerName: 'Deneme Müşteri',
-                    Email: 'deneme',
-                    Password: hashedPassword,
-                    IsVerified: true
-                }
-            });
+            await db.query(`
+                INSERT INTO customers (CustomerName, Email, Password, IsVerified)
+                VALUES (?, ?, ?, ?)
+            `, ['Deneme Müşteri', 'deneme', hashedPassword, true]);
             console.log('Web müşterisi oluşturuldu.');
         }
 
         console.log('İşlem başarıyla tamamlandı!');
     } catch (e) {
-        console.error(e);
+        console.error('Veritabanı hatası:', e);
     } finally {
-        await prisma.$disconnect();
+        process.exit(0);
     }
 }
 

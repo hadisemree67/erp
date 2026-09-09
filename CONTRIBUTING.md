@@ -66,7 +66,7 @@ Her modül kendi klasöründe bağımsız olarak geliştirilir:
 
 - `.env` dosyalarını **asla** commit etmeyin
 - Yeni ortam değişkeni eklediyseniz `.env.example` dosyasını güncelleyin
-- Veritabanı şema değişikliklerinde `prisma/schema.prisma` dosyasını güncelleyin
+- Veritabanı şema değişikliklerinde ilgili SQL migrasyon veya tablo oluşturma scriptlerini güncelleyin
 - Büyük değişiklikler için önce bir **Issue** açarak tartışın
 
 ## 🐛 Hata Bildirme

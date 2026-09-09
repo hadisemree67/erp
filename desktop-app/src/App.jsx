@@ -2,63 +2,72 @@
  * ============================================================================
  * BİLEŞEN ADI: App
  * GÖREV VE AKIŞ AÇIKLAMASI:
- *   Masaüstü ERP uygulamasının alt bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ *   Masaüstü ERP uygulamasının ana bileşenidir. İlgili veri işlemlerini ve UI gösterimini sağlar.
+ *   REACT ROUTER VE LAZY LOADING İLE YENİDEN YAZILMIŞTIR.
  * ============================================================================
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { HashRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { apiFetch } from './utils/api';
 import Sidebar from './components/Sidebar';
-import ActivityLog from './components/ActivityLog';
-import ProductList from './components/Products/ProductList';
-import ProductForm from './components/Products/ProductForm';
-import OutsourcedProducts from './components/Products/OutsourcedProducts';
-import PurchasedProducts from './components/Products/PurchasedProducts';
-import CategoryManager from './components/Categories/CategoryManager';
-import StaffList from './components/Staff/StaffList';
-import StaffForm from './components/Staff/StaffForm';
-import EmployeeList from './components/Employees/EmployeeList';
-import EmployeeForm from './components/Employees/EmployeeForm';
-import EmployeeOffboard from './components/Employees/EmployeeOffboard';
-import LeaveManagement from './components/Employees/LeaveManagement';
-import OvertimeManagement from './components/Employees/OvertimeManagement';
-import StockEntry from './components/WMS/StockEntry';
-import StockList from './components/WMS/StockList';
-import InventoryEntry from './components/WMS/InventoryEntry';
-import InventoryList from './components/WMS/InventoryList';
-import WarehouseList from './components/Warehouses/WarehouseList';
-import WarehouseForm from './components/Warehouses/WarehouseForm';
-import PickingCarts from './components/Warehouses/PickingCarts';
-import WarehouseTransfer from './components/WMS/WarehouseTransfer';
-import WarehouseAcceptance from './components/WMS/WarehouseAcceptance';
-import WarehouseLayout from './components/Warehouses/WarehouseLayout';
-import SupplierList from './components/Suppliers/SupplierList';
-import MachineList from './components/Production/MachineList';
-import ProductionOrder from './components/Production/ProductionOrder';
-import ProductionList from './components/Production/ProductionList';
-import ProductionDetail from './components/Production/ProductionDetail';
-import ProductionRequests from './components/Production/ProductionRequests';
-import PurchaseRequests from './components/Purchasing/PurchaseRequests';
-import PurchaseOrders from './components/Purchasing/PurchaseOrders';
-import GoodsReceipt from './components/WMS/GoodsReceipt';
-import CampaignList from './components/Campaigns/CampaignList';
-import CampaignForm from './components/Campaigns/CampaignForm';
-import Coupons from './components/Campaigns/Coupons';
-import FinanceAccounts from './components/Finance/FinanceAccounts';
-import CustomerList from './components/Customers/CustomerList';
-import CustomerForm from './components/Customers/CustomerForm';
-import CustomerOrders from './components/Orders/CustomerOrders';
-import CustomerReturns from './components/Orders/CustomerReturns';
-import PackagingBoxes from './components/Orders/PackagingBoxes';
-import OrderPacking from './components/Orders/OrderPacking';
-import CourierDelivery from './components/Orders/CourierDelivery';
-import Reports from './components/Reports/Reports';
-import Settings from './components/Settings/Settings';
-import DataImport from './components/DataImport/DataImport';
-import DataExport from './components/DataExport/DataExport';
 import './index.css';
 
-function App() {
+// Lazy Loaded Components
+const ActivityLog = lazy(() => import('./components/ActivityLog'));
+const ProductList = lazy(() => import('./components/Products/ProductList'));
+const ProductForm = lazy(() => import('./components/Products/ProductForm'));
+const OutsourcedProducts = lazy(() => import('./components/Products/OutsourcedProducts'));
+const PurchasedProducts = lazy(() => import('./components/Products/PurchasedProducts'));
+const CategoryManager = lazy(() => import('./components/Categories/CategoryManager'));
+const StaffList = lazy(() => import('./components/Staff/StaffList'));
+const StaffForm = lazy(() => import('./components/Staff/StaffForm'));
+const EmployeeList = lazy(() => import('./components/Employees/EmployeeList'));
+const EmployeeForm = lazy(() => import('./components/Employees/EmployeeForm'));
+const EmployeeOffboard = lazy(() => import('./components/Employees/EmployeeOffboard'));
+const LeaveManagement = lazy(() => import('./components/Employees/LeaveManagement'));
+const OvertimeManagement = lazy(() => import('./components/Employees/OvertimeManagement'));
+const StockEntry = lazy(() => import('./components/WMS/StockEntry'));
+const StockList = lazy(() => import('./components/WMS/StockList'));
+const InventoryEntry = lazy(() => import('./components/WMS/InventoryEntry'));
+const InventoryList = lazy(() => import('./components/WMS/InventoryList'));
+const WarehouseList = lazy(() => import('./components/Warehouses/WarehouseList'));
+const WarehouseForm = lazy(() => import('./components/Warehouses/WarehouseForm'));
+const PickingCarts = lazy(() => import('./components/Warehouses/PickingCarts'));
+const WarehouseTransfer = lazy(() => import('./components/WMS/WarehouseTransfer'));
+const WarehouseAcceptance = lazy(() => import('./components/WMS/WarehouseAcceptance'));
+const WarehouseLayout = lazy(() => import('./components/Warehouses/WarehouseLayout'));
+const SupplierList = lazy(() => import('./components/Suppliers/SupplierList'));
+const MachineList = lazy(() => import('./components/Production/MachineList'));
+const ProductionOrder = lazy(() => import('./components/Production/ProductionOrder'));
+const ProductionList = lazy(() => import('./components/Production/ProductionList'));
+const ProductionDetail = lazy(() => import('./components/Production/ProductionDetail'));
+const ProductionRequests = lazy(() => import('./components/Production/ProductionRequests'));
+const PurchaseRequests = lazy(() => import('./components/Purchasing/PurchaseRequests'));
+const PurchaseOrders = lazy(() => import('./components/Purchasing/PurchaseOrders'));
+const GoodsReceipt = lazy(() => import('./components/WMS/GoodsReceipt'));
+const CampaignList = lazy(() => import('./components/Campaigns/CampaignList'));
+const CampaignForm = lazy(() => import('./components/Campaigns/CampaignForm'));
+const Coupons = lazy(() => import('./components/Campaigns/Coupons'));
+const FinanceAccounts = lazy(() => import('./components/Finance/FinanceAccounts'));
+const CustomerList = lazy(() => import('./components/Customers/CustomerList'));
+const CustomerForm = lazy(() => import('./components/Customers/CustomerForm'));
+const CustomerOrders = lazy(() => import('./components/Orders/CustomerOrders'));
+const CustomerReturns = lazy(() => import('./components/Orders/CustomerReturns'));
+const PackagingBoxes = lazy(() => import('./components/Orders/PackagingBoxes'));
+const OrderPacking = lazy(() => import('./components/Orders/OrderPacking'));
+const CourierDelivery = lazy(() => import('./components/Orders/CourierDelivery'));
+const Reports = lazy(() => import('./components/Reports/Reports'));
+const Settings = lazy(() => import('./components/Settings/Settings'));
+const DataImport = lazy(() => import('./components/DataImport/DataImport'));
+const DataExport = lazy(() => import('./components/DataExport/DataExport'));
+const CustomerQuestions = lazy(() => import('./components/CRM/CustomerQuestions'));
+
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentView = location.pathname.replace('/', '') || 'anasayfa';
+
   // 1. Durum (State) Tanımlamaları ve Hook'lar
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -69,7 +78,6 @@ function App() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [currentView, setCurrentView] = useState('anasayfa');
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [selectedWarehouse, setSelectedWarehouse] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -82,8 +90,16 @@ function App() {
     todayOrders: 0
   });
 
-  // 3. Backend API İstekleri (Veri Çekme)
+  const handleNavigate = (view, dataId = null) => {
+    if (dataId !== null) {
+      if (['uretim-detayi'].includes(view)) {
+         setSelectedOrderId(dataId);
+      }
+    }
+    navigate('/' + view);
+  };
 
+  // 3. Backend API İstekleri (Veri Çekme)
   const fetchStats = async () => {
     try {
       const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/dashboard-stats');
@@ -112,7 +128,6 @@ function App() {
   };
 
   // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
-
   useEffect(() => {
     const verifySession = async () => {
       const token = localStorage.getItem('token');
@@ -121,27 +136,29 @@ function App() {
           const res = await apiFetch(import.meta.env.VITE_API_URL + '/api/auth/verify');
           const data = await res.json();
           if (data.success) {
-            // Token veritabanında aktif ve geçerli, otomatik giriş yap.
             setCurrentUser(data.user);
             setIsLoggedIn(true);
             
             const perms = data.user.permissions || [];
             const isAdmin = data.user.role === 'admin';
             
-            if (isAdmin || perms.includes('view_dashboard')) {
-              setCurrentView('anasayfa');
-              fetchStats();
-            } else if (perms.includes('view_products')) {
-              setCurrentView('urun-listesi');
-            } else if (perms.includes('view_employees')) {
-              setCurrentView('insan-kaynaklari');
-            } else if (perms.includes('view_offboarding')) {
-              setCurrentView('personel-cikis');
-            } else {
-              setCurrentView('anasayfa');
+            if (location.pathname === '/' || location.pathname === '') {
+              if (isAdmin || perms.includes('view_dashboard')) {
+                navigate('/anasayfa', { replace: true });
+                fetchStats();
+              } else if (perms.includes('view_products')) {
+                navigate('/urun-listesi', { replace: true });
+              } else if (perms.includes('view_employees')) {
+                navigate('/insan-kaynaklari', { replace: true });
+              } else if (perms.includes('view_offboarding')) {
+                navigate('/personel-cikis', { replace: true });
+              } else {
+                navigate('/anasayfa', { replace: true });
+              }
+            } else if (location.pathname === '/anasayfa' || location.pathname === '/') {
+                fetchStats();
             }
           } else {
-            // Token çalınmış veya başka bir bilgisayardan giriş yapılmış
             localStorage.removeItem('token');
             setIsLoggedIn(false);
             alert("Oturumunuz başka bir cihazdan açıldığı için sonlandırıldı.");
@@ -154,11 +171,12 @@ function App() {
       }
     };
     verifySession();
-  }, []);
+  }, [navigate]);
+
   useEffect(() => {
     if (isLoggedIn) {
       fetchPendingRequests();
-      const interval = setInterval(fetchPendingRequests, 30000); // Her 30 saniyede bir kontrol et
+      const interval = setInterval(fetchPendingRequests, 30000);
       return () => clearInterval(interval);
     }
   }, [isLoggedIn]);
@@ -171,9 +189,7 @@ function App() {
     try {
       const response = await apiFetch(import.meta.env.VITE_API_URL + '/api/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, role })
       });
 
@@ -187,16 +203,16 @@ function App() {
         const isAdmin = data.user.role === 'admin';
         
         if (isAdmin || perms.includes('view_dashboard')) {
-          setCurrentView('anasayfa');
+          navigate('/anasayfa', { replace: true });
           fetchStats();
         } else if (perms.includes('view_products')) {
-          setCurrentView('urun-listesi');
+          navigate('/urun-listesi', { replace: true });
         } else if (perms.includes('view_employees')) {
-          setCurrentView('insan-kaynaklari');
+          navigate('/insan-kaynaklari', { replace: true });
         } else if (perms.includes('view_offboarding')) {
-          setCurrentView('personel-cikis');
+          navigate('/personel-cikis', { replace: true });
         } else {
-          setCurrentView('anasayfa');
+          navigate('/anasayfa', { replace: true });
         }
       } else {
         setErrorMsg(data.message || 'Giriş başarısız.');
@@ -209,7 +225,6 @@ function App() {
   };
 
   if (isLoggedIn) {
-    // 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
       <div style={{ display: 'flex', width: '100vw', height: '100vh', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
         <Sidebar 
@@ -217,25 +232,23 @@ function App() {
           userRole={currentUser?.role}
           onLogout={async () => { 
             try {
-              // Sunucu tarafında token'ı kara listeye al (Blacklist)
               await apiFetch(import.meta.env.VITE_API_URL + '/api/logout', { method: 'POST' });
             } catch (e) {
               console.error("Logout API hatası:", e);
             }
-            // İstemci tarafında temizle
             localStorage.removeItem('token');
             setIsLoggedIn(false); 
             setCurrentUser(null); 
             window.location.reload();
           }}
           onNavigate={(view) => {
-            setCurrentView(view);
+            handleNavigate(view);
             if (view === 'anasayfa') fetchStats();
           }} 
           currentView={currentView}
         />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Top Navbar - Only show in Production views */}
+          {/* Top Navbar */}
           {['makine-listesi', 'uretim-yap', 'uretim-listesi', 'uretim-talepleri', 'uretim-detayi'].includes(currentView) && (
           <div style={{ padding: '16px 32px', backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
             <div style={{ position: 'relative' }}>
@@ -260,7 +273,7 @@ function App() {
                   <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', fontWeight: 'bold', color: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span>{pendingRequests.length} Yeni Talep</span>
                     <button 
-                      onClick={() => { setShowNotifications(false); setCurrentView('uretim-talepleri'); }}
+                      onClick={() => { setShowNotifications(false); handleNavigate('uretim-talepleri'); }}
                       style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}
                     >
                       Tümünü Gör &rarr;
@@ -273,7 +286,7 @@ function App() {
                       pendingRequests
                         .sort((a, b) => (a.priority === 'Acil' && b.priority !== 'Acil' ? -1 : a.priority !== 'Acil' && b.priority === 'Acil' ? 1 : 0))
                         .slice(0, 5).map(req => (
-                        <div key={req.id} onClick={() => { setShowNotifications(false); setCurrentView('uretim-talepleri'); }} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', backgroundColor: req.priority === 'Acil' ? '#fef2f2' : 'white' }} className="notification-item">
+                        <div key={req.id} onClick={() => { setShowNotifications(false); handleNavigate('uretim-talepleri'); }} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', backgroundColor: req.priority === 'Acil' ? '#fef2f2' : 'white' }} className="notification-item">
                           <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                             <div style={{ fontSize: '16px' }}>{req.source === 'Otomatik' ? '🤖' : '👤'}</div>
                             <div>
@@ -295,97 +308,106 @@ function App() {
           )}
           
           <div style={{ flex: 1, padding: '32px', overflowY: 'auto' }}>
-          
-          {currentView === 'ayarlar' && <Settings currentUser={currentUser} />}
-          {currentView === 'anasayfa' && (
-            <div>
-              <h1 style={{ color: '#0f172a', fontFamily: 'Inter, sans-serif', fontSize: '24px', fontWeight: 'bold' }}>
-                Gösterge Paneli
-              </h1>
-              <p style={{ color: '#64748b', marginTop: '8px', marginBottom: '24px' }}>Sisteminizin genel durumunu buradan takip edebilirsiniz.</p>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Toplam Ürün Çeşidi</div>
-                  <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>{stats.totalProducts}</div>
-                  <div style={{ color: '#10b981', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Sistemdeki ürünler</div>
-                </div>
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Kayıtlı Markalar</div>
-                  <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>{stats.totalBrands}</div>
-                  <div style={{ color: '#10b981', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Sistemdeki markalar</div>
-                </div>
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Azalan Stoklar</div>
-                  <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>{stats.lowStock}</div>
-                  <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Kalan: 10 ve altı</div>
-                </div>
-                <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                  <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Bugünkü Siparişler</div>
-                  <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>0</div>
-                  <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Henüz modül hazır değil</div>
-                </div>
-              </div>
-            </div>
-          )}
+            <Suspense fallback={<div style={{padding: '20px', color: '#64748b'}}>Yükleniyor...</div>}>
+              <Routes>
+                <Route path="/ayarlar" element={<Settings currentUser={currentUser} />} />
+                <Route path="/anasayfa" element={
+                  <div>
+                    <h1 style={{ color: '#0f172a', fontFamily: 'Inter, sans-serif', fontSize: '24px', fontWeight: 'bold' }}>
+                      Gösterge Paneli
+                    </h1>
+                    <p style={{ color: '#64748b', marginTop: '8px', marginBottom: '24px' }}>Sisteminizin genel durumunu buradan takip edebilirsiniz.</p>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
+                      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Toplam Ürün Çeşidi</div>
+                        <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>{stats.totalProducts}</div>
+                        <div style={{ color: '#10b981', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Sistemdeki ürünler</div>
+                      </div>
+                      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Kayıtlı Markalar</div>
+                        <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>{stats.totalBrands}</div>
+                        <div style={{ color: '#10b981', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Sistemdeki markalar</div>
+                      </div>
+                      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Azalan Stoklar</div>
+                        <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>{stats.lowStock}</div>
+                        <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Kalan: 10 ve altı</div>
+                      </div>
+                      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                        <div style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', textTransform: 'uppercase' }}>Bugünkü Siparişler</div>
+                        <div style={{ color: '#0f172a', fontSize: '28px', fontWeight: 'bold', marginTop: '8px' }}>{stats.todayOrders || 0}</div>
+                        <div style={{ color: '#10b981', fontSize: '12px', marginTop: '8px', fontWeight: '500' }}>Bugün alınan siparişler</div>
+                      </div>
+                    </div>
+                  </div>
+                } />
+                <Route path="/son-hareketler" element={<ActivityLog currentUser={currentUser} />} />
+                
+                <Route path="/urun-listesi" element={<ProductList currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/urun-ekle" element={<ProductForm currentUser={currentUser} product={null} onClose={() => handleNavigate('urun-listesi')} />} />
+                <Route path="/fason-urunler" element={<OutsourcedProducts currentUser={currentUser} />} />
+                <Route path="/ticari-urunler" element={<PurchasedProducts currentUser={currentUser} />} />
+                <Route path="/kategoriler" element={<CategoryManager />} />
 
-          {currentView === 'son-hareketler' && <ActivityLog currentUser={currentUser} />}
+                <Route path="/stok-giris" element={<StockEntry currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/stok-listesi" element={<StockList currentUser={currentUser} initialEntryVisible={false} />} />
+                
+                <Route path="/envanter-giris" element={<InventoryEntry currentUser={currentUser} />} />
+                <Route path="/envanter-listesi" element={<InventoryList currentUser={currentUser} />} />
+                
+                <Route path="/depo-listesi" element={<WarehouseList onNavigate={handleNavigate} onEdit={(w) => { setSelectedWarehouse(w); handleNavigate('depo-ekle'); }} />} />
+                <Route path="/depo-ekle" element={<WarehouseForm onNavigate={handleNavigate} warehouse={selectedWarehouse} />} />
+                <Route path="/tasima-arabalari" element={<PickingCarts currentUser={currentUser} />} />
+                <Route path="/depo-transfer" element={<WarehouseTransfer currentUser={currentUser} />} />
+                <Route path="/depo-kabulleri" element={<WarehouseAcceptance currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/mal-kabul" element={<GoodsReceipt currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/depo-krokisi" element={<WarehouseLayout currentUser={currentUser} />} />
 
-          {currentView === 'urun-listesi' && <ProductList currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'urun-ekle' && <ProductForm currentUser={currentUser} product={null} onClose={() => setCurrentView('urun-listesi')} />}
-          {currentView === 'fason-urunler' && <OutsourcedProducts currentUser={currentUser} />}
-          {currentView === 'ticari-urunler' && <PurchasedProducts currentUser={currentUser} />}
-          {currentView === 'kategoriler' && <CategoryManager />}
+                <Route path="/personeller" element={<StaffList currentUser={currentUser} onAdd={() => { setSelectedStaff(null); handleNavigate('personel-ekle'); }} onEdit={(user) => { setSelectedStaff(user); handleNavigate('personel-ekle'); }} />} />
+                <Route path="/personel-ekle" element={<StaffForm currentUser={currentUser} staff={selectedStaff} onClose={() => handleNavigate('personeller')} />} />
 
-          {currentView === 'stok-giris' && <StockEntry currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'stok-listesi' && <StockList currentUser={currentUser} initialEntryVisible={false} />}
-          
-          {currentView === 'envanter-giris' && <InventoryEntry currentUser={currentUser} />}
-          {currentView === 'envanter-listesi' && <InventoryList currentUser={currentUser} />}
-          
-          {currentView === 'depo-listesi' && <WarehouseList onNavigate={setCurrentView} onEdit={setSelectedWarehouse} />}
-          {currentView === 'depo-ekle' && <WarehouseForm onNavigate={setCurrentView} warehouse={selectedWarehouse} />}
-          {currentView === 'tasima-arabalari' && <PickingCarts currentUser={currentUser} />}
-          {currentView === 'depo-transfer' && <WarehouseTransfer currentUser={currentUser} />}
-          {currentView === 'depo-kabulleri' && <WarehouseAcceptance currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'mal-kabul' && <GoodsReceipt currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'depo-krokisi' && <WarehouseLayout currentUser={currentUser} />}
+                <Route path="/insan-kaynaklari" element={<EmployeeList currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/personel-kaydi" element={<EmployeeForm currentUser={currentUser} onNavigate={handleNavigate} onClose={() => handleNavigate('insan-kaynaklari')} employee={null} />} />
+                <Route path="/personel-cikis" element={<EmployeeOffboard currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/izin-yonetimi" element={<LeaveManagement currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/mesai-yonetimi" element={<OvertimeManagement currentUser={currentUser} />} />
 
-          {currentView === 'personeller' && <StaffList currentUser={currentUser} onAdd={() => { setSelectedStaff(null); setCurrentView('personel-ekle'); }} onEdit={(user) => { setSelectedStaff(user); setCurrentView('personel-ekle'); }} />}
-          {currentView === 'personel-ekle' && <StaffForm currentUser={currentUser} staff={selectedStaff} onClose={() => setCurrentView('personeller')} />}
+                <Route path="/tedarikciler" element={<SupplierList currentUser={currentUser} />} />
+                <Route path="/satin-alma-talepleri" element={<PurchaseRequests currentUser={currentUser} />} />
+                <Route path="/tedarik-siparisleri" element={<PurchaseOrders currentUser={currentUser} />} />
 
-          {currentView === 'insan-kaynaklari' && <EmployeeList currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'personel-kaydi' && <EmployeeForm currentUser={currentUser} onNavigate={setCurrentView} onClose={() => setCurrentView('insan-kaynaklari')} employee={null} />}
-          {currentView === 'personel-cikis' && <EmployeeOffboard currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'izin-yonetimi' && <LeaveManagement currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'mesai-yonetimi' && <OvertimeManagement currentUser={currentUser} />}
+                <Route path="/kampanya-listesi" element={<CampaignList currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/kampanya-ekle" element={<CampaignForm currentUser={currentUser} onNavigate={handleNavigate} campaign={null} />} />
+                <Route path="/kuponlar" element={<Coupons currentUser={currentUser} />} />
+                
+                <Route path="/gelir-gider" element={<FinanceAccounts onNavigate={handleNavigate} />} />
+                <Route path="/musteri-listesi" element={<CustomerList currentUser={currentUser} onNavigate={handleNavigate} onEdit={(c) => { setSelectedCustomer(c); handleNavigate('musteri-ekle'); }} />} />
+                <Route path="/b2b-b2c-cari" element={<CustomerList currentUser={currentUser} onNavigate={handleNavigate} onEdit={(c) => { setSelectedCustomer(c); handleNavigate('musteri-ekle'); }} />} />
+                <Route path="/musteri-ekle" element={<CustomerForm currentUser={currentUser} customer={selectedCustomer} onClose={() => handleNavigate('musteri-listesi')} onNavigate={handleNavigate} />} />
+                <Route path="/sikayet-sorular" element={<CustomerQuestions currentUser={currentUser} />} />
+                <Route path="/musteri-siparisleri" element={<CustomerOrders currentUser={currentUser} onNavigate={handleNavigate} statusFilter="tumu" customerId={selectedCustomer?.Id} />} />
+                <Route path="/aktif-siparis" element={<CustomerOrders currentUser={currentUser} onNavigate={handleNavigate} statusFilter="tumu" />} />
+                <Route path="/gecmis-siparis" element={<CustomerOrders currentUser={currentUser} onNavigate={handleNavigate} statusFilter="tumu" />} />
+                <Route path="/iade-talepleri" element={<CustomerReturns currentUser={currentUser} />} />
+                <Route path="/kutu-tanim" element={<PackagingBoxes />} />
+                <Route path="/siparis-paketleme" element={<OrderPacking />} />
+                <Route path="/kurye-teslimat" element={<CourierDelivery />} />
 
-          {currentView === 'tedarikciler' && <SupplierList currentUser={currentUser} />}
-          {currentView === 'satin-alma-talepleri' && <PurchaseRequests currentUser={currentUser} />}
-          {currentView === 'tedarik-siparisleri' && <PurchaseOrders currentUser={currentUser} />}
-
-          {currentView === 'kampanya-listesi' && <CampaignList currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'kuponlar' && <Coupons currentUser={currentUser} />}
-          {currentView === 'gelir-gider' && <FinanceAccounts onNavigate={setCurrentView} />}
-          {(currentView === 'musteri-listesi' || currentView === 'b2b-b2c-cari') && <CustomerList currentUser={currentUser} onNavigate={setCurrentView} onEdit={setSelectedCustomer} />}
-          {currentView === 'musteri-ekle' && <CustomerForm currentUser={currentUser} customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} onNavigate={setCurrentView} />}
-          {currentView === 'musteri-siparisleri' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="tumu" customerId={selectedCustomer?.Id} />}
-          {currentView === 'aktif-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="tumu" />}
-          {currentView === 'gecmis-siparis' && <CustomerOrders currentUser={currentUser} onNavigate={setCurrentView} statusFilter="tumu" />}
-          {currentView === 'iade-talepleri' && <CustomerReturns currentUser={currentUser} />}
-          {currentView === 'kutu-tanim' && <PackagingBoxes />}
-          {currentView === 'siparis-paketleme' && <OrderPacking />}
-          {currentView === 'kurye-teslimat' && <CourierDelivery />}
-
-          {currentView === 'makine-listesi' && <MachineList currentUser={currentUser} />}
-          {currentView === 'uretim-yap' && <ProductionOrder currentUser={currentUser} onNavigate={setCurrentView} />}
-          {currentView === 'uretim-talepleri' && <ProductionRequests currentUser={currentUser} onNavigate={(view, orderId) => { setSelectedOrderId(orderId); setCurrentView(view); }} />}
-          {currentView === 'uretim-listesi' && <ProductionList currentUser={currentUser} onNavigate={(view, orderId) => { setSelectedOrderId(orderId); setCurrentView(view); }} />}
-          {currentView === 'uretim-detayi' && <ProductionDetail currentUser={currentUser} orderId={selectedOrderId} onNavigate={setCurrentView} />}
-          {currentView === 'raporlar' && <Reports currentUser={currentUser} />}
-          {currentView === 'veri-ice-aktar' && <DataImport currentUser={currentUser} />}
-          {currentView === 'veri-aktar' && <DataExport currentUser={currentUser} />}
-        </div>
+                <Route path="/makine-listesi" element={<MachineList currentUser={currentUser} />} />
+                <Route path="/uretim-yap" element={<ProductionOrder currentUser={currentUser} onNavigate={handleNavigate} />} />
+                <Route path="/uretim-talepleri" element={<ProductionRequests currentUser={currentUser} onNavigate={(view, orderId) => { setSelectedOrderId(orderId); handleNavigate(view); }} />} />
+                <Route path="/uretim-listesi" element={<ProductionList currentUser={currentUser} onNavigate={(view, orderId) => { setSelectedOrderId(orderId); handleNavigate(view); }} />} />
+                <Route path="/uretim-detayi" element={<ProductionDetail currentUser={currentUser} orderId={selectedOrderId} onNavigate={handleNavigate} />} />
+                
+                <Route path="/raporlar" element={<Reports currentUser={currentUser} />} />
+                <Route path="/veri-ice-aktar" element={<DataImport currentUser={currentUser} />} />
+                <Route path="/veri-aktar" element={<DataExport currentUser={currentUser} />} />
+                
+                <Route path="*" element={<div style={{padding: '20px', fontSize: '18px', color: '#64748b', textAlign: 'center', marginTop: '50px'}}>Lütfen sol menüden bir işlem seçin.</div>} />
+              </Routes>
+            </Suspense>
+          </div>
         </div>
       </div>
     );
@@ -450,5 +472,12 @@ function App() {
   );
 }
 
-export default App;
+function App() {
+  return (
+    <HashRouter>
+      <AppContent />
+    </HashRouter>
+  );
+}
 
+export default App;

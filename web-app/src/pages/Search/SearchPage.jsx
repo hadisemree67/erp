@@ -61,15 +61,27 @@ const SearchPage = () => {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${API_BASE}/api/products/public`);
+        const queryTerm = (q || '').trim();
+        const res = await fetch(`${API_BASE}/api/products/public?limit=100&q=${encodeURIComponent(queryTerm)}`);
         const data = await res.json();
         if (data.success) {
-          const lowerQ = q.toLowerCase();
+          const lowerQ = queryTerm.toLowerCase();
           const filtered = data.data.filter(p => {
             const nameMatch = p.ProductName && p.ProductName.toLowerCase().includes(lowerQ);
+            const codeMatch = p.ProductCode && String(p.ProductCode).toLowerCase().includes(lowerQ);
             const brandMatch = p.Brand && p.Brand.toLowerCase().includes(lowerQ);
             const catMatch = p.Category && p.Category.toLowerCase().includes(lowerQ);
-            return nameMatch || brandMatch || catMatch;
+
+            let barcodeStr = '';
+            if (p.barcodes && Array.isArray(p.barcodes)) {
+              barcodeStr = p.barcodes.join(' ');
+            } else if (p.Barcode) {
+              if (Array.isArray(p.Barcode)) barcodeStr = p.Barcode.join(' ');
+              else barcodeStr = String(p.Barcode);
+            }
+            const barcodeMatch = barcodeStr.toLowerCase().includes(lowerQ);
+
+            return nameMatch || codeMatch || brandMatch || catMatch || barcodeMatch;
           });
           setProducts(filtered);
           

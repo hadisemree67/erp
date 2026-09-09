@@ -271,7 +271,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
         {/* 7. Müşteri İlişkileri (CRM) */}
         {canSeeCRM && (
           <div className="nav-item">
-            <div className={`nav-link ${(openDropdown === 'crm' || currentView === 'musteri-ekle' || currentView === 'musteri-listesi' || currentView === 'b2b-b2c-cari') ? 'active' : ''}`} onClick={() => toggleDropdown('crm')}>
+            <div className={`nav-link ${(openDropdown === 'crm' || currentView === 'musteri-ekle' || currentView === 'musteri-listesi' || currentView === 'b2b-b2c-cari' || currentView === 'sikayet-sorular') ? 'active' : ''}`} onClick={() => toggleDropdown('crm')}>
               <span className="nav-icon"></span>
               <span className="nav-text">Müşteri İlişkileri (CRM)</span>
               <span className={`nav-arrow ${openDropdown === 'crm' ? 'open' : ''}`}>▼</span>
@@ -281,7 +281,7 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
                 <a href="#musteri-ekle" className={`dropdown-item ${currentView === 'musteri-ekle' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('musteri-ekle'); }}>Yeni Müşteri Ekle</a>
                 <a href="#musteri-listesi" className={`dropdown-item ${currentView === 'musteri-listesi' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('musteri-listesi'); }}>Müşteri Listesi</a>
                 <a href="#b2b-b2c-cari" className={`dropdown-item ${currentView === 'b2b-b2c-cari' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('b2b-b2c-cari'); }}>B2B / B2C Cari Hesapları</a>
-                <a href="#sikayet-oneri" className="dropdown-item">Şikayet ve Talepler</a>
+                <a href="#sikayet-sorular" className={`dropdown-item ${currentView === 'sikayet-sorular' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('sikayet-sorular'); }}>Şikayet ve Sorular</a>
               </div>
             )}
           </div>

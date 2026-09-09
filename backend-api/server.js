@@ -26,28 +26,41 @@ const { checkUpcomingMaintenances } = require('./utils/machineNotifier');
 // Maaş ve mesai otomasyonunu başlat
 require('./utils/salaryCron');
 
+// Otomatik satın alma / Stok takibini başlat
+const { startMonitor } = require('./utils/stockMonitor');
+startMonitor();
+
 // 1. GLOBAL CRASH GUARDS (Sunucu Çökme Kalkanı)
 // Beklenmeyen / yakalanmayan hataların Node.js sürecini (process) sonlandırmasını engeller.
+const logger = require('./utils/logger');
 process.on('uncaughtException', (err) => {
-    console.error(' [KRİTİK HATA] Yakalanmayan İstisna (Uncaught Exception):', err);
+    logger.error(`[KRİTİK HATA] Yakalanmayan İstisna: ${err.message}`, { stack: err.stack });
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error(' [KRİTİK HATA] Yakalanmayan Promise Reddi (Unhandled Rejection):', reason);
+    logger.error(`[KRİTİK HATA] Yakalanmayan Promise Reddi: ${reason}`);
 });
 
 const app = express();
 
-// GÜVENLİK: Access logger — URL path gösterilir ama query string loglanmaz (token/OTP sızıntısını önler)
+// GÜVENLİK: Proxy arkasında (ngrok, Cloudflare, nginx) gerçek istemci IP'sini al
+// Bu olmadan rate limiter proxy IP'sini kullanır ve tüm kullanıcılar aynı limiti paylaşır
+app.set('trust proxy', 1);
+
+const morgan = require('morgan');
+
+// GÜVENLİK: Access logger morgan & winston
+app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
+
 app.use((req, res, next) => {
     const safePath = req.path; // Sadece path — query string yok
     if (process.env.NODE_ENV !== 'production') {
-        console.log(`[REQUEST] ${req.method} ${safePath}`);
+        logger.debug(`[REQUEST] ${req.method} ${safePath}`);
     }
     const originalSend = res.send;
     res.send = function (data) {
         if (res.statusCode >= 400 && process.env.NODE_ENV !== 'production') {
-            console.error(`[RESPONSE ERROR] ${req.method} ${safePath} -> Status: ${res.statusCode}`);
+            logger.warn(`[RESPONSE ERROR] ${req.method} ${safePath} -> Status: ${res.statusCode}`);
         }
         return originalSend.apply(res, arguments);
     };
@@ -56,8 +69,19 @@ app.use((req, res, next) => {
 
 
 app.locals.system_paused = false;
+const redisClient = require('./services/redisService');
 db.query("SELECT setting_value FROM system_settings WHERE setting_key = 'system_paused'")
-    .then(([rows]) => { if (rows.length > 0) app.locals.system_paused = (rows[0].setting_value === 'true'); })
+    .then(async ([rows]) => {
+        if (rows.length > 0) {
+            const isPaused = (rows[0].setting_value === 'true');
+            app.locals.system_paused = isPaused;
+            try {
+                if (redisClient.isReady) {
+                    await redisClient.set('system_paused', isPaused ? 'true' : 'false');
+                }
+            } catch (redisErr) {}
+        }
+    })
     .catch(e => console.error("system_paused fetch error:", e));
 
 // Token Kara Listesi (Blacklist) Tablosunu Oluştur
@@ -81,6 +105,25 @@ db.query(`
         INDEX(token)
     )
 `).catch(e => console.error("user_sessions table create error:", e));
+
+// Ürün Yorum ve Değerlendirmeleri Tablosu
+db.query(`
+    CREATE TABLE IF NOT EXISTS product_reviews (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_id INT NOT NULL,
+        customer_id INT NOT NULL,
+        order_id INT NULL,
+        rating INT NOT NULL DEFAULT 5,
+        comment TEXT NOT NULL,
+        status VARCHAR(50) DEFAULT 'Onaylandı',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX(product_id),
+        INDEX(customer_id),
+        INDEX(order_id)
+    )
+`).catch(e => console.error("product_reviews table create error:", e));
+
 
 
 // --- MİDDLEWARE (ARA KATMAN) AYARLARI ---
@@ -135,6 +178,7 @@ const generalLimiter = rateLimit({
     max: 1000,
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false, // IPv6 keyGenerator uyarısını devre dışı bırak
     message: { success: false, message: 'Çok fazla istek gönderdiniz. Lütfen biraz bekleyin.' }
 });
 app.use('/api/', generalLimiter);
@@ -145,6 +189,7 @@ const loginLimiter = rateLimit({
     max: 10, // 5 dakikada en fazla 10 deneme
     standardHeaders: true,
     legacyHeaders: false,
+    validate: false, // IPv6 keyGenerator uyarısını devre dışı bırak
     message: { success: false, message: 'Çok fazla başarısız giriş denemesi. Lütfen 5 dakika bekleyin.' }
 });
 app.use('/api/login', loginLimiter);
@@ -187,7 +232,7 @@ app.use((req, res, next) => {
         req.path.startsWith('/api/customers/auth') ||
         (req.path === '/api/brands' && req.method === 'GET') ||
         (req.path.startsWith('/api/web-categories') && req.method === 'GET') ||
-        (req.path.startsWith('/api/products/public') && req.method === 'GET') ||
+        req.path.startsWith('/api/products/public') ||
         (req.path.startsWith('/api/shippers/public') && req.method === 'GET') ||
         (req.path.startsWith('/api/campaigns/public') && req.method === 'GET') ||
         (req.path.startsWith('/api/orders/public/checkout') && req.method === 'POST') ||
@@ -216,12 +261,26 @@ app.use(async (req, res, next) => {
             req.path.startsWith('/api/settings') ||
             req.path === '/api/login' || req.path === '/api/login/' ||
             req.path.startsWith('/api/customers/auth') ||
+            req.path.startsWith('/api/orders/public/checkout') ||
+            req.path.startsWith('/api/coupons/apply') ||
             req.path.startsWith('/api/purchasing/orders/action') ||
             req.path.startsWith('/api/supplier-approval') ||
-            req.path.startsWith('/api/cart');
+            req.path.startsWith('/api/cart') ||
+            req.path.includes('/questions') ||
+            req.path.includes('/reviews');
             
         if (!isExempt) {
-            if (req.app.locals.system_paused) {
+            let isPaused = req.app.locals.system_paused;
+            try {
+                if (redisClient.isReady) {
+                    const redisVal = await redisClient.get('system_paused');
+                    if (redisVal !== null) {
+                        isPaused = (redisVal === 'true');
+                    }
+                }
+            } catch (redisErr) {}
+
+            if (isPaused) {
                 return res.status(503).json({
                     success: false,
                     message: 'Sistem şu anda depo sayımı veya bakım nedeniyle duraklatılmıştır. Veri değişikliği yapılamaz.'
@@ -348,6 +407,10 @@ app.use('/api/picking_carts', pickingCartsRouter);
 const couponsRoute = require('./routes/coupons');
 app.use('/api/coupons', couponsRoute);
 
+// CRM - Şikayet ve Sorular
+const crmRouter = require('./routes/crm');
+app.use('/api/crm', crmRouter);
+
 
 // ================================================================
 // FRONTEND ENTEGRASYONU VE HATA YAKALAYICILARI
@@ -374,7 +437,12 @@ app.use((req, res) => {
 // Rotalarda yakalanamayan veya next(err) ile iletilen hataların sunucuyu çökertmesini engeller
 // ve istemciye (frontend) veritabanı hatalarını net Türkçeleştirerek döner.
 app.use((err, req, res, next) => {
-    console.error(' [API HATASI]:', err.message || err);
+    logger.error(`[API HATASI]: ${err.message || err}`, { 
+        url: req.originalUrl, 
+        method: req.method, 
+        ip: req.ip, 
+        stack: err.stack 
+    });
 
     // MySQL Veritabanı Özel Hata Yakalamaları
     if (err.code === 'ER_DUP_ENTRY') {
@@ -392,12 +460,6 @@ app.use((err, req, res, next) => {
     if (err.message && err.message.includes('Bind parameters must not contain undefined')) {
         return res.status(400).json({ success: false, message: 'Eksik veya tanımsız parametre gönderildi.' });
     }
-
-    // Hata dosyasına yaz (asenkron)
-    try {
-        const fs = require('fs');
-        fs.appendFile('error.log', new Date().toISOString() + ' [API HATASI] ' + req.url + ' : ' + (err.stack || err.message || err) + '\n', () => {});
-    } catch (e) { }
 
     // GÜVENLİK: Production'da iç hata detaylarını (stack trace vb.) asla istemciye sızdırma
     const isProduction = process.env.NODE_ENV === 'production';
@@ -421,3 +483,5 @@ app.listen(PORT, '0.0.0.0', () => {
     setTimeout(checkUpcomingMaintenances, 5000);
     setInterval(checkUpcomingMaintenances, 1000 * 60 * 60 * 6);
 });
+
+module.exports = app;

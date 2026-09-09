@@ -29,7 +29,7 @@
   ![React Native](https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
   ![Electron](https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=white)
   ![MySQL](https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white)
-  ![Prisma](https://img.shields.io/badge/Prisma-3982CE?style=for-the-badge&logo=Prisma&logoColor=white)
+  ![MySQL2](https://img.shields.io/badge/MySQL2_Pool-00546B?style=for-the-badge&logo=mysql&logoColor=white)
   ![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
   ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
   ![Expo](https://img.shields.io/badge/Expo-000020?style=for-the-badge&logo=expo&logoColor=white)
@@ -46,7 +46,7 @@ Sistem **dört ana bileşenden** oluşur:
 
 | Bileşen | Teknoloji | Açıklama |
 |---------|-----------|----------|
-| **Backend API** | Node.js, Express, Prisma, MySQL | RESTful API sunucusu, iş mantığı ve veritabanı katmanı |
+| **Backend API** | Node.js, Express, MySQL2 (Connection Pool) | RESTful API sunucusu, iş mantığı ve optimize veritabanı katmanı |
 | **Web App** | React (Vite) | E-Ticaret platformu — müşteri arayüzü |
 | **Desktop App** | React (Vite) + Electron | ERP yönetim paneli — masaüstü uygulaması |
 | **Mobile App** | React Native (Expo) | Depo personeli uygulaması — barkod okuma ve paketleme |
@@ -188,7 +188,7 @@ stokerpsistemi/
 |-----------|-------|----------|
 | Node.js | v16+ | Asenkron çalışma ortamı |
 | Express.js | v5.x | Web framework |
-| Prisma ORM | v5.x | Tip güvenli veritabanı sorguları |
+| MySQL2 (Pool) | v3.x | Yüksek performanslı bağlantı havuzu & parametrik SQL |
 | MySQL | v8.0 | İlişkisel veritabanı |
 | Nodemailer | v9.x | E-posta gönderimi |
 | Helmet | v8.x | HTTP güvenlik başlıkları |
@@ -262,12 +262,9 @@ npm install
 
 # .env dosyasını oluşturun (.env.example'dan)
 cp .env.example .env
-# .env dosyasını düzenleyin: veritabanı, SMTP ve JWT bilgilerinizi girin
+# .env dosyasını düzenleyin: veritabanı (DB_HOST, DB_USER, DB_PASSWORD, DB_NAME), SMTP ve JWT bilgilerinizi girin
 
-# Prisma şemasını veritabanına uygulayın
-npx prisma db push
-
-# Sunucuyu başlatın
+# Sunucuyu başlatın (Tablolar ve sütunlar otomatik kontrol edilir)
 npm run dev
 # ✅ http://localhost:3000
 ```
@@ -335,12 +332,13 @@ Backend API 24 adet modüler route dosyasından oluşur:
 Projeyi çalıştırmak için aşağıdaki ortam değişkenlerini `.env` dosyasında tanımlamanız gerekir:
 
 ```env
-# Veritabanı
+# Veritabanı (MySQL2 Connection Pool)
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=e_ticaret_depo
-DATABASE_URL="mysql://root:your_password@localhost:3306/e_ticaret_depo"
+# Opsiyonel / Geriye dönük uyumluluk:
+# DATABASE_URL="mysql://root:your_password@localhost:3306/e_ticaret_depo"
 
 # Sunucu
 PORT=3000

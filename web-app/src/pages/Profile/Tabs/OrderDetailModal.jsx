@@ -6,12 +6,15 @@
  * ============================================================================
  */
 import React, { useState } from 'react';
-import { X, Package, RotateCcw, MapPin, Ban } from 'lucide-react';
+import { X, Package, RotateCcw, MapPin, Ban, Star } from 'lucide-react';
 import styles from './OrderDetailModal.module.css';
 import AddressChangeModal from './AddressChangeModal';
 import CancelModal from './CancelModal';
 
-const OrderDetailModal = ({ isOpen, onClose, order, onOpenReturn, onOrderUpdated }) => {
+const OrderDetailModal = ({ isOpen, onClose, order, onOpenReturn, onOpenReview, onOrderUpdated }) => {
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
   if (!isOpen || !order) return null;
 
   const getStatusClass = (status) => {
@@ -36,11 +39,8 @@ const OrderDetailModal = ({ isOpen, onClose, order, onOpenReturn, onOrderUpdated
   const isReturnActive = order.OrderStatus === 'Teslim Edildi';
   const isAddressChangeActive = !['Kargoya Verildi', 'Teslim Edildi', 'İptal Edildi', 'İptal'].includes(order.OrderStatus);
   
-  // Siparişi İptal Et is always active according to user request (for now)
-  const isCancelActive = true; 
-
-  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
-  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  // İptal edilebilir ürün varsa ve sipariş kargoda/tamamlanmış/iptal değilse aktif
+  const isCancelActive = !['Kargoya Verildi', 'Teslim Edildi', 'İptal Edildi', 'İptal'].includes(order.OrderStatus) && Boolean(order.items && order.items.length > 0);
 
   const handleReturnClick = () => {
     onClose();
@@ -122,6 +122,20 @@ const OrderDetailModal = ({ isOpen, onClose, order, onOpenReturn, onOrderUpdated
           <div className={styles.section}>
             <h3>Sipariş İşlemleri</h3>
             <div className={styles.actionButtons}>
+              {order.OrderStatus === 'Teslim Edildi' && onOpenReview && (
+                <button 
+                  className={styles.actionBtn} 
+                  onClick={() => {
+                    onClose();
+                    onOpenReview(order);
+                  }}
+                  style={{ background: '#f59e0b', color: '#fff', borderColor: '#d97706', fontWeight: '600' }}
+                >
+                  <Star size={18} fill="#fff" />
+                  Ürünleri Değerlendir / Yorum Yap
+                </button>
+              )}
+
               <button 
                 className={styles.actionBtn} 
                 disabled={!isReturnActive}
@@ -151,7 +165,8 @@ const OrderDetailModal = ({ isOpen, onClose, order, onOpenReturn, onOrderUpdated
             </div>
             <p className={styles.helpText}>
               {!isReturnActive && order.OrderStatus !== 'Teslim Edildi' && '* İade/Değişim talebi sadece teslim edilen siparişler için oluşturulabilir. '}
-              {!isAddressChangeActive && '* Sipariş kargoya verildiği veya tamamlandığı için adres değişikliği yapılamaz.'}
+              {!isAddressChangeActive && '* Sipariş kargoya verildiği veya tamamlandığı için adres değişikliği yapılamaz. '}
+              {!isCancelActive && (!order.items || order.items.length === 0) && '* Bu siparişteki tüm ürünler iptal edilmiş veya iptal sürecindedir.'}
             </p>
           </div>
         </div>

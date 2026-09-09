@@ -1,0 +1,222 @@
+/* Left: Image Gallery */
+.galleryWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 0 0 50%;
+}
+
+.thumbnailList {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+/* Scrollbar styles for thumbnails */
+.thumbnailList::-webkit-scrollbar {
+  height: 6px;
+}
+.thumbnailList::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+  border-radius: 4px;
+}
+.thumbnailList::-webkit-scrollbar-thumb {
+  background: #ccc; 
+  border-radius: 4px;
+}
+.thumbnailList::-webkit-scrollbar-thumb:hover {
+  background: #bbb; 
+}
+
+.thumbnailItem {
+  width: 80px;
+  height: 80px;
+  border: 1px solid #eaeaea;
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s;
+}
+
+.thumbnailItem.activeThumb {
+  border-color: var(--primary);
+  border-width: 2px;
+}
+
+.thumbnailItem img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.mainImageContainer {
+  flex: 1;
+  position: relative;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: #fff;
+  max-width: 450px;
+  height: 500px; 
+}
+
+.mainImage {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.3s ease;
+}
+
+.maximizeBtn {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #555;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.maximizeBtn:hover {
+  background: #f9f9f9;
+  color: #333;
+}
+
+.navArrowBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #475569;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.navArrowBtn:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.prevBtn {
+  left: 16px;
+}
+
+.nextBtn {
+  right: 16px;
+}
+
+/* Image Modal */
+.imageModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  backdrop-filter: blur(4px);
+}
+
+.imageModalContent {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.imageModalImage {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.imageModalClose {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+  opacity: 0.7;
+}
+
+.imageModalClose:hover {
+  opacity: 1;
+}
+
+.modalNavArrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s;
+  opacity: 0.5;
+}
+
+.modalNavArrow:hover {
+  background: rgba(255, 255, 255, 0.2);
+  opacity: 1;
+}
+
+.modalPrevBtn {
+  left: -80px;
+}
+
+.modalNextBtn {
+  right: -80px;
+}
+
+/* Responsive modal arrows */
+@media (max-width: 768px) {
+  .modalPrevBtn { left: 10px; }
+  .modalNextBtn { right: 10px; }
+  .imageModalClose { top: -40px; right: 0px; }
+}

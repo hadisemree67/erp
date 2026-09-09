@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: stockNotifier
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -66,8 +66,8 @@ const checkAndNotifyLowStock = async (productId) => {
             orderQty = minProduction;
         }
 
-        // Üretilen (Fason/Dahili) ürünse makine kapasitelerine bakmamız lazım
-        if (product.supply_type === 'MANUFACTURE') {
+        // Kural: Hammaddeler kesinlikle satın almaya gider. Kategori Hammadde değilse ve Üretim (Dahili) ise makine kapasitelerine bakarız.
+        if (product.Category !== 'Hammadde' && product.supply_type === 'MANUFACTURE') {
             try {
                 // ⚠️ 4. FORMULA JSON PARSE RİSKİ DÜZELTİLDİ
                 let formula = [];

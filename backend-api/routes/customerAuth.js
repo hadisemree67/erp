@@ -1,3 +1,4 @@
+const redisClient = require('../services/redisService');
 /**
  * ============================================================================
  * BİLEŞEN ADI: customerAuth
@@ -7,12 +8,12 @@
  */
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const db = require('../db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { generateFingerprint } = require('../utils/fingerprint');
-const prisma = require('../prisma');
 const { toFrontendStatus } = require('../utils/enumMapper');
 
 // GÜVENLİK: Müşteri login için brute-force koruşma
@@ -42,8 +43,15 @@ const customerAuthMiddleware = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     try {
-        const [blacklistRows] = await db.query('SELECT token FROM blacklisted_tokens WHERE token = ?', [token]);
-        if (blacklistRows.length > 0) {
+        let isBlacklisted = false;
+        try {
+            if (redisClient.isReady) isBlacklisted = await redisClient.get(`bl_${token}`);
+            else {
+                const [dbBl] = await db.query('SELECT token FROM blacklisted_tokens WHERE token = ?', [token]);
+                isBlacklisted = dbBl.length > 0;
+            }
+        } catch(e) {}
+        if (isBlacklisted) {
             return res.status(401).json({ message: 'Bu oturum kapatılmış (Geçersiz Token). Lütfen tekrar giriş yapın.' });
         }
 
@@ -123,7 +131,7 @@ router.post('/register', authLimiter, async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 12); // Cost factor 12 (daha güvenli)
-        const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP
+        const otpCode = crypto.randomInt(100000, 1000000).toString(); // 6 haneli kriptografik güvenli OTP
         const otpExpiry = new Date(Date.now() + 5 * 60000); // 5 minutes from now
         
         const customerName = `${firstName} ${lastName}`;
@@ -134,13 +142,13 @@ router.post('/register', authLimiter, async (req, res) => {
             // Update existing unverified
             await db.query(
                 'UPDATE customers SET CustomerName = ?, Password = ?, OtpCode = ?, OtpExpiry = ?, Email = ?, Phone = ? WHERE Id = ?',
-                [customerName, hashedPassword, otpCode, otpExpiry, email, phone, existing[0].Id]
+                [customerName, hashedPassword, await bcrypt.hash(otpCode, 10), otpExpiry, email, phone, existing[0].Id]
             );
         } else {
             // Insert new
             await db.query(
                 'INSERT INTO customers (CustomerName, Email, Phone, Password, IsVerified, OtpCode, OtpExpiry) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                [customerName, email, phone, hashedPassword, false, otpCode, otpExpiry]
+                [customerName, email, phone, hashedPassword, false, await bcrypt.hash(otpCode, 10), otpExpiry]
             );
         }
 
@@ -185,7 +193,7 @@ router.post('/verify', otpLimiter, async (req, res) => {
             return res.status(400).json({ message: 'Hesap zaten doğrulanmış.' });
         }
 
-        if (user.OtpCode !== otpCode) {
+        if (!user.OtpCode || !(await bcrypt.compare(otpCode, user.OtpCode))) {
             return res.status(400).json({ message: 'Geçersiz doğrulama kodu.' });
         }
 
@@ -217,17 +225,7 @@ router.post('/login', authLimiter, async (req, res) => {
     }
 
     try {
-        // "deneme" hesabı otomatik oluşturma
-        if (contact === 'deneme' && password === 'deneme1') {
-            const [cRows] = await db.query('SELECT * FROM customers WHERE Phone = "deneme"');
-            if (cRows.length === 0) {
-                const hashedPassword = await bcrypt.hash('deneme1', 12);
-                await db.query(
-                    'INSERT INTO customers (CustomerName, Email, Phone, Password, IsVerified) VALUES (?, ?, ?, ?, ?)',
-                    ['Deneme Müşteri', null, 'deneme', hashedPassword, true]
-                );
-            }
-        }
+
 
         const isEmail = contact.includes('@');
         let queryStr = isEmail ? 'SELECT * FROM customers WHERE Email = ?' : 'SELECT * FROM customers WHERE Phone = ?';
@@ -252,43 +250,14 @@ router.post('/login', authLimiter, async (req, res) => {
             return res.status(401).json({ message: 'Hatalı bilgi girdiniz.' });
         }
 
-        // "deneme" hesabı için OTP (2FA) atlama
-        if (contact === 'deneme') {
-            const jwt = require('jsonwebtoken');
-            const token = jwt.sign(
-                { 
-                    id: user.Id, 
-                    email: user.Email,
-                    phone: user.Phone,
-                    role: 'customer',
-                    deviceFingerprint: generateFingerprint(req)
-                },
-                process.env.JWT_SECRET,
-                { expiresIn: '7d' }
-            );
 
-            const ip_address = req.ip || req.connection.remoteAddress;
-            const device_info = req.headers['user-agent'] || 'Unknown Device';
-            
-            await db.query('DELETE FROM customer_sessions WHERE customer_id = ?', [user.Id]);
-            await db.query(
-                'INSERT INTO customer_sessions (customer_id, ip_address, device_info, token) VALUES (?, ?, ?, ?)',
-                [user.Id, ip_address, device_info, token]
-            );
-
-            return res.json({
-                success: true,
-                requires2FA: false,
-                token,
-                user: { id: user.Id, name: user.CustomerName, email: user.Email, phone: user.Phone, TwoFactorEnabled: false }
-            });
-        }
 
         // İSTİSNASIZ HER GİRİŞTE (Şifre doğruysa) DOĞRULAMA KODU (2FA) GÖNDERİLİR.
-        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpCode = crypto.randomInt(100000, 1000000).toString();
         const otpExpiry = new Date(Date.now() + 5 * 60000);
         
-        await db.query('UPDATE customers SET OtpCode = ?, OtpExpiry = ? WHERE Id = ?', [otpCode, otpExpiry, user.Id]);
+        const hashedOtp = await bcrypt.hash(otpCode, 10);
+        await db.query('UPDATE customers SET OtpCode = ?, OtpExpiry = ? WHERE Id = ?', [hashedOtp, otpExpiry, user.Id]);
         
         if (isEmail) {
             const { sendOtpEmail } = require('../services/emailService');
@@ -315,6 +284,9 @@ router.post('/logout', async (req, res) => {
 
     const token = authHeader.split(' ')[1];
     try {
+        try {
+            if (redisClient.isReady) await redisClient.set(`bl_${token}`, '1', { EX: 8 * 60 * 60 });
+        } catch(e){}
         await db.query('INSERT IGNORE INTO blacklisted_tokens (token) VALUES (?)', [token]);
         res.json({ success: true, message: 'Çıkış yapıldı ve oturum sunucu tarafında sonlandırıldı.' });
     } catch (error) {
@@ -434,23 +406,39 @@ router.get('/my-orders', customerAuthMiddleware, async (req, res) => {
     try {
         const userId = req.user.id;
         
-        // Geçici düzeltme: 'İptal Bekliyor' Prisma şemasında olmadığı için çökmeye sebep oluyor.
-        // npx prisma generate çalıştırılana kadar veritabanındaki bozuk veriyi düzelt.
-        await db.query("UPDATE orders SET OrderStatus = 'Beklemede' WHERE OrderStatus = 'İptal Bekliyor'");
 
-        const orders = await prisma.orders.findMany({
-            where: { CustomerId: userId },
-            include: {
-                orderitems: {
-                    include: {
-                        products: true
-                    }
-                }
-            },
-            orderBy: { OrderDate: 'desc' }
-        });
+        const [orders] = await db.query(`
+            SELECT o.*,
+                   IF(COUNT(oi.Id) = 0, '[]', JSON_ARRAYAGG(
+                       JSON_OBJECT(
+                           'Id', oi.Id,
+                           'OrderId', oi.OrderId,
+                           'ProductId', oi.ProductId,
+                           'Quantity', oi.Quantity,
+                           'UnitPrice', oi.UnitPrice,
+                           'products', JSON_OBJECT(
+                               'Id', p.Id,
+                               'ProductName', p.ProductName,
+                               'ImagePath', p.ImagePath,
+                               'unit_type', p.unit_type
+                           )
+                       )
+                   )) as orderitems
+            FROM orders o
+            LEFT JOIN orderitems oi ON o.Id = oi.OrderId
+            LEFT JOIN products p ON oi.ProductId = p.Id
+            WHERE o.CustomerId = ?
+            GROUP BY o.Id
+            ORDER BY o.OrderDate DESC
+        `, [userId]);
 
-        // Prisma modelinde order_returns tam güncellenmediği için manuel çekelim (saf SQL ile)
+        for (let o of orders) {
+            if (typeof o.orderitems === 'string') {
+                try { o.orderitems = JSON.parse(o.orderitems); } catch(e) { o.orderitems = []; }
+            }
+        }
+
+        // İlgili siparişlere ait iade/iptal taleplerini ilişkili şekilde çekelim (MySQL2 SQL)
         const orderIds = orders.map(o => o.Id);
         let allReturns = [];
         if (orderIds.length > 0) {
@@ -463,40 +451,52 @@ router.get('/my-orders', customerAuthMiddleware, async (req, res) => {
         }
 
         const formattedOrders = orders.map(o => {
-            // Aktif (beklemede) iptal talebi var mı? Yalnızca Beklemede olanları dikkate al.
-            const activeCancelRequest = allReturns.find(r => r.order_id === o.Id && r.status === 'Beklemede');
-            let cancelledItemsList = [];
-            if (activeCancelRequest && activeCancelRequest.items_json) {
+            // O siparişe ait TÜM 'Beklemede' olan iptal taleplerindeki ürün miktarlarını topla
+            const pendingRequests = allReturns.filter(r => r.order_id === o.Id && r.status === 'Beklemede');
+            const pendingQtyByProduct = {};
+            let allPendingCancelledItems = [];
+
+            for (const pReq of pendingRequests) {
+                let itemsList = [];
                 try {
-                    cancelledItemsList = typeof activeCancelRequest.items_json === 'string' 
-                        ? JSON.parse(activeCancelRequest.items_json) 
-                        : activeCancelRequest.items_json;
-                    if (!Array.isArray(cancelledItemsList)) cancelledItemsList = [];
-                } catch(e) {
-                    console.error("activeCancelRequest.items_json parse hatası:", e);
-                    cancelledItemsList = [];
+                    itemsList = typeof pReq.items_json === 'string' ? JSON.parse(pReq.items_json) : (pReq.items_json || []);
+                    if (!Array.isArray(itemsList)) itemsList = [];
+                } catch (e) {
+                    itemsList = [];
+                }
+                for (const it of itemsList) {
+                    const pid = Number(it.product_id);
+                    const q = Number(it.quantity) || 1;
+                    pendingQtyByProduct[pid] = (pendingQtyByProduct[pid] || 0) + q;
+                    allPendingCancelledItems.push(it);
                 }
             }
 
-            // İptal bekleyen ürünleri normal listeden çıkar veya miktarını düşür
-            // (Reddedilen talepler görmezden gelinir, ürünler siparişte kalır)
+            // O siparişe ait TÜM 'Onaylandı' olan iptal taleplerindeki ürünleri topla
+            const approvedRequests = allReturns.filter(r => r.order_id === o.Id && r.status === 'Onaylandı');
+            let allApprovedCancelledItems = [];
+            for (const aReq of approvedRequests) {
+                let itemsList = [];
+                try {
+                    itemsList = typeof aReq.items_json === 'string' ? JSON.parse(aReq.items_json) : (aReq.items_json || []);
+                    if (!Array.isArray(itemsList)) itemsList = [];
+                } catch (e) {
+                    itemsList = [];
+                }
+                for (const it of itemsList) {
+                    allApprovedCancelledItems.push(it);
+                }
+            }
+
+            // İptal bekleyen ürünleri normal sipariş listesinden düşür
             let displayItems = [];
             for (const oi of o.orderitems) {
-                const cancelMatch = cancelledItemsList.find(c => c.product_id === oi.ProductId);
-                if (cancelMatch) {
-                    const remainingQty = oi.Quantity - (cancelMatch.quantity || oi.Quantity);
-                    if (remainingQty > 0) {
-                        displayItems.push({
-                            ...oi,
-                            Quantity: remainingQty,
-                            ProductName: oi.products?.ProductName,
-                            ImagePath: oi.products?.ImagePath,
-                            Unit: oi.products?.unit_type
-                        });
-                    }
-                } else {
+                const pendingCancelledQty = pendingQtyByProduct[oi.ProductId] || 0;
+                const remainingQty = oi.Quantity - pendingCancelledQty;
+                if (remainingQty > 0) {
                     displayItems.push({
                         ...oi,
+                        Quantity: remainingQty,
                         ProductName: oi.products?.ProductName,
                         ImagePath: oi.products?.ImagePath,
                         Unit: oi.products?.unit_type
@@ -504,43 +504,28 @@ router.get('/my-orders', customerAuthMiddleware, async (req, res) => {
                 }
             }
 
-            // Eğer sipariş İptal Bekliyor durumundaysa, ama hala gösterilecek ürünü varsa 'Beklemede' gibi gösterelim.
-            // Eğer gösterilecek hiç ürün kalmadıysa (Tamamı iptal talep edilmişse) 'İptal Bekliyor' yazsın.
             let displayStatus = o.OrderStatus;
             if (o.OrderStatus === 'İptal Bekliyor' || o.OrderStatus === 'ptal_Bekliyor') {
                 if (displayItems.length > 0) {
                     displayStatus = 'Beklemede';
                 }
-            }
-
-            // İptal onaylanan ürünleri ayrıca gönder (sipariş kartında göstermek için)
-            const approvedCancelRequest = allReturns.find(r => r.order_id === o.Id && r.status === 'Onaylandı');
-            let cancelledItems = [];
-            if (approvedCancelRequest && approvedCancelRequest.items_json) {
-                try {
-                    cancelledItems = typeof approvedCancelRequest.items_json === 'string'
-                        ? JSON.parse(approvedCancelRequest.items_json)
-                        : approvedCancelRequest.items_json;
-                    if (!Array.isArray(cancelledItems)) cancelledItems = [];
-                } catch(e) {
-                    console.error("approvedCancelRequest.items_json parse hatası:", e);
-                    cancelledItems = [];
-                }
+            } else if (pendingRequests.length > 0 && displayItems.length === 0) {
+                displayStatus = 'İptal Bekliyor';
             }
 
             return {
                 ...o,
                 OrderStatus: toFrontendStatus(displayStatus),
                 items: displayItems,
-                cancelledItems
+                cancelledItems: allApprovedCancelledItems,
+                pendingCancelledItems: allPendingCancelledItems
             };
         });
 
         res.json({ success: true, data: formattedOrders });
     } catch (err) {
         console.error('Müşteri siparişleri getirilirken hata:', err);
-        require('fs').writeFileSync('error.log', err.stack || err.toString());
-        res.status(500).json({ success: false, message: 'Siparişleriniz yüklenemedi.', error: err.message, stack: err.stack });
+        res.status(500).json({ success: false, message: 'Siparişleriniz yüklenemedi.' });
     }
 });
 // GET /api/customers/auth/returns
@@ -578,21 +563,105 @@ router.post('/returns', customerAuthMiddleware, async (req, res) => {
     try {
         const decoded = req.user;
         const { order_id, request_type, reason, description, items } = req.body;
+
+        const orderIdInt = parseInt(order_id, 10);
+        if (isNaN(orderIdInt)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
+        }
+
+        // GÜVENLİK (IDOR Önlemi): Siparişin gerçekten bu müşteriye ait olduğunu doğrula
+        const [orders] = await db.query('SELECT Id, OrderStatus FROM orders WHERE Id = ? AND CustomerId = ?', [orderIdInt, decoded.id]);
+        if (orders.length === 0) {
+            return res.status(404).json({ success: false, message: 'Sipariş bulunamadı veya size ait değil.' });
+        }
+
+        const order = orders[0];
+
+        // Kargoya verilmiş veya tamamlanmış siparişler doğrudan iptal edilemez (iade süreci işletilmeli)
+        if (request_type === 'iptal') {
+            const nonCancellable = ['Kargoya Verildi', 'Teslim Edildi', 'İptal Edildi', 'İptal'];
+            if (nonCancellable.includes(order.OrderStatus)) {
+                return res.status(400).json({ success: false, message: `Bu sipariş '${order.OrderStatus}' durumunda olduğu için iptal edilemez.` });
+            }
+        }
         
         // XSS Önlemi: HTML taglerini temizle
         const safeReason = reason ? reason.replace(/<[^>]*>?/gm, '') : reason;
         const safeDescription = description ? description.replace(/<[^>]*>?/gm, '') : description;
+
+        if (!items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ success: false, message: 'İptal edilecek ürün seçilmedi.' });
+        }
+
+        // Siparişteki mevcut ürünleri çek
+        const [orderItems] = await db.query('SELECT ProductId, Quantity FROM orderitems WHERE OrderId = ?', [orderIdInt]);
+        if (orderItems.length === 0) {
+            return res.status(400).json({ success: false, message: 'Bu siparişte iptal edilecek ürün bulunmuyor.' });
+        }
+
+        // Zaten 'Beklemede' olan iptal taleplerindeki ürün miktarlarını çek
+        const [existingPendingReturns] = await db.query(
+            "SELECT items_json FROM order_returns WHERE order_id = ? AND request_type = 'iptal' AND status = 'Beklemede'",
+            [orderIdInt]
+        );
+
+        const currentPendingQty = {};
+        for (const ep of existingPendingReturns) {
+            let epItems = [];
+            try {
+                epItems = typeof ep.items_json === 'string' ? JSON.parse(ep.items_json) : (ep.items_json || []);
+                if (!Array.isArray(epItems)) epItems = [];
+            } catch (e) {
+                epItems = [];
+            }
+            for (const it of epItems) {
+                const pid = Number(it.product_id);
+                const q = Number(it.quantity) || 1;
+                currentPendingQty[pid] = (currentPendingQty[pid] || 0) + q;
+            }
+        }
+
+        // Her bir talep edilen ürün için kalan iptal edilebilir miktar kontrolü
+        for (const reqItem of items) {
+            const pid = Number(reqItem.product_id);
+            const oi = orderItems.find(o => o.ProductId === pid);
+            if (!oi) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `"${reqItem.product_name || 'Ürün'}" bu siparişte bulunmuyor.` 
+                });
+            }
+
+            const alreadyPending = currentPendingQty[pid] || 0;
+            const remainingCancellable = oi.Quantity - alreadyPending;
+            const requestedQty = Number(reqItem.quantity) || 1;
+
+            if (remainingCancellable <= 0) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `"${reqItem.product_name || 'Seçilen ürün'}" için zaten tüm adetlerde bekleyen bir iptal talebiniz bulunmaktadır.` 
+                });
+            }
+
+            if (requestedQty > remainingCancellable) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `"${reqItem.product_name || 'Seçilen ürün'}" için en fazla ${remainingCancellable} adet daha iptal talebi oluşturabilirsiniz (İstenen: ${requestedQty}).` 
+                });
+            }
+        }
+
         const itemsJson = JSON.stringify(items);
         
         const [result] = await db.query(
             'INSERT INTO order_returns (customer_id, order_id, request_type, reason, description, items_json) VALUES (?, ?, ?, ?, ?, ?)',
-            [decoded.id, order_id, request_type, safeReason, safeDescription, itemsJson]
+            [decoded.id, orderIdInt, request_type, safeReason, safeDescription, itemsJson]
         );
         
         // Eğer iptal talebi ise, siparişi dondur (toplanmaması için)
         // NOT: MySQL ENUM'da gerçek değer 'İptal Bekliyor', Prisma iç adı 'ptal_Bekliyor'
         if (request_type === 'iptal') {
-            await db.query('UPDATE orders SET OrderStatus = ? WHERE Id = ?', ['İptal Bekliyor', order_id]);
+            await db.query('UPDATE orders SET OrderStatus = ? WHERE Id = ?', ['İptal Bekliyor', orderIdInt]);
         }
         
         res.status(201).json({ success: true, message: 'Talebiniz başarıyla oluşturuldu.', id: result.insertId });
@@ -688,7 +757,7 @@ router.post('/login-verify', otpLimiter, async (req, res) => {
         
         const user = users[0];
 
-        if (user.OtpCode !== otpCode) return res.status(400).json({ message: 'Geçersiz doğrulama kodu.' });
+        if (!user.OtpCode || !(await bcrypt.compare(otpCode, user.OtpCode))) return res.status(400).json({ message: 'Geçersiz doğrulama kodu.' });
         
         if (new Date() > new Date(user.OtpExpiry)) return res.status(400).json({ message: 'Doğrulama kodunun süresi dolmuş.' });
 
@@ -764,6 +833,72 @@ router.get('/sessions', customerAuthMiddleware, async (req, res) => {
 // Frontend (Web-App) yüklendiğinde token'ın hala aktif (başka cihazdan girilmemiş) olduğunu doğrular.
 router.get('/verify', customerAuthMiddleware, (req, res) => {
     res.json({ success: true, message: 'Oturum geçerli.', user: req.user });
+});
+
+// ==========================================
+// MÜŞTERİ BİLDİRİMLERİ (NOTIFICATIONS)
+// ==========================================
+
+// GET /api/customers/auth/notifications
+router.get('/notifications', customerAuthMiddleware, async (req, res) => {
+    const customerId = req.user.id;
+    try {
+        const [rows] = await db.query(
+            'SELECT id, type, title, message, link, is_read, created_at FROM customer_notifications WHERE customer_id = ? ORDER BY created_at DESC LIMIT 50',
+            [customerId]
+        );
+        const unreadCount = rows.filter(r => !r.is_read).length;
+        res.json({ success: true, notifications: rows, unreadCount });
+    } catch (err) {
+        console.error('Get notifications error:', err);
+        res.status(500).json({ success: false, message: 'Bildirimler alınamadı.' });
+    }
+});
+
+// PUT /api/customers/auth/notifications/:id/read
+router.put('/notifications/:id/read', customerAuthMiddleware, async (req, res) => {
+    const customerId = req.user.id;
+    const notifId = parseInt(req.params.id, 10);
+    try {
+        await db.query(
+            'UPDATE customer_notifications SET is_read = 1 WHERE id = ? AND customer_id = ?',
+            [notifId, customerId]
+        );
+        res.json({ success: true, message: 'Bildirim okundu olarak işaretlendi.' });
+    } catch (err) {
+        console.error('Mark read error:', err);
+        res.status(500).json({ success: false, message: 'Sunucu hatası' });
+    }
+});
+
+// PUT /api/customers/auth/notifications/read-all
+router.put('/notifications/read-all', customerAuthMiddleware, async (req, res) => {
+    const customerId = req.user.id;
+    try {
+        await db.query(
+            'UPDATE customer_notifications SET is_read = 1 WHERE customer_id = ?',
+            [customerId]
+        );
+        res.json({ success: true, message: 'Tüm bildirimler okundu olarak işaretlendi.' });
+    } catch (err) {
+        console.error('Mark all read error:', err);
+        res.status(500).json({ success: false, message: 'Sunucu hatası' });
+    }
+});
+
+// GET /api/customers/auth/my-reviews - Kullanıcının yaptığı tüm değerlendirmeleri getir
+router.get('/my-reviews', customerAuthMiddleware, async (req, res) => {
+    const customerId = req.user.id;
+    try {
+        const [rows] = await db.query(
+            'SELECT id, product_id, order_id, rating, comment, status, created_at, updated_at FROM product_reviews WHERE customer_id = ?',
+            [customerId]
+        );
+        res.json({ success: true, reviews: rows });
+    } catch (err) {
+        console.error('My reviews error:', err);
+        res.status(500).json({ success: false, message: 'Değerlendirmeler alınamadı.' });
+    }
 });
 
 module.exports = router;

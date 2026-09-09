@@ -19,6 +19,7 @@ import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { triggerSuccessFeedback, triggerErrorFeedback } from '../utils/feedback';
 
 const { width } = Dimensions.get('window');
 
@@ -87,11 +88,59 @@ export default function PackagingScreen({ route, navigation }) {
         } catch (e) {}
     };
 
+    // Akıllı Kutu Önerisi Algoritması (Hacim, Boyut ve Ağırlık Bazlı)
     useEffect(() => {
         if (availableBoxes.length > 0 && packagingList.length > 0) {
+            // 1. Toplam sipariş ağırlığı (kg)
             const totalW = packagingList.reduce((acc, item) => acc + ((parseFloat(item.Weight) || 0) * item.Quantity), 0);
-            const sorted = [...availableBoxes].sort((a,b) => parseFloat(a.MaxWeightCapacity || 0) - parseFloat(b.MaxWeightCapacity || 0));
-            let bestBox = sorted.find(b => parseFloat(b.MaxWeightCapacity || 0) >= totalW);
+
+            // 2. Toplam sipariş hacmi (cm³)
+            const totalV = packagingList.reduce((acc, item) => {
+                const vol = parseFloat(item.Volume) || 0;
+                if (vol > 0) return acc + (vol * item.Quantity);
+                const w = parseFloat(item.Width) || 0;
+                const h = parseFloat(item.Height) || 0;
+                const d = parseFloat(item.Depth) || 0;
+                const calcVol = (w * h * d > 0) ? (w * h * d) : 0;
+                return acc + (calcVol * item.Quantity);
+            }, 0);
+
+            // %15 paketleme/ambalaj payı (buffer)
+            const requiredVol = totalV * 1.15;
+
+            // 3. Siparişteki en büyük tekil ürün boyutu
+            const maxItemDimension = packagingList.reduce((max, item) => {
+                const w = parseFloat(item.Width) || 0;
+                const h = parseFloat(item.Height) || 0;
+                const d = parseFloat(item.Depth) || 0;
+                return Math.max(max, w, h, d);
+            }, 0);
+
+            // 4. Kutuları hacimlerine göre (yoksa ağırlık kapasitesine göre) küçükten büyüğe sırala
+            const sorted = [...availableBoxes].sort((a, b) => {
+                const volA = (parseFloat(a.Width) || 0) * (parseFloat(a.Height) || 0) * (parseFloat(a.Depth) || 0);
+                const volB = (parseFloat(b.Width) || 0) * (parseFloat(b.Height) || 0) * (parseFloat(b.Depth) || 0);
+                if (volA > 0 && volB > 0 && volA !== volB) return volA - volB;
+                return (parseFloat(a.MaxWeightCapacity) || 0) - (parseFloat(b.MaxWeightCapacity) || 0);
+            });
+
+            // 5. Hem ağırlığı hem hacmi hem de fiziksel boyutu karşılayan en küçük/uygun kutuyu seç
+            let bestBox = sorted.find(b => {
+                const maxWeight = parseFloat(b.MaxWeightCapacity) || 0;
+                const boxW = parseFloat(b.Width) || 0;
+                const boxH = parseFloat(b.Height) || 0;
+                const boxD = parseFloat(b.Depth) || 0;
+                const boxVol = boxW * boxH * boxD;
+                const maxBoxDim = Math.max(boxW, boxH, boxD);
+
+                const weightFits = maxWeight === 0 || maxWeight >= totalW;
+                const volumeFits = boxVol === 0 || requiredVol === 0 || boxVol >= requiredVol;
+                const dimensionFits = maxItemDimension === 0 || maxBoxDim === 0 || maxBoxDim >= maxItemDimension;
+
+                return weightFits && volumeFits && dimensionFits;
+            });
+
+            // Eğer tam uyan bulunamazsa eldeki en büyük kutuyu öner
             if (!bestBox) bestBox = sorted[sorted.length - 1];
             if (bestBox) setRecommendedBoxId(bestBox.Id);
         }
@@ -182,12 +231,14 @@ export default function PackagingScreen({ route, navigation }) {
         });
 
         if (found) {
+            triggerSuccessFeedback();
             setPackagingList(newList);
             setTimeout(() => {
                 setScanned(false);
                 isScanningRef.current = false;
             }, 1500);
         } else {
+            triggerErrorFeedback();
             const exists = packagingList.find(i => isMatch(i, scannedCode));
             if (exists) {
                 Alert.alert('Uyarı', 'Bu üründen kutuya eklenecek miktar tamamlandı.', [
@@ -491,7 +542,7 @@ export default function PackagingScreen({ route, navigation }) {
                             {/* Kutu Önerisi Sadece Metin */}
                             {recommendedBoxId && availableBoxes && availableBoxes.length > 0 && (
                                 <Text style={{ fontSize: 13, color: '#d97706', fontWeight: '700', marginBottom: 12 }}>
-                                    💡 {availableBoxes.find(b => b.Id === recommendedBoxId)?.BoxName} numaralı kutu öneriliyor.
+                                    💡 {availableBoxes.find(b => b.Id === recommendedBoxId)?.BoxName} kutusu öneriliyor (Hacim & Ağırlık Uyumlu).
                                 </Text>
                             )}
 

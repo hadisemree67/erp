@@ -39,12 +39,13 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: process.env.DB_CONNECTION_LIMIT ? parseInt(process.env.DB_CONNECTION_LIMIT, 10) : 50,
     queueLimit: 0,
     // 🚨 PERFORMANS VE ZAMAN DÜZELTMELERİ
     enableKeepAlive: true,       // TCP bağlantı kopmalarını engeller
     keepAliveInitialDelay: 0,    // Boşta kalınca ping atar
-    dateStrings: true            // Tarih sapmalarını (-3 / +3 saat) engellemek için doğrudan metin okur
+    dateStrings: true,           // Tarih sapmalarını (-3 / +3 saat) engellemek için doğrudan metin okur
+    charset: 'utf8mb4'           // Jest testlerinde cesu8 hatasını çözer
 });
 
 pool.getConnection()

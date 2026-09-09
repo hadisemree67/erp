@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: campaigns
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -292,7 +292,7 @@ router.put('/:id', authMiddleware, checkPermission('campaign_manage'), uploadMid
         const {
             title, campaign_type, discount_rate, min_amount, buy_quantity,
             pay_quantity, gift_quantity, gift_product_name, target_product_ids, target_barcode, start_date,
-            end_date, status, description, existing_cover_image
+            end_date, status, description
         } = req.body;
 
         const [oldRows] = await db.query('SELECT * FROM campaigns WHERE id = ?', [id]);
@@ -300,6 +300,9 @@ router.put('/:id', authMiddleware, checkPermission('campaign_manage'), uploadMid
             return res.status(404).json({ success: false, message: 'Kampanya bulunamadı.' });
         }
 
+        let existing_cover_image = req.body.existing_cover_image;
+        if (existing_cover_image === 'null') existing_cover_image = null;
+        
         const cover_image_path = req.file ? `/uploads/${req.file.filename}` : (existing_cover_image !== undefined ? existing_cover_image : oldRows[0].cover_image_path);
 
         await db.query(`

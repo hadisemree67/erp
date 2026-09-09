@@ -260,7 +260,7 @@ const CampaignList = ({ currentUser, onNavigate }) => {
                                 <div style={{ 
                                     height: '160px', 
                                     width: '100%', 
-                                    background: camp.cover_image_path ? `url(http://localhost:3000${camp.cover_image_path}) center/cover no-repeat` : badge.bannerBg,
+                                    background: camp.cover_image_path ? `url(${import.meta.env.VITE_API_URL}${camp.cover_image_path}) center/cover no-repeat` : badge.bannerBg,
                                     position: 'relative',
                                     display: 'flex',
                                     alignItems: 'flex-end',

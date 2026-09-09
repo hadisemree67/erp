@@ -7,8 +7,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const db = require('../db');
 const rateLimit = require('express-rate-limit');
 
 // GÜVENLİK: Sepet işlemleri için rate limiter (DoS + stok manipulasyonu önleme)
@@ -29,7 +28,7 @@ router.use(cartLimiter);
 // Yardımcı Fonksiyon: Süresi geçmiş rezervasyonları temizle
 async function cleanupExpiredReservations() {
     try {
-        await prisma.$executeRawUnsafe('DELETE FROM cart_reservations WHERE expires_at < NOW()');
+        await db.query('DELETE FROM cart_reservations WHERE expires_at < NOW()');
     } catch (err) {
         console.error("Süresi dolmuş rezervasyonları temizleme hatası:", err);
     }
@@ -42,49 +41,54 @@ router.post('/reserve', async (req, res) => {
     const quantityInt = parseInt(quantity, 10);
     const productIdInt = parseInt(product_id, 10);
 
-    // GÜVENLİK: session_id formatını doğrula (UUID zorunlu)
     if (!isValidSessionId(session_id) || isNaN(productIdInt) || isNaN(quantityInt) || quantityInt < 0) {
         return res.status(400).json({ success: false, message: 'Eksik veya geçersiz parametre.' });
     }
 
+    const conn = await db.getConnection();
     try {
-        // Önce süresi dolmuş olanları temizle
-        await cleanupExpiredReservations();
+        await conn.beginTransaction();
 
-        // Ürünün gerçek kullanılabilir stoğunu hesapla
-        const product = await prisma.products.findUnique({
-            where: { Id: productIdInt }
-        });
+        // Süresi dolmuş rezervasyonları transaction içinde temizle
+        await conn.query('DELETE FROM cart_reservations WHERE expires_at < NOW()');
+
+        // Ürünü FOR UPDATE ile kilitle (aynı anda gelen paralel istekleri sıraya sokar, race condition'ı engeller)
+        const [productRows] = await conn.query('SELECT * FROM products WHERE Id = ? FOR UPDATE', [productIdInt]);
+        const product = productRows[0];
 
         if (!product || !product.is_active) {
+            await conn.rollback();
             return res.status(404).json({ success: false, message: 'Ürün bulunamadı veya pasif.' });
         }
 
-        const wmsStockRes = await prisma.$queryRawUnsafe('SELECT SUM(quantity) as qty FROM wms_stock_balances WHERE product_id = ?', productIdInt);
+        const [wmsStockRes] = await conn.query('SELECT SUM(quantity) as qty FROM wms_stock_balances WHERE product_id = ?', [productIdInt]);
         const wmsStock = wmsStockRes.length > 0 && wmsStockRes[0].qty !== null ? Number(wmsStockRes[0].qty) : product.StockQuantity;
 
-        const activeReservations = await prisma.$queryRawUnsafe('SELECT SUM(quantity) as sum_qty FROM cart_reservations WHERE product_id = ? AND session_id != ? AND expires_at > NOW()', productIdInt, session_id);
+        const [activeReservations] = await conn.query(
+            'SELECT SUM(quantity) as sum_qty FROM cart_reservations WHERE product_id = ? AND session_id != ? AND expires_at > NOW()',
+            [productIdInt, session_id]
+        );
         const reservedAmount = activeReservations.length > 0 ? Number(activeReservations[0].sum_qty) || 0 : 0;
 
-        const unpickedOrders = await prisma.$queryRawUnsafe(`
+        const [unpickedOrders] = await conn.query(`
             SELECT SUM(oi.Quantity) as sum_qty 
             FROM orderitems oi 
             JOIN orders o ON oi.OrderId = o.Id 
             WHERE oi.ProductId = ? 
             AND o.OrderStatus IN ('Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Toplamada', 'İptal Bekliyor')
-        `, productIdInt);
+        `, [productIdInt]);
         const unpickedAmount = unpickedOrders.length > 0 ? Number(unpickedOrders[0].sum_qty) || 0 : 0;
 
-        const availableStock = wmsStock - reservedAmount - unpickedAmount;
+        const availableStock = Math.max(0, wmsStock - reservedAmount - unpickedAmount);
 
-        // Mevcut kullanıcı için bu üründe zaten bir rezervasyon var mı?
-        const existingResList = await prisma.$queryRawUnsafe('SELECT * FROM cart_reservations WHERE session_id = ? AND product_id = ? LIMIT 1', session_id, productIdInt);
+        const [existingResList] = await conn.query(
+            'SELECT * FROM cart_reservations WHERE session_id = ? AND product_id = ? LIMIT 1 FOR UPDATE',
+            [session_id, productIdInt]
+        );
         const existingReservation = existingResList.length > 0 ? existingResList[0] : null;
 
-        const requestedAdditional = quantityInt - (existingReservation ? existingReservation.quantity : 0);
-
-        // Eğer toplam istenen miktar, kullanıcının alabileceği maksimum stoktan fazlaysa red et
         if (quantityInt > availableStock) {
+            await conn.rollback();
             return res.status(400).json({ 
                 success: false, 
                 message: 'Yetersiz stok. Üründen en fazla ' + availableStock + ' adet alabilirsiniz.',
@@ -94,21 +98,22 @@ router.post('/reserve', async (req, res) => {
 
         if (existingReservation) {
             if (quantityInt <= 0) {
-                // Miktar 0 yapıldıysa rezervasyonu sil
-                await prisma.$executeRawUnsafe('DELETE FROM cart_reservations WHERE id = ?', existingReservation.id);
+                await conn.query('DELETE FROM cart_reservations WHERE id = ?', [existingReservation.id]);
             } else {
-                // Güncelle ve süreyi uzat
-                await prisma.$executeRawUnsafe('UPDATE cart_reservations SET quantity = ?, expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE id = ?', quantityInt, existingReservation.id);
+                await conn.query('UPDATE cart_reservations SET quantity = ?, expires_at = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE id = ?', [quantityInt, existingReservation.id]);
             }
         } else if (quantityInt > 0) {
-            // Yeni rezervasyon oluştur
-            await prisma.$executeRawUnsafe('INSERT INTO cart_reservations (session_id, product_id, quantity, expires_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))', session_id, productIdInt, quantityInt);
+            await conn.query('INSERT INTO cart_reservations (session_id, product_id, quantity, expires_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))', [session_id, productIdInt, quantityInt]);
         }
 
+        await conn.commit();
         res.json({ success: true, message: 'Stok ayrıldı.' });
     } catch (error) {
+        if (conn) await conn.rollback();
         console.error('Rezervasyon hatası:', error);
         res.status(500).json({ success: false, message: 'Sunucu hatası.' });
+    } finally {
+        if (conn) conn.release();
     }
 });
 
@@ -121,7 +126,7 @@ router.post('/release', async (req, res) => {
     }
 
     try {
-        await prisma.$executeRawUnsafe('DELETE FROM cart_reservations WHERE session_id = ? AND product_id = ?', session_id, parseInt(product_id));
+        await db.query('DELETE FROM cart_reservations WHERE session_id = ? AND product_id = ?', [session_id, parseInt(product_id)]);
         res.json({ success: true, message: 'Stok serbest bırakıldı.' });
     } catch (error) {
         console.error('Serbest bırakma hatası:', error);
@@ -138,7 +143,7 @@ router.post('/clear', async (req, res) => {
     }
 
     try {
-        await prisma.$executeRawUnsafe('DELETE FROM cart_reservations WHERE session_id = ?', session_id);
+        await db.query('DELETE FROM cart_reservations WHERE session_id = ?', [session_id]);
         res.json({ success: true, message: 'Sepet temizlendi, stoklar serbest.' });
     } catch (error) {
         console.error('Sepet temizleme hatası:', error);
@@ -154,7 +159,7 @@ router.post('/ping', async (req, res) => {
 
     try {
         const expiresAt = new Date(Date.now() + 10 * 60000);
-        await prisma.$executeRawUnsafe('UPDATE cart_reservations SET expires_at = ? WHERE session_id = ?', expiresAt, session_id);
+        await db.query('UPDATE cart_reservations SET expires_at = ? WHERE session_id = ?', [expiresAt, session_id]);
         res.json({ success: true });
     } catch (err) {
         console.error('Ping hatası:', err);
@@ -169,7 +174,7 @@ router.get('/my-reservations', async (req, res) => {
 
     try {
         await cleanupExpiredReservations();
-        const reservations = await prisma.$queryRawUnsafe('SELECT product_id, quantity FROM cart_reservations WHERE session_id = ? AND expires_at > NOW()', session_id);
+        const [reservations] = await db.query('SELECT product_id, quantity FROM cart_reservations WHERE session_id = ? AND expires_at > NOW()', [session_id]);
         res.json({ success: true, data: reservations });
     } catch (error) {
         console.error('Rezervasyonları getirme hatası:', error);
@@ -194,20 +199,18 @@ router.post('/validate-stock', async (req, res) => {
             
             if (isNaN(itemIdInt) || isNaN(itemQtyInt) || itemQtyInt < 0) continue;
 
-            const product = await prisma.products.findUnique({
-                where: { Id: itemIdInt }
-            });
+            const [productRows] = await db.query('SELECT * FROM products WHERE Id = ?', [itemIdInt]);
+            const product = productRows[0];
 
             if (!product || !product.is_active) {
                 invalidIds.push(item.Id);
                 continue;
             }
 
-            const wmsStockRes = await prisma.$queryRawUnsafe('SELECT SUM(quantity) as qty FROM wms_stock_balances WHERE product_id = ?', itemIdInt);
+            const [wmsStockRes] = await db.query('SELECT SUM(quantity) as qty FROM wms_stock_balances WHERE product_id = ?', [itemIdInt]);
             const wmsStock = wmsStockRes.length > 0 && wmsStockRes[0].qty !== null ? Number(wmsStockRes[0].qty) : product.StockQuantity;
 
-            // session_id hariç diğer kişilerin aktif rezervasyonlarını bul
-            const otherReservations = await prisma.$queryRawUnsafe('SELECT SUM(quantity) as sum_qty FROM cart_reservations WHERE product_id = ? AND session_id != ? AND expires_at > NOW()', itemIdInt, session_id);
+            const [otherReservations] = await db.query('SELECT SUM(quantity) as sum_qty FROM cart_reservations WHERE product_id = ? AND session_id != ? AND expires_at > NOW()', [itemIdInt, session_id]);
             const otherReservedAmount = otherReservations.length > 0 ? Number(otherReservations[0].sum_qty) || 0 : 0;
             
             const realAvailableStock = wmsStock - otherReservedAmount;
@@ -225,4 +228,3 @@ router.post('/validate-stock', async (req, res) => {
 });
 
 module.exports = router;
-

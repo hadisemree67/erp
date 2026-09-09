@@ -11,6 +11,7 @@ import styles from './ReturnModal.module.css';
 
 const CancelModal = ({ isOpen, onClose, order, onSuccess }) => {
   const [selectedItems, setSelectedItems] = useState([]);
+  const [itemQuantities, setItemQuantities] = useState({});
   const [reason, setReason] = useState('Vazgeçtim');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,9 +25,18 @@ const CancelModal = ({ isOpen, onClose, order, onSuccess }) => {
       if (exists) {
         return prev.filter(i => i.Id !== item.Id);
       } else {
+        if (!itemQuantities[item.Id]) {
+          setItemQuantities(q => ({ ...q, [item.Id]: item.Quantity }));
+        }
         return [...prev, item];
       }
     });
+  };
+
+  const handleQuantityChange = (itemId, maxQty, newQty) => {
+    const parsed = parseInt(newQty, 10);
+    const val = isNaN(parsed) ? 1 : Math.max(1, Math.min(maxQty, parsed));
+    setItemQuantities(prev => ({ ...prev, [itemId]: val }));
   };
 
   const handleSelectAll = () => {
@@ -34,6 +44,11 @@ const CancelModal = ({ isOpen, onClose, order, onSuccess }) => {
       setSelectedItems([]);
     } else {
       setSelectedItems(order.items || []);
+      const initialQtys = {};
+      (order.items || []).forEach(i => {
+        initialQtys[i.Id] = itemQuantities[i.Id] || i.Quantity;
+      });
+      setItemQuantities(initialQtys);
     }
   };
 
@@ -63,7 +78,7 @@ const CancelModal = ({ isOpen, onClose, order, onSuccess }) => {
           items: selectedItems.map(item => ({
             product_id: item.ProductId,
             product_name: item.ProductName,
-            quantity: item.Quantity,
+            quantity: itemQuantities[item.Id] || item.Quantity,
             price: item.UnitPrice,
             image_path: item.ImagePath
           }))
@@ -76,6 +91,7 @@ const CancelModal = ({ isOpen, onClose, order, onSuccess }) => {
         onClose();
         // Reset state
         setSelectedItems([]);
+        setItemQuantities({});
         setReason('Vazgeçtim');
         setDescription('');
       } else {
@@ -113,19 +129,56 @@ const CancelModal = ({ isOpen, onClose, order, onSuccess }) => {
             
             <p className={styles.subtitle}>Sipariş: #{order.OrderNumber} ({order.items?.length} ürün)</p>
             <div className={styles.productList}>
-              {order.items?.map(item => (
-                <label key={item.Id} className={styles.productItem}>
-                  <input
-                    type="checkbox"
-                    checked={!!selectedItems.find(i => i.Id === item.Id)}
-                    onChange={() => handleItemToggle(item)}
-                  />
-                  <div className={styles.productInfo}>
-                    <span className={styles.productName}>{item.ProductName}</span>
-                    <span className={styles.productDetails}>{item.Quantity} {item.Unit} - {Number(item.UnitPrice).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}</span>
+              {order.items?.map(item => {
+                const isSelected = !!selectedItems.find(i => i.Id === item.Id);
+                const currentQty = itemQuantities[item.Id] || item.Quantity;
+
+                return (
+                  <div key={item.Id} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between', 
+                    padding: '8px 12px',
+                    borderBottom: '1px solid #f1f5f9',
+                    backgroundColor: isSelected ? '#f8fafc' : 'transparent'
+                  }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleItemToggle(item)}
+                      />
+                      <div className={styles.productInfo}>
+                        <span className={styles.productName}>{item.ProductName}</span>
+                        <span className={styles.productDetails}>
+                          Kalan: {item.Quantity} {item.Unit || 'Adet'} - {Number(item.UnitPrice).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })}
+                        </span>
+                      </div>
+                    </label>
+
+                    {isSelected && item.Quantity > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }} onClick={(e) => e.stopPropagation()}>
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>İptal Adedi:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max={item.Quantity}
+                          value={currentQty}
+                          onChange={(e) => handleQuantityChange(item.Id, item.Quantity, e.target.value)}
+                          style={{
+                            width: '56px',
+                            padding: '4px 6px',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            textAlign: 'center'
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
-                </label>
-              ))}
+                );
+              })}
             </div>
           </div>
 

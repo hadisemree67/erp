@@ -40,7 +40,7 @@ const CampaignsPage = () => {
   };
 
   const getImageUrl = (path) => {
-    if (!path) return 'https://via.placeholder.com/600x300?text=Görsel+Yok';
+    if (!path || path === 'null') return 'https://via.placeholder.com/600x300?text=Görsel+Yok';
     if (path.startsWith('http')) return path;
     return `${API_BASE}/${path.replace(/^\//, '')}`;
   };
@@ -71,8 +71,8 @@ const CampaignsPage = () => {
     <div className={styles.pageContainer}>
       {/* Sayfa Başlığı */}
       <div className={styles.header}>
-        <h1 className={styles.title}>🎁 Aktif Kampanyalar</h1>
-        <p className={styles.subtitle}>En güncel fırsatlarımızı kaçırmayın!</p>
+        <h1 className={styles.title}>Kampanyalar</h1>
+        <p className={styles.subtitle}>Güncel fırsatları buradan takip edebilirsiniz.</p>
       </div>
 
       {loading ? (

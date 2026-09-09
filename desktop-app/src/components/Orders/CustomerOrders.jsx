@@ -418,6 +418,31 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         }
     };
 
+    const handleQuickPack = async (order) => {
+        const recBox = getRecommendedBox(order);
+        const boxId = recBox ? recBox.Id : (boxes && boxes.length > 0 ? boxes[0].Id : null);
+        
+        try {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${order.Id}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    status: 'Paketlendi',
+                    boxId: boxId
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                fetchInitialData();
+            } else {
+                alert(data.message || 'Paketleme durumu güncellenemedi.');
+            }
+        } catch (err) {
+            console.error('Hızlı paketleme hatası:', err);
+            alert('Sunucu hatası.');
+        }
+    };
+
     const handlePackSubmit = async (order, boxId) => {
         if (!boxId) {
             alert('Lütfen bir kargo kutusu seçiniz.');
@@ -427,12 +452,13 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         setPacking(true);
         try {
             const trackingNo = `CRG-${order.Id}-${Date.now().toString().slice(-4)}`;
-            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${order.Id}/pack`, {
+            const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/orders/${order.Id}/status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    BoxId: boxId,
-                    TrackingNumber: trackingNo
+                    status: 'Paketlendi',
+                    boxId: boxId,
+                    trackingNumber: trackingNo
                 })
             });
             const data = await res.json();
@@ -649,7 +675,11 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
         if (customerId && o.CustomerId !== customerId) return false;
 
         // 1. Siparişin aktif sekmeye ait olup olmadığını kontrol et
-        const matchesTab = activeTab === 'Tümü' || o.OrderStatus?.toLowerCase() === activeTab.toLowerCase();
+        const matchesTab = activeTab === 'Tümü' || 
+            o.OrderStatus?.toLowerCase() === activeTab.toLowerCase() ||
+            (activeTab === 'Onaylandı' && (o.OrderStatus === 'Toplanacaklar' || o.OrderStatus === 'Toplamada')) ||
+            (activeTab === 'Toplandı' && (o.OrderStatus === 'Hazır' || o.OrderStatus === 'Haz_r')) ||
+            (activeTab === 'Toplanıyor' && (o.OrderStatus === 'Hazırlanıyor' || o.OrderStatus === 'Haz_rlan_yor'));
         if (!matchesTab) return false;
 
         // 2. Eğer arama terimi varsa filtrele
@@ -762,9 +792,9 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                     {[
                         { id: 'Tümü', label: 'Tümü' },
                         { id: 'Beklemede', label: 'Beklemede (Yeni)' },
-                        { id: 'Onaylandı', label: 'Onaylandı' },
+                        { id: 'Onaylandı', label: 'Onaylandı (Toplanacaklar)' },
                         { id: 'Toplanıyor', label: 'Toplanıyor' },
-                        { id: 'Toplandı', label: 'Toplandı' },
+                        { id: 'Toplandı', label: 'Toplandı (Paketlenecek)' },
                         { id: 'Paketleniyor', label: 'Paketleniyor' },
                         { id: 'Paketlendi', label: 'Paketlendi' },
                         { id: 'Kargoya Verildi', label: 'Kargoya Verildi' },
@@ -816,12 +846,12 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                             <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '10%' }}>Sipariş No & Tarih</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '12%' }}>Müşteri Bilgisi</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '20%' }}>Sipariş Kalemleri (Ürünler)</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '20%' }}>Sevkiyat Adresi</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '19%' }}>Sipariş Kalemleri (Ürünler)</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '18%' }}>Sevkiyat Adresi</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', width: '8%' }}>Kargo Şirketi</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'right', width: '8%' }}>Toplam Tutar</th>
                                 <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'center', width: '8%' }}>Durum</th>
-                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'center', width: '14%' }}>İşlemler</th>
+                                <th style={{ padding: '14px 16px', fontSize: '13px', fontWeight: '700', color: '#475569', textAlign: 'center', width: '17%' }}>İşlemler</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -914,35 +944,61 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                         </td>
                                         <td style={{ padding: '16px', textAlign: 'center' }}>
                                             <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                
+                                                {/* 1. BEKLEMEDE -> ONAYLA */}
                                                 {order.OrderStatus === 'Beklemede' && hasPerm('order_approve') && (
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleApproveOrder(order.Id); }} 
-                                                        style={{ padding: '6px 12px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                        style={{ padding: '6px 14px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                                                         title="Siparişi Onayla, Kutu Ata ve Kargo Barkodu Oluştur"
                                                     >
-                                                        Onayla
+                                                        ✓ Onayla
                                                     </button>
                                                 )}
-                                                {order.OrderStatus === 'Hazırlanıyor' && hasPerm('order_prepare') && (
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); if(window.confirm('Siparişi toplamayı iptal edip havuzda Onaylandı durumuna geri çekmek istediğinize emin misiniz?')) handleUpdateStatus(order.Id, 'Onaylandı'); }} 
-                                                            style={{ padding: '6px 14px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                                            title="Toplamayı iptal et ve siparişi genel havuza (Onaylandı) geri döndür"
-                                                        >
-                                                            Toplamayı İptal Et
-                                                        </button>
-                                                    </div>
-                                                )}
-                                                {order.OrderStatus === 'Hazır' && hasPerm('order_ship') && (
+
+                                                {/* 2. ONAYLANDI / TOPLANACAKLAR / TOPLANIYOR -> TOPLANDI OLARAK İŞARETLE */}
+                                                {['Onaylandı', 'Toplanacaklar', 'Toplamada', 'Toplanıyor', 'Hazırlanıyor'].includes(order.OrderStatus) && (hasPerm('order_prepare') || hasPerm('order_approve')) && (
                                                     <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleOpenPackingModal(order); }} 
-                                                        style={{ padding: '6px 14px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                                        title="Siparişi Paketle (Barkod Doğrulama)"
+                                                        onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'Toplandı'); }} 
+                                                        style={{ padding: '6px 14px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)' }}
+                                                        title="Siparişi Toplandı olarak işaretle (Stoklar düşülür)"
                                                     >
-                                                        Paketlemeye Başla
+                                                        🛒 Toplandı Olarak İşaretle
                                                     </button>
                                                 )}
+
+                                                {/* TOPLANIYOR ise İPTAL ET seçeneği de kalsın */}
+                                                {['Toplanıyor', 'Hazırlanıyor'].includes(order.OrderStatus) && hasPerm('order_prepare') && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); if(window.confirm('Siparişi toplamayı iptal edip havuzda Onaylandı durumuna geri çekmek istediğinize emin misiniz?')) handleUpdateStatus(order.Id, 'Onaylandı'); }} 
+                                                        style={{ padding: '6px 10px', backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '6px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                                                        title="Toplamayı iptal et ve siparişi Onaylandı durumuna geri döndür"
+                                                    >
+                                                        Toplamayı İptal Et
+                                                    </button>
+                                                )}
+
+                                                {/* 3. TOPLANDI / PAKETLENİYOR -> PAKETLENDİ OLARAK İŞARETLE & DETAYLI PAKETLE */}
+                                                {['Toplandı', 'Hazır', 'Paketleniyor'].includes(order.OrderStatus) && hasPerm('order_ship') && (
+                                                    <>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleQuickPack(order); }} 
+                                                            style={{ padding: '6px 14px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 1px 2px rgba(37, 99, 235, 0.2)' }}
+                                                            title="Otomatik Kutu Atayarak Hızlı Paketle ve Paketlendi Olarak İşaretle"
+                                                        >
+                                                            📦 Paketlendi Olarak İşaretle
+                                                        </button>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); handleOpenPackingModal(order); }} 
+                                                            style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                                                            title="Barkod Okutarak Manuel Paketle"
+                                                        >
+                                                            Detaylı Paketle
+                                                        </button>
+                                                    </>
+                                                )}
+
+                                                {/* 4. PAKETLENDİ -> KARGOYA VER */}
                                                 {order.OrderStatus === 'Paketlendi' && hasPerm('order_ship') && (
                                                     <>
                                                         <button 
@@ -958,13 +1014,15 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                         </button>
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'Kargoya Verildi'); }} 
-                                                            style={{ padding: '6px 12px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                                                            style={{ padding: '6px 14px', backgroundColor: '#d97706', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 1px 2px rgba(217, 119, 6, 0.2)' }}
                                                             title="Siparişi kargoya ver"
                                                         >
-                                                            Kargoya Ver
+                                                            🚚 Kargoya Ver
                                                         </button>
                                                     </>
                                                 )}
+
+                                                {/* 5. KARGOYA VERİLDİ -> TESLİM EDİLDİ */}
                                                 {order.OrderStatus === 'Kargoya Verildi' && hasPerm('order_ship') && (
                                                     <>
                                                         <button 
@@ -980,17 +1038,19 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                                                         </button>
                                                         <button 
                                                             onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'Teslim Edildi'); }} 
-                                                            style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
-                                                            title="Siparişi Manuel Olarak Teslim Edildiye Çek (Test/Yedek)"
+                                                            style={{ padding: '6px 14px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 1px 2px rgba(22, 163, 74, 0.2)' }}
+                                                            title="Siparişi Teslim Edildi Olarak İşaretle"
                                                         >
-                                                            Teslim Edildi Yap
+                                                            ✅ Teslim Edildi
                                                         </button>
                                                     </>
                                                 )}
+
+                                                {/* İPTAL ET */}
                                                 {order.OrderStatus !== 'İptal Edildi' && order.OrderStatus !== 'Teslim Edildi' && hasPerm('order_cancel') && (
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleUpdateStatus(order.Id, 'İptal Edildi'); }} 
-                                                        style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#94a3b8', border: 'none', fontSize: '12px', fontWeight: '500', cursor: 'pointer', textDecoration: 'underline' }}
+                                                        style={{ padding: '6px 10px', backgroundColor: 'transparent', color: '#94a3b8', border: 'none', fontSize: '11px', fontWeight: '500', cursor: 'pointer', textDecoration: 'underline' }}
                                                         title="Siparişi İptal Et"
                                                     >
                                                         İptal Et
@@ -1736,7 +1796,49 @@ const CustomerOrders = ({ currentUser, onNavigate, statusFilter = 'Beklemede', c
                         </div>
 
                         {/* Footer (Actions) */}
-                        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#f8fafc', borderRadius: '0 0 16px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {selectedOrderDetail.OrderStatus === 'Beklemede' && hasPerm('order_approve') && (
+                                    <button 
+                                        onClick={() => { handleApproveOrder(selectedOrderDetail.Id); setIsDetailModalOpen(false); }}
+                                        style={{ padding: '8px 16px', backgroundColor: '#334155', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                                    >
+                                        ✓ Siparişi Onayla
+                                    </button>
+                                )}
+                                {['Onaylandı', 'Toplanacaklar', 'Toplanıyor', 'Hazırlanıyor'].includes(selectedOrderDetail.OrderStatus) && (hasPerm('order_prepare') || hasPerm('order_approve')) && (
+                                    <button 
+                                        onClick={() => { handleUpdateStatus(selectedOrderDetail.Id, 'Toplandı'); setIsDetailModalOpen(false); }}
+                                        style={{ padding: '8px 16px', backgroundColor: '#059669', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                                    >
+                                        🛒 Toplandı Olarak İşaretle
+                                    </button>
+                                )}
+                                {['Toplandı', 'Hazır', 'Paketleniyor'].includes(selectedOrderDetail.OrderStatus) && hasPerm('order_ship') && (
+                                    <button 
+                                        onClick={() => { handleQuickPack(selectedOrderDetail); setIsDetailModalOpen(false); }}
+                                        style={{ padding: '8px 16px', backgroundColor: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                                    >
+                                        📦 Paketlendi Olarak İşaretle
+                                    </button>
+                                )}
+                                {selectedOrderDetail.OrderStatus === 'Paketlendi' && hasPerm('order_ship') && (
+                                    <button 
+                                        onClick={() => { handleUpdateStatus(selectedOrderDetail.Id, 'Kargoya Verildi'); setIsDetailModalOpen(false); }}
+                                        style={{ padding: '8px 16px', backgroundColor: '#d97706', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                                    >
+                                        🚚 Kargoya Ver
+                                    </button>
+                                )}
+                                {selectedOrderDetail.OrderStatus === 'Kargoya Verildi' && hasPerm('order_ship') && (
+                                    <button 
+                                        onClick={() => { handleUpdateStatus(selectedOrderDetail.Id, 'Teslim Edildi'); setIsDetailModalOpen(false); }}
+                                        style={{ padding: '8px 16px', backgroundColor: '#16a34a', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                                    >
+                                        ✅ Teslim Edildi Olarak İşaretle
+                                    </button>
+                                )}
+                            </div>
                             <button 
                                 onClick={() => setIsDetailModalOpen(false)}
                                 style={{ padding: '10px 24px', backgroundColor: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}

@@ -7,10 +7,11 @@
  */
 import React, { useState, useEffect } from 'react';
 import styles from './Orders.module.css';
-import { Package, Truck, CheckCircle, Clock, XCircle, RotateCcw } from 'lucide-react';
+import { Package, Truck, CheckCircle, Clock, XCircle, RotateCcw, Star } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import ReturnModal from './ReturnModal';
 import OrderDetailModal from './OrderDetailModal';
+import ProductReviewModal from './ProductReviewModal';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -18,6 +19,7 @@ const Orders = () => {
   const [error, setError] = useState(null);
   const [returnModalOpen, setReturnModalOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
 
   useEffect(() => {
@@ -41,6 +43,10 @@ const Orders = () => {
       const data = await res.json();
       if (data.success) {
         setOrders(data.data);
+        setSelectedOrder(prev => {
+          if (!prev) return null;
+          return data.data.find(o => o.Id === prev.Id) || null;
+        });
       } else {
         setError((data.message || 'Siparişler yüklenemedi.') + (data.error ? ' | Hata Detayı: ' + data.error : ''));
       }
@@ -181,6 +187,19 @@ const Orders = () => {
                   >
                     Sipariş Detayı
                   </button>
+                  {order.OrderStatus === 'Teslim Edildi' && (
+                    <button 
+                      className={styles.reviewBtn}
+                      onClick={() => {
+                        setSelectedOrder(order);
+                        setReviewModalOpen(true);
+                      }}
+                      title="Siparişteki ürünleri puanla ve değerlendirme yaz"
+                    >
+                      <Star size={15} fill="#f59e0b" color="#f59e0b" />
+                      Ürünleri Değerlendir
+                    </button>
+                  )}
                 </div>
                 <div className={styles.totalSection}>
                   <div className={styles.totalLabel}>Toplam Tutar:</div>
@@ -200,7 +219,21 @@ const Orders = () => {
           onClose={() => setDetailModalOpen(false)}
           order={selectedOrder}
           onOpenReturn={handleOpenReturn}
+          onOpenReview={(order) => {
+            setDetailModalOpen(false);
+            setSelectedOrder(order);
+            setTimeout(() => setReviewModalOpen(true), 100);
+          }}
           onOrderUpdated={fetchOrders}
+        />
+      )}
+
+      {reviewModalOpen && (
+        <ProductReviewModal
+          isOpen={reviewModalOpen}
+          onClose={() => setReviewModalOpen(false)}
+          order={selectedOrder}
+          onSuccess={fetchOrders}
         />
       )}
 

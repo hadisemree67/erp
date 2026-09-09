@@ -1,3 +1,4 @@
+const redisClient = require('../services/redisService');
 /**
  * ============================================================================
  * DOSYA ADI: routes/auth.js
@@ -26,30 +27,7 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        // DEV-ONLY: Demo hesabı — sadece geliştirme ortamında çalışır, production'da devre dışıdır
-        if (process.env.NODE_ENV !== 'production' && username === 'deneme' && password === 'deneme1') {
-            const [dRows] = await db.query('SELECT * FROM users WHERE username = "deneme"');
-            if (dRows.length === 0) {
-                const hashedPassword = await bcrypt.hash('deneme1', 12);
-                await db.query(
-                    'INSERT INTO users (username, name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?)',
-                    ['deneme', 'Deneme Admin', 'admin@deneme.com', hashedPassword, 'admin', true]
-                );
-                
-                // Demo Ürünlerini Ekle (Eğer hiç ürün yoksa)
-                const [pRows] = await db.query('SELECT COUNT(*) as count FROM products');
-                if (pRows[0].count === 0) {
-                    await db.query(
-                        'INSERT INTO products (ProductName, Brand, Category, SalePrice, StockQuantity, ImagePath) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)',
-                        [
-                            'Örnek Nemlendirici Krem', 'DemoMarka', 'Kozmetik', 299.90, 50, '',
-                            'Örnek Mat Ruj', 'DemoMarka', 'Kozmetik', 149.90, 120, '',
-                            'Örnek Göz Farı Paleti', 'DemoMarka', 'Kozmetik', 399.90, 30, ''
-                        ]
-                    );
-                }
-            }
-        }
+
 
         const [rows] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
 
@@ -151,6 +129,9 @@ router.post('/logout', async (req, res) => {
 
     const token = authHeader.split(' ')[1];
     try {
+        try {
+            if (redisClient.isReady) await redisClient.set(`bl_${token}`, '1', { EX: 8 * 60 * 60 });
+        } catch(e){}
         await db.query('INSERT IGNORE INTO blacklisted_tokens (token) VALUES (?)', [token]);
         res.json({ success: true, message: 'Çıkış yapıldı ve token iptal edildi.' });
     } catch (error) {

@@ -14,12 +14,9 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 const { generateFingerprint } = require('../utils/fingerprint');
+const redisClient = require('../services/redisService');
 
-
-
-// Basit bir in-memory önbellek (cache) sistemi: DB yükünü azaltmak için
-const authCache = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 dakika
+const CACHE_TTL_SECONDS = 5 * 60; // 5 dakika
 
 const authMiddleware = async (req, res, next) => {
     // İstek başlığında (header) 'Authorization' (yetkilendirme) bilgisi olup olmadığı kontrol ediliyor
@@ -33,20 +30,17 @@ const authMiddleware = async (req, res, next) => {
 
     try {
         // [YENİ] Token'ın kara listede olup olmadığını kontrol et (Çıkış yapılmış mı?)
-        const [blacklistRows] = await db.query('SELECT token FROM blacklisted_tokens WHERE token = ?', [token]);
-        if (blacklistRows.length > 0) {
+        let isBlacklisted = false;
+        try {
+            if (redisClient.isReady) isBlacklisted = await redisClient.get(`bl_${token}`);
+            else {
+                const [dbBl] = await db.query('SELECT token FROM blacklisted_tokens WHERE token = ?', [token]);
+                isBlacklisted = dbBl.length > 0;
+            }
+        } catch(e) {}
+        if (isBlacklisted) {
             return res.status(401).json({ success: false, message: 'Bu oturum kapatılmış (Geçersiz Token). Lütfen tekrar giriş yapın.' });
         }
-
-        // TEKİL OTURUM (STRICT SINGLE SESSION): Veritabanında bu token hala aktif mi?
-        // ŞİMDİLİK DEVRE DIŞI BIRAKILDI (Aynı anda mobilde ve webde kullanılabilmesi için)
-        /*
-        const [activeSessionRows] = await db.query('SELECT id FROM user_sessions WHERE token = ?', [token]);
-        if (activeSessionRows.length === 0) {
-            console.warn(`[GÜVENLİK UYARISI] Personel hesabı başka cihazdan açıldığı için eski oturum düşürüldü.`);
-            return res.status(401).json({ success: false, message: 'Hesabınıza başka bir cihazdan giriş yapıldı. Güvenliğiniz için bu oturum sonlandırıldı.' });
-        }
-        */
 
         // Token'ın geçerliliği gizli anahtar (JWT_SECRET) kullanılarak doğrulanıyor
         const secretKey = process.env.JWT_SECRET;
@@ -67,12 +61,19 @@ const authMiddleware = async (req, res, next) => {
             }
         }
 
-        const now = Date.now();
-        const cached = authCache.get(decoded.id);
+        let cached = null;
+        try {
+            if (redisClient.isReady) {
+                const redisData = await redisClient.get(`authCache:${decoded.id}`);
+                if (redisData) cached = JSON.parse(redisData);
+            }
+        } catch (redisErr) {
+            console.warn('Redis okuma hatası:', redisErr);
+        }
 
         // Eğer önbellekte geçerli bir veri varsa veritabanına HİÇ SORMADAN devam et
-        if (cached && cached.expiresAt > now) {
-            req.user = cached.data;
+        if (cached) {
+            req.user = cached;
             return next();
         }
 
@@ -87,7 +88,9 @@ const authMiddleware = async (req, res, next) => {
         `, [decoded.id]);
         
         if (rows.length === 0 || rows[0].is_active === 0 || rows[0].is_active === '0' || rows[0].is_active === false) {
-            authCache.delete(decoded.id); // Eğer hesap pasifse hemen cache'den de sil
+            try {
+                if (redisClient.isReady) await redisClient.del(`authCache:${decoded.id}`);
+            } catch (e) {}
             return res.status(401).json({ 
                 success: false, 
                 message: 'Güvenlik İhlali: Hesabınız sistemden silinmiş veya pasife alınmış.' 
@@ -106,10 +109,13 @@ const authMiddleware = async (req, res, next) => {
         };
 
         // Veritabanından taze çektiğimiz bu bilgiyi 5 dakikalığına önbelleğe al
-        authCache.set(decoded.id, {
-            data: req.user,
-            expiresAt: now + CACHE_TTL_MS
-        });
+        try {
+            if (redisClient.isReady) {
+                await redisClient.set(`authCache:${decoded.id}`, JSON.stringify(req.user), { EX: CACHE_TTL_SECONDS });
+            }
+        } catch (e) {
+            console.warn('Redis yazma hatası:', e);
+        }
 
         // Kimlik doğrulama başarılı, istek ilgili rotaya (route) iletiliyor
         next();
@@ -120,8 +126,12 @@ const authMiddleware = async (req, res, next) => {
 };
 
 // Yetkiler değiştirildiğinde cache'i temizlemek için metod
-authMiddleware.clearAuthCache = (userId) => {
-    authCache.delete(Number(userId));
+authMiddleware.clearAuthCache = async (userId) => {
+    try {
+        if (redisClient.isReady) {
+            await redisClient.del(`authCache:${userId}`);
+        }
+    } catch(e) {}
 };
 
 // Ara katman (middleware) dışa aktarılıyor

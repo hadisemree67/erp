@@ -13,12 +13,8 @@
 .title {
   font-size: 2.5rem;
   font-weight: 800;
-  color: #0f172a;
+  color: #111827;
   margin-bottom: 12px;
-  background: linear-gradient(135deg, #e25b8b 0%, #a21caf 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .subtitle {
@@ -75,9 +71,9 @@
 }
 
 .card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.1), 0 10px 15px -10px rgba(226, 91, 139, 0.2);
-  border-color: #fce7f3;
+  transform: translateY(-4px);
+  box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.15);
+  border-color: #cbd5e1;
 }
 
 .imageWrapper {
@@ -103,14 +99,16 @@
   position: absolute;
   top: 16px;
   left: 16px;
-  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  background: #111827;
   color: #fff;
-  font-weight: 700;
-  font-size: 0.85rem;
+  font-weight: 600;
+  font-size: 0.8rem;
   padding: 6px 14px;
-  border-radius: 20px;
-  box-shadow: 0 4px 6px -1px rgba(225, 29, 72, 0.3);
+  border-radius: 6px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
   z-index: 10;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .content {
@@ -148,7 +146,7 @@
 .date {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #f59e0b;
+  color: #475569;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -157,16 +155,18 @@
 .viewBtn {
   background: none;
   border: none;
-  color: #e25b8b;
-  font-weight: 700;
+  color: #111827;
+  font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
   padding: 0;
   transition: color 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .card:hover .viewBtn {
-  color: #be185d;
+  color: #475569;
 }
 
 /* ── MODAL (POPUP) DETAY ── */
@@ -227,9 +227,9 @@
 }
 
 .closeBtn:hover {
-  background: #fff;
-  transform: scale(1.1);
-  color: #e11d48;
+  background: #f1f5f9;
+  transform: scale(1.05);
+  color: #111827;
 }
 
 .modalImage {
@@ -246,14 +246,16 @@
 
 .modalBadge {
   display: inline-block;
-  background: #fef1f2;
-  color: #e11d48;
-  padding: 6px 16px;
-  border-radius: 20px;
-  font-weight: 800;
-  font-size: 0.9rem;
+  background: #f1f5f9;
+  color: #334155;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.85rem;
   margin-bottom: 16px;
-  border: 1px solid #fecdd3;
+  border: 1px solid #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .modalTitle {
@@ -281,7 +283,7 @@
   background: #f8fafc;
   padding: 20px;
   border-radius: 12px;
-  border-left: 4px solid #e25b8b;
+  border-left: 4px solid #334155;
   margin-bottom: 24px;
 }
 
@@ -298,21 +300,21 @@
 .actionBtn {
   width: 100%;
   padding: 16px;
-  background: linear-gradient(135deg, #e25b8b 0%, #be185d 100%);
+  background: #111827;
   color: #fff;
   border: none;
-  border-radius: 14px;
-  font-size: 1.1rem;
-  font-weight: 700;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
   margin-top: 16px;
   transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(190, 24, 93, 0.3);
 }
 
 .actionBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(190, 24, 93, 0.4);
+  background: #000;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* ── HEDEF ÜRÜN KARTI (MODAL İÇİ) ── */
@@ -331,10 +333,10 @@
 }
 
 .targetProductCard:hover {
-  border-color: #e25b8b;
-  background: #fff9fc;
+  border-color: #94a3b8;
+  background: #f8fafc;
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(226, 91, 139, 0.15);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
 .targetProductImageWrapper {
@@ -370,7 +372,7 @@
 .targetProductPrice {
   font-size: 0.95rem;
   font-weight: 700;
-  color: #be185d;
+  color: #111827;
 }
 
 .targetProductArrow {
@@ -382,7 +384,7 @@
 }
 
 .targetProductCard:hover .targetProductArrow {
-  color: #e25b8b;
+  color: #111827;
 }
 
 @media (max-width: 768px) {

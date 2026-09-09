@@ -78,7 +78,7 @@ const Header = () => {
       <div className={styles.headerMain}>
         <div className={`container ${styles.mainContainer}`}>
           {/* Logo */}
-          <a href="/" className={styles.logo}>
+          <Link to="/" className={styles.logo}>
             <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="22" cy="22" r="22" fill="#00A896" opacity="0.12"/>
               <path d="M22 6C22 6 28 6 28 12C28 18 22 22 22 22C22 22 16 18 16 12C16 6 22 6 22 6Z" fill="#00A896"/>
@@ -92,7 +92,7 @@ const Header = () => {
               <div style={{ fontWeight: '700', fontSize: '28px', color: '#00A896', letterSpacing: '-0.5px', lineHeight: '1' }}>dermo</div>
               <div style={{ fontWeight: '400', fontSize: '18px', color: '#6b7280', letterSpacing: '1px', lineHeight: '1.2' }}>pharma</div>
             </div>
-          </a>
+          </Link>
 
           {/* Search */}
           <form className={styles.searchBar} onSubmit={handleSearch}>
@@ -177,22 +177,22 @@ const Header = () => {
                       </Link>
                     </li>
                     <li className={styles.dropdownItem}>
-                      <a href="#" className={styles.dropdownLink}>
+                      <Link to="/profile/notifications" className={styles.dropdownLink}>
                         <div className={styles.dropdownLinkLeft}><Bell size={16} className={styles.dropdownLinkIcon}/> Bildirimlerim</div>
                         <ChevronRight size={14} className={styles.dropdownLinkArrow}/>
-                      </a>
+                      </Link>
                     </li>
                     <li className={styles.dropdownItem}>
-                      <a href="#" className={styles.dropdownLink}>
+                      <Link to="/profile/payment" className={styles.dropdownLink}>
                         <div className={styles.dropdownLinkLeft}><CreditCard size={16} className={styles.dropdownLinkIcon}/> Ödeme Yöntemlerim</div>
                         <ChevronRight size={14} className={styles.dropdownLinkArrow}/>
-                      </a>
+                      </Link>
                     </li>
                     <li className={styles.dropdownItem}>
-                      <a href="#" className={styles.dropdownLink}>
+                      <Link to="/profile/security" className={styles.dropdownLink}>
                         <div className={styles.dropdownLinkLeft}><ShieldCheck size={16} className={styles.dropdownLinkIcon}/> Güvenlik Ayarlarım</div>
                         <ChevronRight size={14} className={styles.dropdownLinkArrow}/>
-                      </a>
+                      </Link>
                     </li>
                     
                     <div className={styles.dropdownDivider}></div>

@@ -17,6 +17,7 @@ import { Camera, CameraView } from 'expo-camera';
 import { Feather } from '@expo/vector-icons';
 import api from '../api/api';
 import { useIsFocused } from '@react-navigation/native';
+import { triggerSuccessFeedback, triggerErrorFeedback } from '../utils/feedback';
 
 /**
  * ShippingScreen Bileşeni
@@ -52,11 +53,14 @@ export default function ShippingScreen({ navigation }) {
         try {
             const res = await api.post('/mobile/orders/ship', { cargoBarcode: data });
             if (res.data.success) {
+                triggerSuccessFeedback();
                 setLastScanned({ success: true, message: `✅ ${res.data.orderNumber} kargoya verildi!` });
             } else {
+                triggerErrorFeedback();
                 setLastScanned({ success: false, message: `❌ ${res.data.message}` });
             }
         } catch (error) {
+            triggerErrorFeedback();
             setLastScanned({ success: false, message: `❌ Hata: ${error.response?.data?.message || 'Bilinmeyen hata'}` });
         }
 

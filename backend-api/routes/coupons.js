@@ -7,7 +7,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const prisma = require('../prisma');
+const db = require('../db');
 const authMiddleware = require('../middleware/auth');
 const customerAuthMiddleware = require('../middleware/customerAuth');
 const { checkPermission } = require('../middleware/rbac');
@@ -15,9 +15,7 @@ const { checkPermission } = require('../middleware/rbac');
 // Get all coupons
 router.get('/', authMiddleware, checkPermission('view_campaigns'), async (req, res) => {
     try {
-        const coupons = await prisma.coupons.findMany({
-            orderBy: { created_at: 'desc' }
-        });
+        const [coupons] = await db.query('SELECT * FROM coupons ORDER BY created_at DESC');
         res.json({ success: true, coupons });
     } catch (error) {
         console.error(error);
@@ -36,33 +34,43 @@ router.post('/', authMiddleware, checkPermission('campaign_manage'), async (req,
             target_audience, target_customer_ids
         } = req.body;
 
-        const existing = await prisma.coupons.findUnique({ where: { code } });
-        if (existing) {
+        const [existing] = await db.query('SELECT * FROM coupons WHERE code = ?', [code]);
+        if (existing.length > 0) {
             return res.status(400).json({ success: false, message: 'Bu kupon kodu zaten kullanımda.' });
         }
 
-        const newCoupon = await prisma.coupons.create({
-            data: {
-                code,
-                discount_type,
-                discount_value: discount_value ? parseFloat(discount_value) : null,
-                minimum_order_amount: minimum_order_amount ? parseFloat(minimum_order_amount) : null,
-                maximum_discount_amount: maximum_discount_amount ? parseFloat(maximum_discount_amount) : null,
-                buy_quantity: buy_quantity ? parseInt(buy_quantity) : null,
-                free_quantity: free_quantity ? parseInt(free_quantity) : null,
-                gift_product_id: gift_product_id ? parseInt(gift_product_id) : null,
-                target_category: target_category || null,
-                target_product_id: target_product_id ? parseInt(target_product_id) : null,
-                usage_limit: usage_limit ? parseInt(usage_limit) : null,
-                start_date: start_date ? new Date(start_date) : null,
-                end_date: end_date ? new Date(end_date) : null,
-                is_active: is_active !== undefined ? is_active : true,
-                target_audience: target_audience || 'all',
-                target_customer_ids: target_customer_ids || null
-            }
-        });
+        const data = [
+            code,
+            discount_type,
+            discount_value ? parseFloat(discount_value) : null,
+            minimum_order_amount ? parseFloat(minimum_order_amount) : null,
+            maximum_discount_amount ? parseFloat(maximum_discount_amount) : null,
+            buy_quantity ? parseInt(buy_quantity) : null,
+            free_quantity ? parseInt(free_quantity) : null,
+            gift_product_id ? parseInt(gift_product_id) : null,
+            target_category || null,
+            target_product_id ? parseInt(target_product_id) : null,
+            usage_limit ? parseInt(usage_limit) : null,
+            start_date ? new Date(start_date) : null,
+            end_date ? new Date(end_date) : null,
+            is_active !== undefined ? is_active : true,
+            target_audience || 'all',
+            target_customer_ids ? JSON.stringify(target_customer_ids) : null
+        ];
 
-        res.json({ success: true, message: 'Kupon oluşturuldu.', coupon: newCoupon });
+        const [result] = await db.query(`
+            INSERT INTO coupons (
+                code, discount_type, discount_value, minimum_order_amount,
+                maximum_discount_amount, buy_quantity, free_quantity,
+                gift_product_id, target_category, target_product_id,
+                usage_limit, start_date, end_date, is_active,
+                target_audience, target_customer_ids
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, data);
+
+        const [newCoupon] = await db.query('SELECT * FROM coupons WHERE id = ?', [result.insertId]);
+
+        res.json({ success: true, message: 'Kupon oluşturuldu.', coupon: newCoupon[0] });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Kupon oluşturulurken hata oluştu.' });
@@ -83,29 +91,39 @@ router.put('/:id', authMiddleware, checkPermission('campaign_manage'), async (re
             target_audience, target_customer_ids
         } = req.body;
 
-        const updatedCoupon = await prisma.coupons.update({
-            where: { id: idInt },
-            data: {
-                code,
-                discount_type,
-                discount_value: discount_value ? parseFloat(discount_value) : null,
-                minimum_order_amount: minimum_order_amount ? parseFloat(minimum_order_amount) : null,
-                maximum_discount_amount: maximum_discount_amount ? parseFloat(maximum_discount_amount) : null,
-                buy_quantity: buy_quantity ? parseInt(buy_quantity) : null,
-                free_quantity: free_quantity ? parseInt(free_quantity) : null,
-                gift_product_id: gift_product_id ? parseInt(gift_product_id) : null,
-                target_category: target_category || null,
-                target_product_id: target_product_id ? parseInt(target_product_id) : null,
-                usage_limit: usage_limit ? parseInt(usage_limit) : null,
-                start_date: start_date ? new Date(start_date) : null,
-                end_date: end_date ? new Date(end_date) : null,
-                is_active: is_active !== undefined ? is_active : true,
-                target_audience: target_audience || 'all',
-                target_customer_ids: target_customer_ids || null
-            }
-        });
+        const data = [
+            code,
+            discount_type,
+            discount_value ? parseFloat(discount_value) : null,
+            minimum_order_amount ? parseFloat(minimum_order_amount) : null,
+            maximum_discount_amount ? parseFloat(maximum_discount_amount) : null,
+            buy_quantity ? parseInt(buy_quantity) : null,
+            free_quantity ? parseInt(free_quantity) : null,
+            gift_product_id ? parseInt(gift_product_id) : null,
+            target_category || null,
+            target_product_id ? parseInt(target_product_id) : null,
+            usage_limit ? parseInt(usage_limit) : null,
+            start_date ? new Date(start_date) : null,
+            end_date ? new Date(end_date) : null,
+            is_active !== undefined ? is_active : true,
+            target_audience || 'all',
+            target_customer_ids ? JSON.stringify(target_customer_ids) : null,
+            idInt
+        ];
 
-        res.json({ success: true, message: 'Kupon güncellendi.', coupon: updatedCoupon });
+        await db.query(`
+            UPDATE coupons SET 
+                code = ?, discount_type = ?, discount_value = ?, minimum_order_amount = ?,
+                maximum_discount_amount = ?, buy_quantity = ?, free_quantity = ?,
+                gift_product_id = ?, target_category = ?, target_product_id = ?,
+                usage_limit = ?, start_date = ?, end_date = ?, is_active = ?,
+                target_audience = ?, target_customer_ids = ?
+            WHERE id = ?
+        `, data);
+
+        const [updatedCoupon] = await db.query('SELECT * FROM coupons WHERE id = ?', [idInt]);
+
+        res.json({ success: true, message: 'Kupon güncellendi.', coupon: updatedCoupon[0] });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Kupon güncellenirken hata oluştu.' });
@@ -118,7 +136,7 @@ router.delete('/:id', authMiddleware, checkPermission('campaign_manage'), async 
         const idInt = parseInt(req.params.id, 10);
         if (isNaN(idInt)) return res.status(400).json({ success: false, message: 'Geçersiz Kupon ID.' });
 
-        await prisma.coupons.delete({ where: { id: idInt } });
+        await db.query('DELETE FROM coupons WHERE id = ?', [idInt]);
         res.json({ success: true, message: 'Kupon silindi.' });
     } catch (error) {
         console.error(error);
@@ -137,10 +155,11 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
 
         const validItems = Array.isArray(items) ? items : [];
 
-        const coupon = await prisma.coupons.findUnique({ where: { code } });
-        if (!coupon) {
+        const [coupons] = await db.query('SELECT * FROM coupons WHERE code = ?', [code]);
+        if (coupons.length === 0) {
             return res.status(404).json({ success: false, message: 'Kupon bulunamadı.' });
         }
+        const coupon = coupons[0];
 
         if (!coupon.is_active) {
             return res.status(400).json({ success: false, message: 'Bu kupon aktif değil.' });
@@ -158,8 +177,8 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
         }
 
         let totalAmount = 0;
-        let eligibleAmount = 0; // Tutar üzerinden indirim (Yüzde veya Sabit) için uygun tutar
-        let eligibleQuantity = 0; // BuyXGetY veya Gift için uygun ürün sayısı
+        let eligibleAmount = 0; 
+        let eligibleQuantity = 0; 
 
         validItems.forEach(item => {
             const qty = parseFloat(item.quantity) || 0;
@@ -167,7 +186,6 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
             const lineTotal = qty * price;
             totalAmount += lineTotal;
 
-            // Kategori veya Ürün bazlı filtreleme var mı?
             let isEligible = true;
             if (coupon.target_category && item.Category !== coupon.target_category) {
                 isEligible = false;
@@ -214,7 +232,6 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
                         });
                         
                         if (eligibleItems.length > 0) {
-                            // Sort by unit price ascending
                             eligibleItems.sort((a, b) => parseFloat(a.unitPrice) - parseFloat(b.unitPrice));
                             let itemsToDiscount = coupon.free_quantity;
                             
@@ -235,10 +252,10 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
                 }
                 break;
             case 'GiftProduct':
-                // Hediye ürün
                 if (coupon.gift_product_id) {
-                    const product = await prisma.products.findUnique({ where: { Id: coupon.gift_product_id } });
-                    if (product) {
+                    const [products] = await db.query('SELECT * FROM products WHERE Id = ?', [coupon.gift_product_id]);
+                    if (products.length > 0) {
+                        const product = products[0];
                         giftItem = {
                             productId: product.Id,
                             productName: product.ProductName,
@@ -250,7 +267,6 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
                 }
                 break;
             case 'FreeShipping':
-                // Kargo bedava
                 break;
             default:
                 break;
@@ -278,8 +294,6 @@ router.post('/validate', authMiddleware, checkPermission('campaign_manage'), asy
 router.get('/my-coupons', customerAuthMiddleware, async (req, res) => {
     try {
         const customerId = req.user.id;
-        const db = require('../db');
-        // Müşteriye özel (JSON listesinde ID'si olan) veya herkese açık (all) olan aktif kuponlar
         const [coupons] = await db.query(`
             SELECT * FROM coupons 
             WHERE is_active = 1 
@@ -305,7 +319,6 @@ router.post('/apply', customerAuthMiddleware, async (req, res) => {
         
         if (!code) return res.status(400).json({ success: false, message: 'Kupon kodu gereklidir.' });
         
-        const db = require('../db');
         const [coupons] = await db.query(`
             SELECT * FROM coupons 
             WHERE code = ? AND is_active = 1 
@@ -316,25 +329,24 @@ router.post('/apply', customerAuthMiddleware, async (req, res) => {
         
         const coupon = coupons[0];
         
-        // Müşteri uygunluğu kontrolü
         if (coupon.target_audience === 'specific') {
-            const allowedIds = typeof coupon.target_customer_ids === 'string' ? JSON.parse(coupon.target_customer_ids) : coupon.target_customer_ids;
+            let allowedIds = [];
+            try {
+                allowedIds = typeof coupon.target_customer_ids === 'string' ? JSON.parse(coupon.target_customer_ids) : coupon.target_customer_ids;
+            } catch (e) {}
             if (!allowedIds || !allowedIds.includes(customerId)) {
                 return res.status(403).json({ success: false, message: 'Bu kupon hesabınız için geçerli değildir.' });
             }
         }
         
-        // Sepet limiti kontrolü
         if (coupon.minimum_order_amount && cartTotal < coupon.minimum_order_amount) {
             return res.status(400).json({ success: false, message: `Bu kuponu kullanmak için sepet tutarınız en az ${coupon.minimum_order_amount} TL olmalıdır.` });
         }
         
-        // Kullanım limiti kontrolü
         if (coupon.usage_limit && coupon.used_count >= coupon.usage_limit) {
             return res.status(400).json({ success: false, message: 'Kupon kullanım limitine ulaşmış.' });
         }
         
-        // İndirim hesaplama
         let discountAmount = 0;
         if (coupon.discount_type === 'Percentage') {
             discountAmount = (cartTotal * coupon.discount_value) / 100;
@@ -345,7 +357,6 @@ router.post('/apply', customerAuthMiddleware, async (req, res) => {
             discountAmount = coupon.discount_value;
         }
         
-        // İndirim tutarı sepetten büyük olamaz
         if (discountAmount > cartTotal) discountAmount = cartTotal;
         
         res.json({ success: true, discountAmount, coupon });
@@ -356,4 +367,3 @@ router.post('/apply', customerAuthMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-

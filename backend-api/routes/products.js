@@ -12,6 +12,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
+const customerAuthMiddleware = require('../middleware/customerAuth');
 const { checkRole, checkPermission } = require('../middleware/rbac');
 const { logActivity } = require('../utils/logger');
 const multer = require('multer');
@@ -29,6 +30,12 @@ const storage = multer.diskStorage({
         cb(null, 'product-' + crypto.randomUUID() + ext);
     }
 });
+
+const ensureMinMaxCols = async () => {
+    try { await db.query(`ALTER TABLE products ADD COLUMN min_stock_level INT DEFAULT 0`); console.log('min_stock_level added'); } catch (e) {}
+    try { await db.query(`ALTER TABLE products ADD COLUMN max_stock_level INT DEFAULT 0`); console.log('max_stock_level added'); } catch (e) {}
+};
+ensureMinMaxCols();
 
 // GÜVENLİK: Arbitrary File Upload (Rastgele Dosya Yükleme) zafiyetini önlemek için sadece resimlere izin verildi
 const fileFilter = (req, file, cb) => {
@@ -72,10 +79,14 @@ const parseStackable = (val, defaultVal = 0) => {
 // ===========================
 router.get('/public', async (req, res) => {
     try {
-        const { category, subcategory, subtitle, brand } = req.query;
+        const { category, subcategory, subtitle, brand, search, q } = req.query;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || (search || q ? 100 : 20);
+        const offset = (page - 1) * limit;
 
         let queryStr = `
             SELECT Id, ProductName, ProductCode, FeaturedFeatures, Brand, Category, SalePrice, Description, ImagePath, web_categories, web_subcategories, web_subtitles, Highlights, is_bestseller,
+            (SELECT JSON_ARRAYAGG(pb.barcode) FROM product_barcodes pb WHERE pb.product_id = products.Id) AS Barcode,
             (COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = products.Id), products.StockQuantity) - 
              COALESCE((SELECT SUM(quantity) FROM cart_reservations WHERE product_id = products.Id AND expires_at > NOW()), 0) -
              COALESCE((SELECT SUM(oi.Quantity) FROM orderitems oi JOIN orders o ON oi.OrderId = o.Id WHERE oi.ProductId = products.Id AND o.OrderStatus IN ('Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Toplamada', 'İptal Bekliyor')), 0)) AS AvailableStock
@@ -103,7 +114,21 @@ router.get('/public', async (req, res) => {
             params.push(`%"${subtitle}"%`);
         }
 
-        queryStr += ` ORDER BY Id DESC`;
+        const searchTerm = (search || q || '').trim();
+        if (searchTerm) {
+            queryStr += ` AND (
+                products.ProductName LIKE ?
+                OR products.ProductCode LIKE ?
+                OR products.Brand LIKE ?
+                OR products.Category LIKE ?
+                OR EXISTS (SELECT 1 FROM product_barcodes pb WHERE pb.product_id = products.Id AND pb.barcode LIKE ?)
+            )`;
+            const s = `%${searchTerm}%`;
+            params.push(s, s, s, s, s);
+        }
+
+        queryStr += ` ORDER BY Id DESC LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
 
         const [rows] = await db.query(queryStr, params);
         
@@ -117,9 +142,22 @@ router.get('/public', async (req, res) => {
             } catch (e) {
                 if (product.ImagePath) images = [product.ImagePath];
             }
+
+            let barcodes = [];
+            try {
+                if (typeof product.Barcode === 'string') {
+                    barcodes = JSON.parse(product.Barcode);
+                } else if (Array.isArray(product.Barcode)) {
+                    barcodes = product.Barcode;
+                }
+            } catch (e) {
+                if (product.Barcode) barcodes = [product.Barcode];
+            }
+
             return {
                 ...product,
-                images: images
+                images: images,
+                barcodes: barcodes
             };
         });
 
@@ -168,6 +206,311 @@ router.get('/public/:id', async (req, res) => {
     } catch (error) {
         console.error('Public ürün detayı getirilirken hata:', error);
         res.status(500).json({ success: false, message: 'Ürün getirilirken sunucu hatası oluştu.' });
+    }
+});
+
+// ===========================
+// [GET] Ürünün Cevaplanan Sorularını Listeleme (Herkese Açık)
+// ===========================
+router.get('/public/:id/questions', async (req, res) => {
+    try {
+        const productId = parseInt(req.params.id, 10);
+        if (isNaN(productId)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ürün ID.' });
+        }
+
+        const [rows] = await db.query(`
+            SELECT 
+                pq.id,
+                pq.topic,
+                pq.is_anonymous,
+                pq.question,
+                pq.answer,
+                pq.created_at,
+                pq.answered_at,
+                c.CustomerName
+            FROM product_questions pq
+            JOIN customers c ON pq.customer_id = c.Id
+            WHERE pq.product_id = ? AND pq.status = 'Cevaplandı'
+            ORDER BY pq.answered_at DESC, pq.created_at DESC
+        `, [productId]);
+
+        const maskCustomerName = (name) => {
+            if (!name || typeof name !== 'string') return 'Müşteri';
+            const parts = name.trim().split(/\s+/);
+            return parts.map(part => {
+                if (part.length <= 1) return part + '***';
+                return part[0] + '***';
+            }).join(' ');
+        };
+
+        const questions = rows.map(q => ({
+            id: q.id,
+            topic: q.topic || 'Genel',
+            question: q.question,
+            answer: q.answer,
+            created_at: q.created_at,
+            answered_at: q.answered_at,
+            author: maskCustomerName(q.CustomerName)
+        }));
+
+        res.json({ success: true, data: questions });
+    } catch (error) {
+        console.error('Ürün soruları listelenirken hata:', error);
+        res.status(500).json({ success: false, message: 'Sorular yüklenirken hata oluştu.' });
+    }
+});
+
+// ===========================
+// [POST] Ürüne Yeni Soru Sorma (Müşteri Girişi Gerekli)
+// ===========================
+router.post('/public/:id/questions', customerAuthMiddleware, async (req, res) => {
+    try {
+        const productId = parseInt(req.params.id, 10);
+        if (isNaN(productId)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ürün ID.' });
+        }
+
+        const { question, topic, is_anonymous } = req.body;
+
+        if (!question || typeof question !== 'string' || !question.trim()) {
+            return res.status(400).json({ success: false, message: 'Lütfen bir soru metni girin.' });
+        }
+
+        // XSS Önlemi: HTML etiketlerini temizle
+        const safeQuestion = question.replace(/<[^>]*>?/gm, '').trim();
+
+        if (safeQuestion.length < 5) {
+            return res.status(400).json({ success: false, message: 'Soru en az 5 karakter olmalıdır.' });
+        }
+        if (safeQuestion.length > 1000) {
+            return res.status(400).json({ success: false, message: 'Soru en fazla 1000 karakter olabilir.' });
+        }
+
+        // Ürünün var olduğunu doğrula
+        const [productCheck] = await db.query('SELECT Id FROM products WHERE Id = ? AND is_active = 1', [productId]);
+        if (productCheck.length === 0) {
+            return res.status(404).json({ success: false, message: 'Ürün bulunamadı veya satışta değil.' });
+        }
+
+        const customerId = req.user.id;
+        const validTopic = topic && typeof topic === 'string' && topic.trim() ? topic.trim() : 'Genel';
+        const isAnonymous = 1;
+
+        await db.query(`
+            INSERT INTO product_questions (product_id, customer_id, topic, is_anonymous, question, status)
+            VALUES (?, ?, ?, ?, ?, 'Beklemede')
+        `, [productId, customerId, validTopic, isAnonymous, safeQuestion]);
+
+        res.json({
+            success: true,
+            message: 'Sorunuz başarıyla iletildi. Yetkili ekibimiz inceleyip yanıtladıktan sonra yayınlanacaktır.'
+        });
+    } catch (error) {
+        console.error('Soru kaydedilirken hata:', error);
+        res.status(500).json({ success: false, message: 'Soru kaydedilirken bir hata oluştu.' });
+    }
+});
+
+// ===========================
+// [GET] Ürünün Değerlendirmelerini ve Yorumlarını Listeleme (Herkese Açık)
+// ===========================
+router.get('/public/:id/reviews', async (req, res) => {
+    try {
+        const productId = parseInt(req.params.id, 10);
+        if (isNaN(productId)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ürün ID.' });
+        }
+
+        const [rows] = await db.query(`
+            SELECT 
+                pr.id,
+                pr.product_id,
+                pr.order_id,
+                pr.rating,
+                pr.comment,
+                pr.created_at,
+                c.CustomerName
+            FROM product_reviews pr
+            LEFT JOIN customers c ON pr.customer_id = c.Id
+            WHERE pr.product_id = ? AND pr.status = 'Onaylandı'
+            ORDER BY pr.created_at DESC
+        `, [productId]);
+
+        const maskCustomerName = (name) => {
+            if (!name || typeof name !== 'string') return 'Değerli Müşterimiz';
+            const parts = name.trim().split(/\s+/);
+            return parts.map(part => {
+                if (part.length <= 1) return part + '***';
+                return part[0] + '***';
+            }).join(' ');
+        };
+
+        const totalReviews = rows.length;
+        let sumRating = 0;
+        const distribution = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+
+        const reviews = rows.map(r => {
+            const stars = Math.max(1, Math.min(5, parseInt(r.rating, 10) || 5));
+            sumRating += stars;
+            distribution[stars] = (distribution[stars] || 0) + 1;
+
+            return {
+                id: r.id,
+                product_id: r.product_id,
+                order_id: r.order_id,
+                rating: stars,
+                comment: r.comment,
+                created_at: r.created_at,
+                author: maskCustomerName(r.CustomerName),
+                isVerifiedPurchase: Boolean(r.order_id)
+            };
+        });
+
+        const averageRating = totalReviews > 0 ? parseFloat((sumRating / totalReviews).toFixed(1)) : 0;
+        const ratingPercentages = {};
+        [5, 4, 3, 2, 1].forEach(star => {
+            ratingPercentages[star] = totalReviews > 0 ? Math.round((distribution[star] / totalReviews) * 100) : 0;
+        });
+
+        res.json({
+            success: true,
+            data: {
+                reviews,
+                stats: {
+                    averageRating,
+                    totalReviews,
+                    distribution,
+                    ratingDistribution: distribution,
+                    percentages: ratingPercentages,
+                    ratingPercentages
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Ürün değerlendirmeleri listelenirken hata:', error);
+        res.status(500).json({ success: false, message: 'Yorumlar yüklenirken hata oluştu.' });
+    }
+});
+
+// ===========================
+// [POST] Ürüne Değerlendirme / Yorum Yapma (Müşteri Girişi Gerekli)
+// GÜVENLİK: IDOR ve Sahte Yorum Koruması - Yalnızca ürünü satın alan ve siparişi teslim edilen müşteriler yorum yapabilir
+// ===========================
+router.post('/public/:id/reviews', customerAuthMiddleware, async (req, res) => {
+    try {
+        const productId = parseInt(req.params.id, 10);
+        if (isNaN(productId)) {
+            return res.status(400).json({ success: false, message: 'Geçersiz ürün ID.' });
+        }
+
+        const { rating, comment, order_id } = req.body;
+        const rawComment = (comment && typeof comment === 'string') ? comment.trim() : '';
+        // XSS Önlemi: HTML etiketlerini temizle
+        const cleanComment = rawComment.replace(/<[^>]*>?/gm, '').trim();
+
+        if (cleanComment.length > 1000) {
+            return res.status(400).json({ success: false, message: 'Yorum metni en fazla 1000 karakter olabilir.' });
+        }
+
+        const numericRating = Math.max(1, Math.min(5, parseInt(rating, 10) || 5));
+        const customerId = req.user.id;
+        let verifiedOrderId = null;
+
+        // 1. Ürünün var olduğunu doğrula
+        const [productCheck] = await db.query('SELECT Id, ProductName FROM products WHERE Id = ?', [productId]);
+        if (productCheck.length === 0) {
+            return res.status(404).json({ success: false, message: 'Ürün bulunamadı.' });
+        }
+
+        // 2. GÜVENLİK (IDOR & Teslim Edilmiş Sipariş Kontrolü):
+        if (order_id) {
+            const requestedOrderId = parseInt(order_id, 10);
+            if (isNaN(requestedOrderId)) {
+                return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
+            }
+
+            // Siparişin bu müşteriye ait olup olmadığını ve bu ürünü içerip içermediğini kontrol et
+            const [orderCheck] = await db.query(`
+                SELECT o.Id, o.OrderStatus 
+                FROM orders o
+                JOIN orderitems oi ON o.Id = oi.OrderId
+                WHERE o.Id = ? AND o.CustomerId = ? AND oi.ProductId = ?
+            `, [requestedOrderId, customerId, productId]);
+
+            if (orderCheck.length === 0) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Bu ürünü değerlendirmek için geçerli bir sipariş kaydınız bulunamadı veya sipariş hesabınıza ait değil.'
+                });
+            }
+
+            const orderStatus = orderCheck[0].OrderStatus;
+            const allowedStatuses = ['Teslim Edildi', 'Tamamlandı'];
+            if (!allowedStatuses.includes(orderStatus)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Yalnızca teslim edilmiş siparişlerdeki ürünleri değerlendirebilirsiniz. (Siparişinizin mevcut durumu: ${orderStatus})`
+                });
+            }
+
+            verifiedOrderId = requestedOrderId;
+        } else {
+            // Eğer order_id doğrudan gönderilmediyse, müşterinin bu ürünü teslim aldığı geçmiş bir siparişini bul
+            const [autoOrder] = await db.query(`
+                SELECT o.Id 
+                FROM orders o
+                JOIN orderitems oi ON o.Id = oi.OrderId
+                WHERE o.CustomerId = ? AND oi.ProductId = ? AND o.OrderStatus IN ('Teslim Edildi', 'Tamamlandı')
+                ORDER BY o.OrderDate DESC
+                LIMIT 1
+            `, [customerId, productId]);
+
+            if (autoOrder.length === 0) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Ürünü değerlendirebilmek için bu ürünü satın almış ve siparişinizin teslim edilmiş olması gerekmektedir.'
+                });
+            }
+
+            verifiedOrderId = autoOrder[0].Id;
+        }
+
+        // 3. Müşterinin bu ürün ve sipariş için var olan bir değerlendirmesi var mı kontrol et
+        const [existingReview] = await db.query(
+            'SELECT id FROM product_reviews WHERE product_id = ? AND customer_id = ? AND order_id = ?',
+            [productId, customerId, verifiedOrderId]
+        );
+
+        if (existingReview.length > 0) {
+            // Yorumu güncelle
+            await db.query(`
+                UPDATE product_reviews 
+                SET rating = ?, comment = ?, status = 'Onaylandı', updated_at = NOW()
+                WHERE id = ?
+            `, [numericRating, cleanComment, existingReview[0].id]);
+
+            res.json({
+                success: true,
+                message: 'Değerlendirmeniz başarıyla güncellendi.',
+                reviewId: existingReview[0].id
+            });
+        } else {
+            // Yeni yorum ekle
+            const [insertRes] = await db.query(`
+                INSERT INTO product_reviews (product_id, customer_id, order_id, rating, comment, status)
+                VALUES (?, ?, ?, ?, ?, 'Onaylandı')
+            `, [productId, customerId, verifiedOrderId, numericRating, cleanComment]);
+
+            res.json({
+                success: true,
+                message: 'Değerlendirmeniz için teşekkür ederiz! Yorumunuz yayınlandı.',
+                reviewId: insertRes.insertId
+            });
+        }
+    } catch (error) {
+        console.error('Yorum kaydedilirken hata:', error);
+        res.status(500).json({ success: false, message: 'Değerlendirmeniz kaydedilemedi.' });
     }
 });
 
@@ -224,7 +567,7 @@ router.get('/', authMiddleware, checkPermission('view_products'), async (req, re
 // Sisteme yeni bir ürün kaydeder. Aynı anda resim yükleme (multer), barkod ekleme ve çoklu tedarikçi atamalarını gerçekleştirir. İşlemi transaction ile güvenceye alır.
 // ===========================
 router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), async (req, res) => {
-    const { Barcode, ProductName, ProductCode, FeaturedFeatures, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type, is_active, is_bestseller, web_categories, web_subcategories, web_subtitles, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse, existingFeaturesImage, BannerSlogan, existingBannerLogo, CircularFeatures, CalloutText, Highlights } = req.body;
+    const { Barcode, ProductName, ProductCode, FeaturedFeatures, Brand, Category, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, min_stock_level, max_stock_level, shelf_life_months, minimum_production_quantity, supplier_id, suppliers, supply_type, is_active, is_bestseller, web_categories, web_subcategories, web_subtitles, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse, existingFeaturesImage, BannerSlogan, existingBannerLogo, CircularFeatures, CalloutText, Highlights } = req.body;
 
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode):', e.message); }
@@ -303,11 +646,11 @@ router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), a
                 ProductName, ProductCode, FeaturedFeatures, Brand, Category, PurchasePrice, SalePrice, 
                 StockQuantity, ExpirationDate, BatchNumber, Description, ImagePath, Location, Formula,
                 ProductionTime, Width, Height, Depth, Diameter, Volume, Weight, is_stackable, max_stack_limit,
-                unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity,
+                unit_type, package_capacity, package_name, critical_stock_level, min_stock_level, max_stock_level, minimum_production_quantity,
                 supplier_id, shelf_life_months, supply_type, is_active, is_bestseller, web_categories, web_subcategories, web_subtitles,
                 FeaturesImage, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse,
                 BannerSlogan, BannerLogo, CircularFeatures, CalloutText, Highlights
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const insertParams = [
@@ -338,6 +681,8 @@ router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), a
             safeFloat(package_capacity, 1),
             package_name || null,
             safeInt(critical_stock_level, 0),
+            safeInt(min_stock_level, 0),
+            safeInt(max_stock_level, 0),
             safeInt(minimum_production_quantity, 0),
             safeInt(supplier_id, null),
             safeInt(shelf_life_months, 0),
@@ -485,7 +830,7 @@ router.put('/bulk-edit', authMiddleware, checkPermission('product_edit'), async 
 router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any(), async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Ürün ID.' });
-    const { Barcode, ProductName, ProductCode, FeaturedFeatures, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type, is_bestseller, web_categories, web_subcategories, web_subtitles, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse, existingFeaturesImage, removeFeaturesImage, BannerSlogan, existingBannerLogo, removeBannerLogo, CircularFeatures, CalloutText, Highlights } = req.body;
+    const { Barcode, ProductName, ProductCode, FeaturedFeatures, Brand, Category, shelf_life_months, lead_time_days, PurchasePrice, SalePrice, StockQuantity, ExpirationDate, BatchNumber, Description, existingImages, Location, Formula, ProductionTime, Width, Height, Depth, Diameter, Weight, is_stackable, max_stack_limit, unit_type, package_capacity, package_name, critical_stock_level, min_stock_level, max_stock_level, minimum_production_quantity, supplier_id, suppliers, supply_type, is_bestseller, web_categories, web_subcategories, web_subtitles, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse, existingFeaturesImage, removeFeaturesImage, BannerSlogan, existingBannerLogo, removeBannerLogo, CircularFeatures, CalloutText, Highlights } = req.body;
 
     let parsedBarcodes = [];
     try { if (Barcode) parsedBarcodes = JSON.parse(Barcode); } catch (e) { console.warn('JSON Parse Error (Barcode update):', e.message); }
@@ -590,6 +935,8 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
             isStackableVal,
             maxStackLimitVal,
             req.body.critical_stock_level !== undefined ? safeInt(req.body.critical_stock_level, 0) : safeInt(oldData.critical_stock_level, 0),
+            req.body.min_stock_level !== undefined ? safeInt(req.body.min_stock_level, 0) : safeInt(oldData.min_stock_level, 0),
+            req.body.max_stock_level !== undefined ? safeInt(req.body.max_stock_level, 0) : safeInt(oldData.max_stock_level, 0),
             req.body.minimum_production_quantity !== undefined ? safeInt(req.body.minimum_production_quantity, 0) : safeInt(oldData.minimum_production_quantity, 0),
             req.body.supplier_id !== undefined ? safeInt(req.body.supplier_id, null) : (oldData.supplier_id ? safeInt(oldData.supplier_id, null) : null),
             req.body.shelf_life_months !== undefined ? safeInt(req.body.shelf_life_months, 0) : safeInt(oldData.shelf_life_months, 0),
@@ -614,7 +961,7 @@ router.put('/:id', authMiddleware, checkPermission('product_edit'), upload.any()
 
         let query = `
             UPDATE products 
-            SET ProductName=?, ProductCode=?, FeaturedFeatures=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?, supply_type=?, is_active=?, is_bestseller=?, web_categories=?, web_subcategories=?, web_subtitles=?, FeaturesImage=?, FeaturesBgColor=?, FeaturesTextColor=?, WhoCanUse=?, HowToUse=?, BannerSlogan=?, BannerLogo=?, CircularFeatures=?, CalloutText=?, Highlights=?
+            SET ProductName=?, ProductCode=?, FeaturedFeatures=?, Brand=?, Category=?, unit_type=?, package_capacity=?, package_name=?, PurchasePrice=?, SalePrice=?, StockQuantity=?, ExpirationDate=?, BatchNumber=?, Description=?, ImagePath=?, Location=?, Formula=?, ProductionTime=?, Width=?, Height=?, Depth=?, Diameter=?, Volume=?, Weight=?, is_stackable=?, max_stack_limit=?, critical_stock_level=?, min_stock_level=?, max_stock_level=?, minimum_production_quantity=?, supplier_id=?, shelf_life_months=?, supply_type=?, is_active=?, is_bestseller=?, web_categories=?, web_subcategories=?, web_subtitles=?, FeaturesImage=?, FeaturesBgColor=?, FeaturesTextColor=?, WhoCanUse=?, HowToUse=?, BannerSlogan=?, BannerLogo=?, CircularFeatures=?, CalloutText=?, Highlights=?
             WHERE Id=?
         `;
 

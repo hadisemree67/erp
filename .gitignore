@@ -63,6 +63,9 @@ backend-api/uploads/*
 # Scratch / Geçici Dosyalar
 # ────────────────────────────────────────────────
 **/scratch_*.js
+scratch/
+backend-api/scratch/
+
 
 # ────────────────────────────────────────────────
 # AI / Agents Yapılandırma

@@ -88,13 +88,13 @@ const FavoritesPage = () => {
                                 
                                 <div className={styles.ratingRow}>
                                     <div className={styles.stars}>
-                                        <Star size={12} fill="#fbbf24" color="#fbbf24" />
-                                        <Star size={12} fill="#fbbf24" color="#fbbf24" />
-                                        <Star size={12} fill="#fbbf24" color="#fbbf24" />
-                                        <Star size={12} fill="#fbbf24" color="#fbbf24" />
-                                        <Star size={12} fill="#fbbf24" color="#fbbf24" />
+                                        <Star size={12} fill="#e2e8f0" color="#e2e8f0" />
+                                        <Star size={12} fill="#e2e8f0" color="#e2e8f0" />
+                                        <Star size={12} fill="#e2e8f0" color="#e2e8f0" />
+                                        <Star size={12} fill="#e2e8f0" color="#e2e8f0" />
+                                        <Star size={12} fill="#e2e8f0" color="#e2e8f0" />
                                     </div>
-                                    <span className={styles.ratingCount}>(128)</span>
+                                    <span className={styles.ratingCount}>(0)</span>
                                 </div>
 
                                 <div className={styles.priceRow}>

@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
+import styles from './CampaignForm.module.css';
 
 const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
     const isEdit = Boolean(campaign && campaign.id);
@@ -225,57 +226,14 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
 
     // 5. Stil Tanımlamaları (UI Sabitleri)
     // Stil Sabitleri (Minimalist & Kurumsal Palet)
-    const cardStyle = {
-        backgroundColor: '#ffffff',
-        padding: '24px',
-        borderRadius: '12px',
-        border: '1px solid #e2e8f0',
-        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.02)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        transition: 'border-color 0.2s'
-    };
-
-    const sectionTitleStyle = {
-        fontSize: '15px',
-        fontWeight: '700',
-        color: '#0f172a',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        borderBottom: '1px solid #f1f5f9',
-        paddingBottom: '12px',
-        margin: '0'
-    };
-
-    const labelStyle = {
-        fontSize: '13px',
-        fontWeight: '600',
-        color: '#334155',
-        marginBottom: '6px'
-    };
-
-    const inputStyle = {
-        padding: '10px 14px',
-        borderRadius: '8px',
-        border: '1px solid #cbd5e1',
-        fontSize: '14px',
-        color: '#0f172a',
-        backgroundColor: '#ffffff',
-        outline: 'none',
-        transition: 'border-color 0.2s',
-        boxSizing: 'border-box'
-    };
-
-        // 5. Arayüz (UI) Çizimi ve Render Edilmesi
+// 5. Arayüz (UI) Çizimi ve Render Edilmesi
     return (
-        <div style={{ animation: 'fadeIn 0.25s ease', maxWidth: '860px', margin: '0 auto', paddingBottom: '40px', fontFamily: 'Inter, sans-serif' }}>
+        <div className={styles.formContainer}>
             {/* Üst Başlık Barı */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
+            <div className={styles.headerBar}>
                 <div>
-                    <h1 style={{ color: '#0f172a', fontSize: '22px', fontWeight: '800', margin: '0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ display: 'inline-block', width: '8px', height: '22px', backgroundColor: '#10b981', borderRadius: '4px' }}></span>
+                    <h1 className={styles.pageTitle}>
+                        <span className={styles.pageTitleIcon}></span>
                         {isEdit ? 'Kampanya Düzenle' : 'Yeni Kampanya Oluştur'}
                     </h1>
                     <p style={{ color: '#64748b', fontSize: '13px', margin: '6px 0 0 18px' }}>
@@ -299,22 +257,22 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                 </div>
             )}
 
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <form onSubmit={handleSubmit} className={styles.formLayout}>
                 
                 {/* BÖLÜM 1: KAMPANYA TÜRÜ VE ADI */}
-                <div style={cardStyle}>
-                    <h3 style={sectionTitleStyle}>
+                <div className={styles.card}>
+                    <h3 className={styles.sectionTitle}>
                         <span style={{ color: '#10b981' }}>1.</span> Kampanya Türü ve Başlığı
                     </h3>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={labelStyle}>Kampanya Kurgusu (Tür) <span style={{ color: '#ef4444' }}>*</span></label>
+                    <div className={styles.gridCol1}>
+                        <div className={styles.colFlex}>
+                            <label className={styles.label}>Kampanya Kurgusu (Tür) <span style={{ color: '#ef4444' }}>*</span></label>
                             <select 
                                 name="campaign_type" 
                                 value={formData.campaign_type} 
                                 onChange={handleTypeChange}
-                                style={{ ...inputStyle, fontWeight: '600', backgroundColor: '#f8fafc', borderColor: '#94a3b8', cursor: 'pointer' }}
+                                className={styles.input} style={{ fontWeight: '600', backgroundColor: '#f8fafc', borderColor: '#94a3b8', cursor: 'pointer' }}
                             >
                                 <option value="buy_x_pay_y">X Al Y Öde (Örn: 2 Al 1 Öde, 3 Al 2 Öde)</option>
                                 <option value="min_amount_discount">Sepet Tutarı İndirimi (Örn: 12.000 TL Üzerine %10 İndirim)</option>
@@ -324,8 +282,8 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                             </select>
                         </div>
 
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={labelStyle}>Kampanya Adı / Başlığı <span style={{ color: '#ef4444' }}>*</span></label>
+                        <div className={styles.colFlex}>
+                            <label className={styles.label}>Kampanya Adı / Başlığı <span style={{ color: '#ef4444' }}>*</span></label>
                             <input 
                                 type="text" 
                                 name="title" 
@@ -333,16 +291,16 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                                 onChange={handleChange} 
                                 placeholder="Örn: Büyük Yaz Sezonu: 2 Al 1 Öde Fırsatı!" 
                                 required 
-                                style={{ ...inputStyle, fontWeight: '600' }} 
+                                className={styles.input} style={{ fontWeight: '600' }} 
                             />
                         </div>
                     </div>
                 </div>
 
                 {/* BÖLÜM 2: KAYITLI ÜRÜN BAĞLAMA VE BARKOD OKUYUCU */}
-                <div style={{ ...cardStyle, backgroundColor: '#fcfdfe', borderColor: '#cbd5e1' }}>
+                <div className={styles.card} style={{ backgroundColor: '#fcfdfe', borderColor: '#cbd5e1' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-                        <h3 style={{ ...sectionTitleStyle, borderBottom: 'none', paddingBottom: '0' }}>
+                        <h3 className={styles.sectionTitle} style={{ borderBottom: 'none', paddingBottom: '0' }}>
                             <span style={{ color: '#10b981' }}>2.</span> Kayıtlı Ürün Bağlama ve Barkod Okuyucu
                         </h3>
                         <span style={{ fontSize: '11px', fontWeight: '600', backgroundColor: '#ecfdf5', color: '#047857', padding: '4px 10px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
@@ -356,8 +314,8 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginTop: '4px' }}>
                         {/* Barkod Okuma Kutusu */}
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={labelStyle}>Barkodla Ürün Tarama</label>
+                        <div className={styles.colFlex}>
+                            <label className={styles.label}>Barkodla Ürün Tarama</label>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <input 
                                     type="text"
@@ -365,7 +323,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                                     onChange={(e) => setScannedBarcode(e.target.value)}
                                     onKeyDown={handleBarcodeKeyDown}
                                     placeholder="Barkod okutun veya yazıp Enter'a basın..."
-                                    style={{ ...inputStyle, flex: 1 }}
+                                    className={styles.input} style={{ flex: 1 }}
                                 />
                                 <button 
                                     type="button" 
@@ -380,12 +338,12 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                         </div>
 
                         {/* Manuel Ürün Seçimi Dropdown */}
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={labelStyle}>Kayıtlı Ürün Listesi ({products.length} Ürün)</label>
+                        <div className={styles.colFlex}>
+                            <label className={styles.label}>Kayıtlı Ürün Listesi ({products.length} Ürün)</label>
                             <select 
                                 value="" 
                                 onChange={handleProductSelect}
-                                style={{ ...inputStyle, cursor: 'pointer' }}
+                                className={styles.input} style={{ cursor: 'pointer' }}
                             >
                                 <option value="">-- Listeden Ürün Seçip Ekleyin --</option>
                                 {products.map(p => (
@@ -400,7 +358,7 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                     {/* Seçili Ürünlerin Listesi */}
                     {formData.target_product_ids && formData.target_product_ids.length > 0 && (
                         <div style={{ marginTop: '16px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                            <label style={{ ...labelStyle, color: '#0f172a' }}>Seçilen Kampanya Ürünleri ({formData.target_product_ids.length} Adet)</label>
+                            <label className={styles.label} style={{ color: '#0f172a' }}>Seçilen Kampanya Ürünleri ({formData.target_product_ids.length} Adet)</label>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
                                 {formData.target_product_ids.map(id => {
                                     const p = products.find(prod => String(prod.Id) === String(id));
@@ -449,52 +407,52 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                 </div>
 
                 {/* BÖLÜM 3: İNDİRİM VE PROMOSYON KOŞULLARI */}
-                <div style={cardStyle}>
-                    <h3 style={sectionTitleStyle}>
+                <div className={styles.card}>
+                    <h3 className={styles.sectionTitle}>
                         <span style={{ color: '#10b981' }}>3.</span> İndirim ve Promosyon Koşulları
                     </h3>
 
                     {/* X Al Y Öde */}
                     {formData.campaign_type === 'buy_x_pay_y' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={labelStyle}>Alınması Gereken Adet (X)</label>
-                                <input type="number" name="buy_quantity" min="1" value={formData.buy_quantity} onChange={handleChange} placeholder="Örn: 2" style={inputStyle} />
+                        <div className={styles.gridCol2}>
+                            <div className={styles.colFlex}>
+                                <label className={styles.label}>Alınması Gereken Adet (X)</label>
+                                <input type="number" name="buy_quantity" min="1" value={formData.buy_quantity} onChange={handleChange} placeholder="Örn: 2" className={styles.input} />
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={labelStyle}>Ödenmesi Gereken Adet (Y)</label>
-                                <input type="number" name="pay_quantity" min="1" value={formData.pay_quantity} onChange={handleChange} placeholder="Örn: 1" style={inputStyle} />
+                            <div className={styles.colFlex}>
+                                <label className={styles.label}>Ödenmesi Gereken Adet (Y)</label>
+                                <input type="number" name="pay_quantity" min="1" value={formData.pay_quantity} onChange={handleChange} placeholder="Örn: 1" className={styles.input} />
                             </div>
                         </div>
                     )}
 
                     {/* Sepet Tutarı İndirimi */}
                     {formData.campaign_type === 'min_amount_discount' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={labelStyle}>Minimum Sepet Tutarı (TL)</label>
-                                <input type="number" step="0.01" name="min_amount" value={formData.min_amount} onChange={handleChange} placeholder="Örn: 12000" style={inputStyle} />
+                        <div className={styles.gridCol2}>
+                            <div className={styles.colFlex}>
+                                <label className={styles.label}>Minimum Sepet Tutarı (TL)</label>
+                                <input type="number" step="0.01" name="min_amount" value={formData.min_amount} onChange={handleChange} placeholder="Örn: 12000" className={styles.input} />
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={labelStyle}>İndirim Oranı (%)</label>
-                                <input type="number" step="0.01" max="100" name="discount_rate" value={formData.discount_rate} onChange={handleChange} placeholder="Örn: 10" style={inputStyle} />
+                            <div className={styles.colFlex}>
+                                <label className={styles.label}>İndirim Oranı (%)</label>
+                                <input type="number" step="0.01" max="100" name="discount_rate" value={formData.discount_rate} onChange={handleChange} placeholder="Örn: 10" className={styles.input} />
                             </div>
                         </div>
                     )}
 
                     {/* Hediye Ürün Kampanyası */}
                     {formData.campaign_type === 'gift_product' && (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={labelStyle}>Gereken Alım Adedi</label>
-                                <input type="number" name="buy_quantity" min="1" value={formData.buy_quantity} onChange={handleChange} placeholder="Örn: 5" style={inputStyle} />
+                        <div className={styles.gridCol3}>
+                            <div className={styles.colFlex}>
+                                <label className={styles.label}>Gereken Alım Adedi</label>
+                                <input type="number" name="buy_quantity" min="1" value={formData.buy_quantity} onChange={handleChange} placeholder="Örn: 5" className={styles.input} />
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={labelStyle}>Hediye Verilecek Adet</label>
-                                <input type="number" name="gift_quantity" min="1" value={formData.gift_quantity} onChange={handleChange} placeholder="Örn: 1" style={inputStyle} />
+                            <div className={styles.colFlex}>
+                                <label className={styles.label}>Hediye Verilecek Adet</label>
+                                <input type="number" name="gift_quantity" min="1" value={formData.gift_quantity} onChange={handleChange} placeholder="Örn: 1" className={styles.input} />
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <label style={labelStyle}>Hediye Ürün Adı / Paketi</label>
+                            <div className={styles.colFlex}>
+                                <label className={styles.label}>Hediye Ürün Adı / Paketi</label>
                                 <input 
                                     type="text" 
                                     name="gift_product_name" 
@@ -514,24 +472,24 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                     {/* Net Yüzde İndirimi */}
                     {formData.campaign_type === 'percentage_discount' && (
                         <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '320px' }}>
-                            <label style={labelStyle}>Net İndirim Oranı (%)</label>
-                            <input type="number" step="0.01" max="100" name="discount_rate" value={formData.discount_rate} onChange={handleChange} placeholder="Örn: 25" style={inputStyle} />
+                            <label className={styles.label}>Net İndirim Oranı (%)</label>
+                            <input type="number" step="0.01" max="100" name="discount_rate" value={formData.discount_rate} onChange={handleChange} placeholder="Örn: 25" className={styles.input} />
                         </div>
                     )}
 
                     {/* Ücretsiz Kargo */}
                     {formData.campaign_type === 'free_shipping' && (
                         <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '320px' }}>
-                            <label style={labelStyle}>Kargo Bedava İçin Min. Tutar (TL)</label>
-                            <input type="number" step="0.01" name="min_amount" value={formData.min_amount} onChange={handleChange} placeholder="Örn: 1500 (Boşsa tüm siparişlere uygulanır)" style={inputStyle} />
+                            <label className={styles.label}>Kargo Bedava İçin Min. Tutar (TL)</label>
+                            <input type="number" step="0.01" name="min_amount" value={formData.min_amount} onChange={handleChange} placeholder="Örn: 1500 (Boşsa tüm siparişlere uygulanır)" className={styles.input} />
                         </div>
                     )}
                 </div>
 
                 {/* BÖLÜM 4: KAPAK RESMİ (BANNER) */}
-                <div style={{ ...cardStyle, backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}>
+                <div className={styles.card} style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
-                        <h3 style={{ ...sectionTitleStyle, borderBottom: 'none', paddingBottom: '0' }}>
+                        <h3 className={styles.sectionTitle} style={{ borderBottom: 'none', paddingBottom: '0' }}>
                             <span style={{ color: '#10b981' }}>4.</span> Kampanya Kapak Görseli (Yatay Banner - Önerilen: 1920x600 px)
                         </h3>
                         <button 
@@ -600,22 +558,22 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                 </div>
 
                 {/* BÖLÜM 5: TARİH VE DURUM */}
-                <div style={cardStyle}>
-                    <h3 style={sectionTitleStyle}>
+                <div className={styles.card}>
+                    <h3 className={styles.sectionTitle}>
                         <span style={{ color: '#10b981' }}>5.</span> Tarih Aralığı ve Yayın Durumu
                     </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={labelStyle}>Başlangıç Tarihi</label>
-                            <input type="date" name="start_date" value={formData.start_date} onChange={handleChange} style={inputStyle} />
+                    <div className={styles.gridCol3}>
+                        <div className={styles.colFlex}>
+                            <label className={styles.label}>Başlangıç Tarihi</label>
+                            <input type="date" name="start_date" value={formData.start_date} onChange={handleChange} className={styles.input} />
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={labelStyle}>Bitiş Tarihi</label>
-                            <input type="date" name="end_date" value={formData.end_date} onChange={handleChange} style={inputStyle} />
+                        <div className={styles.colFlex}>
+                            <label className={styles.label}>Bitiş Tarihi</label>
+                            <input type="date" name="end_date" value={formData.end_date} onChange={handleChange} className={styles.input} />
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <label style={labelStyle}>Yayın Durumu</label>
-                            <select name="status" value={formData.status} onChange={handleChange} style={{ ...inputStyle, fontWeight: '600' }}>
+                        <div className={styles.colFlex}>
+                            <label className={styles.label}>Yayın Durumu</label>
+                            <select name="status" value={formData.status} onChange={handleChange} className={styles.input} style={{ fontWeight: '600' }}>
                                 <option value="Aktif">Aktif (Yayında)</option>
                                 <option value="Pasif">Pasif (Yayından Kaldırıldı)</option>
                                 <option value="Taslak">Taslak</option>
@@ -625,19 +583,19 @@ const CampaignForm = ({ currentUser, campaign, onNavigate }) => {
                 </div>
 
                 {/* BÖLÜM 6: AÇIKLAMA */}
-                <div style={cardStyle}>
-                    <h3 style={sectionTitleStyle}>
+                <div className={styles.card}>
+                    <h3 className={styles.sectionTitle}>
                         <span style={{ color: '#10b981' }}>6.</span> Detaylı Kampanya Açıklaması
                     </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <label style={labelStyle}>Koşullar ve Ek Bilgiler</label>
+                    <div className={styles.colFlex}>
+                        <label className={styles.label}>Koşullar ve Ek Bilgiler</label>
                         <textarea 
                             name="description" 
                             value={formData.description} 
                             onChange={handleChange} 
                             rows="3" 
                             placeholder="Örn: Bu kampanya diğer indirimlerle birleştirilemez. Sepet aşamasında indirim otomatik yansır."
-                            style={{ ...inputStyle, resize: 'vertical' }}
+                            className={styles.input} style={{ resize: 'vertical' }}
                         ></textarea>
                     </div>
                 </div>

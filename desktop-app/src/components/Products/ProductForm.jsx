@@ -150,6 +150,8 @@ const ProductForm = ({ product, onClose, currentUser }) => {
     max_stack_limit: product?.max_stack_limit || 1,
     supplier_id: product?.supplier_id || '',
     critical_stock_level: product?.critical_stock_level || 0,
+    min_stock_level: product?.min_stock_level || 0,
+    max_stock_level: product?.max_stock_level || 0,
     shelf_life_months: product?.shelf_life_months || 0,
     is_active: product ? (product.is_active === 1 || product.is_active === true) : true,
     is_bestseller: product ? (product.is_bestseller === 1 || product.is_bestseller === true) : false,
@@ -777,8 +779,8 @@ const ProductForm = ({ product, onClose, currentUser }) => {
           </div>
         </div>
 
-        {/* GENİŞLİK / YÜKSEKLİK / DERİNLİK / AĞIRLIK / ÇAP / KRİTİK STOK - 6'lı tek satır */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '12px', marginBottom: '20px' }}>
+        {/* GENİŞLİK / YÜKSEKLİK / DERİNLİK / AĞIRLIK / ÇAP / KRİTİK STOK / SİPARİŞ NOKTASI / HEDEF STOK - 8'li tek satır */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: '12px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Genişlik (cm)</label>
             <input type="number" step="0.01" name="Width" value={formData.Width} onChange={handleChange} placeholder="Örn: 10" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
@@ -807,6 +809,14 @@ const ProductForm = ({ product, onClose, currentUser }) => {
               </span>
             </label>
             <input type="number" step="1" min="0" name="critical_stock_level" value={formData.critical_stock_level} onChange={handleChange} placeholder="Örn: 100" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Sipariş Noktası</label>
+            <input type="number" step="1" min="0" name="min_stock_level" value={formData.min_stock_level} onChange={handleChange} placeholder="Örn: 15" title="Otomatik satın alma talebi için minimum miktar" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Hedef Stok</label>
+            <input type="number" step="1" min="0" name="max_stock_level" value={formData.max_stock_level} onChange={handleChange} placeholder="Örn: 100" title="Talebin tamamlanacağı maksimum miktar" style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1', boxSizing: 'border-box', minWidth: 0 }} />
           </div>
         </div>
 

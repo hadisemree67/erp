@@ -90,6 +90,7 @@ const Home = () => {
                 <ProductCarousel
                   title={`${category} Ürünleri`}
                   products={categoryProducts}
+                  linkTo={`/category/${encodeURIComponent(category)}`}
                 />
               </div>
             );
