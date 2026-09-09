@@ -4,66 +4,14 @@ import {
   Phone, 
   Mail, 
   Clock, 
-  MapPin, 
-  ShieldCheck, 
-  Truck, 
-  RefreshCw, 
-  Award, 
-  Lock, 
-  CheckCircle,
-  Sparkles
+  Lock 
 } from 'lucide-react';
 import styles from './Footer.module.css';
 
 const Footer = () => {
   return (
     <footer className={styles.footer}>
-      {/* 1. Üst Güven ve Avantajlar Şeridi */}
-      <div className={styles.featuresStrip}>
-        <div className={`container ${styles.featuresContainer}`}>
-          <div className={styles.featureItem}>
-            <div className={styles.featureIcon}>
-              <Truck size={24} color="#00A896" />
-            </div>
-            <div>
-              <h4 className={styles.featureTitle}>Ücretsiz Hızlı Kargo</h4>
-              <p className={styles.featureDesc}>2000 TL ve üzeri tüm siparişlerde aynı gün kargo</p>
-            </div>
-          </div>
-
-          <div className={styles.featureItem}>
-            <div className={styles.featureIcon}>
-              <Award size={24} color="#00A896" />
-            </div>
-            <div>
-              <h4 className={styles.featureTitle}>%100 Orijinal Ürün</h4>
-              <p className={styles.featureDesc}>Doğrudan yetkili üretici ve ecza garantisi</p>
-            </div>
-          </div>
-
-          <div className={styles.featureItem}>
-            <div className={styles.featureIcon}>
-              <RefreshCw size={24} color="#00A896" />
-            </div>
-            <div>
-              <h4 className={styles.featureTitle}>Kolay & Hızlı İade</h4>
-              <p className={styles.featureDesc}>14 gün içinde koşulsuz ve ücretsiz iade imkanı</p>
-            </div>
-          </div>
-
-          <div className={styles.featureItem}>
-            <div className={styles.featureIcon}>
-              <ShieldCheck size={24} color="#00A896" />
-            </div>
-            <div>
-              <h4 className={styles.featureTitle}>256-Bit Güvenli Ödeme</h4>
-              <p className={styles.featureDesc}>3D Secure güvencesiyle uçtan uca şifreli alışveriş</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Ana Footer Sütunları */}
+      {/* 1. Ana Footer Sütunları */}
       <div className={styles.mainFooter}>
         <div className={`container ${styles.footerGrid}`}>
           
