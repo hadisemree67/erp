@@ -36,7 +36,7 @@ router.get('/warehouses', authMiddleware, wmsController.getWarehouses);
 router.get('/warehouses/:warehouseId/locations', authMiddleware, wmsController.getWarehousesWarehouseIdLocations);
 
 // Depo krokisini kaydet
-router.post('/warehouses/:warehouseId/layout', authMiddleware, checkRole(['Depo']), wmsController.postWarehousesWarehouseIdLayout);
+router.post('/warehouses/:warehouseId/layout', authMiddleware, checkRole(['Depo', 'Yönetici', 'yonetici', 'Admin', 'admin']), wmsController.postWarehousesWarehouseIdLayout);
 
 // Bir depoda belirli bir ürünü içeren rafları getir
 router.get('/warehouses/:warehouseId/products/:productId/shelves', authMiddleware, wmsController.getWarehousesWarehouseIdProductsProductIdShelves);
@@ -54,7 +54,7 @@ router.get('/warehouses/:warehouseId/shelves/:shelfCode/stock', authMiddleware, 
 // [POST] Rafı Tamamen Boşaltma
 // Seçilen raftaki tüm ürünleri stoktan düşer (sıfırlar) ve işlem geçmişine log kaydı bırakır.
 // ===========================
-router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', authMiddleware, checkRole(['Depo']), wmsController.postWarehousesWarehouseIdShelvesShelfCodeClear);
+router.post('/warehouses/:warehouseId/shelves/:shelfCode/clear', authMiddleware, checkRole(['Depo', 'Yönetici', 'yonetici', 'Admin', 'admin']), wmsController.postWarehousesWarehouseIdShelvesShelfCodeClear);
 
 // ===========================
 // [POST] Manuel Mal Kabul (Stok Girişi)
@@ -72,22 +72,22 @@ router.get('/stock-list', authMiddleware, checkPermission('inventory_view'), wms
 // [PUT] Stok Bakiyesi Güncelleme (Manuel Düzeltme)
 // Sayım farklılıklarında veya hatalı girişlerde; stok miktarını, raf lokasyonunu veya son kullanma tarihini manuel düzeltir.
 // ===========================
-router.put('/stock/:id', authMiddleware, checkRole(['Depo']), wmsController.putStockId);
+router.put('/stock/:id', authMiddleware, checkRole(['Depo', 'Yönetici', 'yonetici', 'Admin', 'admin']), wmsController.putStockId);
 
 // Bir stok bakiyesi satırını sil
-router.delete('/stock/:id', authMiddleware, checkRole(['Depo']), wmsController.deleteStockId);
+router.delete('/stock/:id', authMiddleware, checkRole(['Depo', 'Yönetici', 'yonetici', 'Admin', 'admin']), wmsController.deleteStockId);
 
 // ===========================
 // [POST] Raftan Rafa Tekli Ürün Transferi
 // Bir raftaki ürünü başka bir depoya veya rafa fiziksel olarak taşır. Eski raftan düşer, yeni rafa ekler.
 // ===========================
-router.post('/transfer', authMiddleware, checkRole(['Depo']), wmsController.postTransfer);
+router.post('/transfer', authMiddleware, checkRole(['Depo', 'Yönetici', 'yonetici', 'Admin', 'admin']), wmsController.postTransfer);
 
 // ===========================
 // [POST] Toplu Stok İşlemleri
 // Seçilen birden fazla raf/stok kaydı için aynı anda ekleme, düşme, sıfırlama veya toplu transfer işlemleri gerçekleştirir.
 // ===========================
-router.post('/bulk-action', authMiddleware, checkRole(['Depo']), wmsController.postBulkAction);
+router.post('/bulk-action', authMiddleware, checkRole(['Depo', 'Yönetici', 'yonetici', 'Admin', 'admin']), wmsController.postBulkAction);
 
 // GET /shelf-capacity
 router.get('/shelf-capacity', authMiddleware, wmsController.getShelfCapacity);
@@ -99,5 +99,5 @@ router.get('/warehouse-capacities', authMiddleware, wmsController.getWarehouseCa
 router.get('/shelf-by-barcode', authMiddleware, wmsController.getShelfByBarcode);
 
 // FEFO tabanlı hızlı stok düşüşü (Hızlı Çıkış)
-router.post('/deduct-fefo', authMiddleware, checkRole(['Depo']), wmsController.postDeductFefo);
+router.post('/deduct-fefo', authMiddleware, checkRole(['Depo', 'Yönetici', 'yonetici', 'Admin', 'admin']), wmsController.postDeductFefo);
 module.exports = router;

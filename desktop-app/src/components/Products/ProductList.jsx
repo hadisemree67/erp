@@ -215,6 +215,18 @@ const ProductList = ({ onNavigate, currentUser }) => {
              searchInField(p.web_categories) ||
              searchInField(p.web_subcategories) ||
              searchInField(p.web_subtitles);
+  }).sort((a, b) => {
+      const isTarget1 = (p) => {
+          const barcodeStr = typeof p.Barcode === 'string' ? p.Barcode : JSON.stringify(p.Barcode || '');
+          return barcodeStr.includes('8691851889870') || (p.ProductName && p.ProductName.includes('Nemlendirici & Dolgunlaştırıcı'));
+      };
+      const isTarget2 = (p) => {
+          return p.ProductName && (p.ProductName.toLowerCase().includes('mendil') || p.ProductName.toLowerCase().includes('ıslak'));
+      };
+      const rankA = isTarget1(a) ? 1 : isTarget2(a) ? 2 : 3;
+      const rankB = isTarget1(b) ? 1 : isTarget2(b) ? 2 : 3;
+      if (rankA !== rankB) return rankA - rankB;
+      return (b.Id || 0) - (a.Id || 0);
   });
 
   // 5. Arayüz (UI) Çizimi ve Render Edilmesi
@@ -488,22 +500,50 @@ const ProductList = ({ onNavigate, currentUser }) => {
                     </div>
                   </td>
                   <td style={{ padding: '12px 24px', textAlign: 'center' }}>
-                    <span style={{ 
-                      padding: '4px 10px', borderRadius: '12px', fontSize: '13px', fontWeight: '600',
-                      backgroundColor: product.StockQuantity > 10 ? '#f1f5f9' : '#fee2e2',
-                      color: product.StockQuantity > 10 ? '#475569' : '#dc2626'
-                    }}>
-                      {product.StockQuantity} Adet
-                    </span>
+                    {(() => {
+                      const totalStock = parseFloat(product.StockQuantity) || 0;
+                      const rawCrit = parseFloat(product.critical_stock_level);
+                      const rawMin = parseFloat(product.min_stock_level);
+                      const hasCustom = (!isNaN(rawCrit) && rawCrit > 0) || (!isNaN(rawMin) && rawMin > 0);
+                      const criticalLimit = (!isNaN(rawCrit) && rawCrit > 0) 
+                        ? rawCrit 
+                        : ((!isNaN(rawMin) && rawMin > 0) ? rawMin : 10);
+                      const isLow = totalStock <= criticalLimit;
+
+                      return (
+                        <span style={{ 
+                          padding: '4px 10px', borderRadius: '12px', fontSize: '13px', fontWeight: '600',
+                          backgroundColor: isLow ? '#fee2e2' : '#f1f5f9',
+                          color: isLow ? '#dc2626' : '#475569',
+                          whiteSpace: 'nowrap'
+                        }} title={`Mevcut Toplam Stok: ${totalStock} Adet${hasCustom ? ` (Kritik Sınır: ${criticalLimit})` : ''}`}>
+                          {product.StockQuantity} Adet
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td style={{ padding: '12px 24px', textAlign: 'center' }}>
-                    <span style={{ 
-                      padding: '4px 10px', borderRadius: '12px', fontSize: '13px', fontWeight: '600',
-                      backgroundColor: product.AvailableStock > 10 ? '#f0fdf4' : (product.AvailableStock > 0 ? '#fef08a' : '#fee2e2'),
-                      color: product.AvailableStock > 10 ? '#166534' : (product.AvailableStock > 0 ? '#a16207' : '#dc2626')
-                    }} title="Sepetlerde bekleyen stoğu düşülmüş net rakam">
-                      {product.AvailableStock} Adet
-                    </span>
+                    {(() => {
+                      const availStock = parseFloat(product.AvailableStock) || 0;
+                      const rawCrit = parseFloat(product.critical_stock_level);
+                      const rawMin = parseFloat(product.min_stock_level);
+                      const hasCustom = (!isNaN(rawCrit) && rawCrit > 0) || (!isNaN(rawMin) && rawMin > 0);
+                      const criticalLimit = (!isNaN(rawCrit) && rawCrit > 0) 
+                        ? rawCrit 
+                        : ((!isNaN(rawMin) && rawMin > 0) ? rawMin : 10);
+                      const isLow = availStock <= criticalLimit;
+
+                      return (
+                        <span style={{ 
+                          padding: '4px 10px', borderRadius: '12px', fontSize: '13px', fontWeight: '600',
+                          backgroundColor: isLow ? '#fee2e2' : '#f0fdf4',
+                          color: isLow ? '#dc2626' : '#166534',
+                          whiteSpace: 'nowrap'
+                        }} title={`Sepetlerde bekleyen stoğu düşülmüş net rakam${hasCustom ? ` (Kritik Sınır: ${criticalLimit})` : ''}`}>
+                          {product.AvailableStock} Adet
+                        </span>
+                      );
+                    })()}
                   </td>
                   {canSeeCosts && (
                     <td style={{ padding: '12px 24px', color: '#0f172a', fontWeight: '600', fontSize: '14px', textAlign: 'right' }}>

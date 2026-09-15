@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ============================================================================
  * BİLEŞEN ADI: rbac
  * GÖREV VE AKIŞ AÇIKLAMASI:
@@ -12,12 +12,18 @@
  * bilgilerini kontrol ederek rotalara erişimi kısıtlar.
  */
 
+const isAdmin = (role) => {
+    if (!role) return false;
+    const r = role.toString().trim().toLowerCase();
+    return r === 'admin' || r === 'yönetici' || r === 'yonetici';
+};
+
 /**
  * Belirli rollere sahip kullanıcıların erişimine izin verir.
- * 'admin' rolüne sahip kullanıcılar her zaman erişebilir.
+ * 'admin' ve 'Yönetici' rolüne sahip kullanıcılar her zaman erişebilir.
  * @param {string[]} allowedRoles - İzin verilen roller dizisi (örn: ['Depo', 'Üretim'])
  */
-const checkRole = (allowedRoles, fallbackPermission = null) => {
+const checkRole = (allowedRoles = [], fallbackPermission = null) => {
     return (req, res, next) => {
         if (!req.user) {
             return res.status(401).json({ success: false, message: 'Oturum bilgisi bulunamadı.' });
@@ -25,15 +31,15 @@ const checkRole = (allowedRoles, fallbackPermission = null) => {
 
         const userRole = req.user.role;
 
-
-
-        // Admin her şeye erişebilir
-        if (userRole === 'admin') {
+        // Admin ve Yönetici her şeye tam yetkilidir
+        if (isAdmin(userRole)) {
             return next();
         }
 
-        // Kullanıcının rolü izin verilen roller arasında mı?
-        if (allowedRoles.includes(userRole)) {
+        // Kullanıcının rolü izin verilen roller arasında mı? (Büyük/küçük harf duyarsız)
+        const lowerUserRole = (userRole || '').toString().toLowerCase();
+        const isAllowed = allowedRoles.some(r => r.toString().toLowerCase() === lowerUserRole);
+        if (isAllowed) {
             return next();
         }
 
@@ -50,7 +56,7 @@ const checkRole = (allowedRoles, fallbackPermission = null) => {
 
 /**
  * Belirli bir özel yetkiye sahip kullanıcıların erişimine izin verir.
- * 'admin' rolüne sahip kullanıcılar her zaman erişebilir.
+ * 'admin' ve 'Yönetici' rolüne sahip kullanıcılar her zaman erişebilir.
  * @param {string} requiredPermission - Gerekli yetki anahtarı (örn: 'staff_manage')
  */
 const checkPermission = (requiredPermission) => {
@@ -59,9 +65,7 @@ const checkPermission = (requiredPermission) => {
             return res.status(401).json({ success: false, message: 'Oturum bilgisi bulunamadı.' });
         }
 
-
-
-        if (req.user.role === 'admin') {
+        if (isAdmin(req.user.role)) {
             return next();
         }
 

@@ -37,20 +37,25 @@ const ensureMinMaxCols = async () => {
 };
 ensureMinMaxCols();
 
-// GÜVENLİK: Arbitrary File Upload (Rastgele Dosya Yükleme) zafiyetini önlemek için sadece resimlere izin verildi
+// GÜVENLİK: Resim dosyaları ve tedarikçi sözleşmeleri için PDF/Word formatlarına izin verilir
 const fileFilter = (req, file, cb) => {
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowedMimeTypes = [
+        'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
     if (allowedMimeTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
-        cb(new Error('Desteklenmeyen dosya formatı. Sadece resim dosyaları yüklenebilir.'), false);
+        cb(new Error('Desteklenmeyen dosya formatı. Sadece resim, PDF ve Word dosyaları yüklenebilir.'), false);
     }
 };
 
 const upload = multer({ 
     storage: storage,
     fileFilter: fileFilter,
-    limits: { fileSize: 5 * 1024 * 1024 } // 5 MB sınır
+    limits: { fileSize: 10 * 1024 * 1024 } // 10 MB sınır
 });
 
 const safeFloat = (val, defaultVal = 0) => {
@@ -127,7 +132,7 @@ router.get('/public', async (req, res) => {
             params.push(s, s, s, s, s);
         }
 
-        queryStr += ` ORDER BY Id DESC LIMIT ? OFFSET ?`;
+        queryStr += ` ORDER BY (products.ProductName LIKE '%Nemlendirici & Dolgunlaştırıcı%') DESC, (products.ProductName LIKE '%mendil%' OR products.ProductName LIKE '%Mendil%') DESC, products.Id DESC LIMIT ? OFFSET ?`;
         params.push(limit, offset);
 
         const [rows] = await db.query(queryStr, params);
@@ -529,7 +534,7 @@ router.get('/', authMiddleware, checkPermission('view_products'), async (req, re
             (COALESCE((SELECT SUM(quantity) FROM wms_stock_balances WHERE product_id = p.Id), p.StockQuantity) - 
              COALESCE((SELECT SUM(quantity) FROM cart_reservations WHERE product_id = p.Id AND expires_at > NOW()), 0) -
              COALESCE((SELECT SUM(oi.Quantity) FROM orderitems oi JOIN orders o ON oi.OrderId = o.Id WHERE oi.ProductId = p.Id AND o.OrderStatus IN ('Beklemede', 'Onaylandı', 'Hazırlanıyor', 'Toplamada', 'İptal Bekliyor')), 0)) AS AvailableStock
-            FROM products p ORDER BY p.Id DESC
+            FROM products p ORDER BY (p.ProductName LIKE '%Nemlendirici & Dolgunlaştırıcı%') DESC, (p.ProductName LIKE '%mendil%' OR p.ProductName LIKE '%Mendil%') DESC, p.Id DESC
         `);
 
         // Ürünlere ait tedarikçi bilgilerini (ürünü kimden alıyoruz) çekiyoruz.
@@ -650,7 +655,7 @@ router.post('/', authMiddleware, checkPermission('product_add'), upload.any(), a
                 supplier_id, shelf_life_months, supply_type, is_active, is_bestseller, web_categories, web_subcategories, web_subtitles,
                 FeaturesImage, FeaturesBgColor, FeaturesTextColor, WhoCanUse, HowToUse,
                 BannerSlogan, BannerLogo, CircularFeatures, CalloutText, Highlights
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         const insertParams = [

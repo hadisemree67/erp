@@ -54,13 +54,24 @@ const checkStockAndCreateRequests = async () => {
                         `, [product.ProductName]);
 
                         if (existingReqs.length === 0) {
+                            // Ürünün tedarikçisini product_suppliers tablosundan çek (öncelik is_primary)
+                            const [prodSuppliers] = await db.query(`
+                                SELECT supplier_id FROM product_suppliers 
+                                WHERE product_id = ? 
+                                ORDER BY is_primary DESC, id ASC 
+                                LIMIT 1
+                            `, [product.Id]);
+                            const effectiveSupplierId = prodSuppliers.length > 0 
+                                ? prodSuppliers[0].supplier_id 
+                                : (product.supplier_id || null);
+
                             const description = 'Otomatik Stok Takip Sistemi Tarafından Oluşturuldu';
                             await db.query(`
-                                INSERT INTO purchase_requests (product_name, quantity, description, status, supplier_id)
-                                VALUES (?, ?, ?, 'Bekliyor', ?)
-                            `, [product.ProductName, orderQuantity, description, product.supplier_id || null]);
+                                INSERT INTO purchase_requests (product_id, product_name, quantity, description, status, supplier_id)
+                                VALUES (?, ?, ?, ?, 'Bekliyor', ?)
+                            `, [product.Id, product.ProductName, orderQuantity, description, effectiveSupplierId]);
                             
-                            console.log(`[StockMonitor] ${product.ProductName} için ${orderQuantity} adet otomatik SATIN ALMA talebi oluşturuldu.`);
+                            console.log(`[StockMonitor] ${product.ProductName} için ${orderQuantity} adet otomatik SATIN ALMA talebi oluşturuldu (Tedarikçi: ${effectiveSupplierId}).`);
                             requestsCreated++;
                         }
                     }

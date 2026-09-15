@@ -529,8 +529,9 @@ class WmsController {
         message: 'Geçerli bir pozitif miktar zorunludur.'
       });
     }
+    let conn = null;
     try {
-      const conn = await db.getConnection();
+      conn = await db.getConnection();
       await conn.query('BEGIN');
 
       // Find old balance
@@ -538,13 +539,15 @@ class WmsController {
       if (rows.length === 0) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(404).json({
           success: false,
           message: 'Stok kaydı bulunamadı.'
         });
       }
       const oldData = rows[0];
-      const diff = quantity - oldData.quantity;
+      const newQty = Number(quantity);
+      const diff = newQty - oldData.quantity;
       const supplier_id_val = req.body.supplier_id !== undefined ? req.body.supplier_id === '' ? null : req.body.supplier_id : oldData.supplier_id;
       const unit_price_val = req.body.unit_price !== undefined ? req.body.unit_price === '' ? null : req.body.unit_price : oldData.unit_price;
       const warehouse_id_val = req.body.warehouse_id !== undefined ? req.body.warehouse_id : oldData.warehouse_id;
@@ -560,6 +563,7 @@ class WmsController {
         if (shelfCheck.length === 0) {
           await conn.query('ROLLBACK');
           conn.release();
+          conn = null;
           return res.status(404).json({
             success: false,
             message: `Hata: Hedef depo veya raf (${shelf_code_val}) bulunamadı!`
@@ -568,44 +572,66 @@ class WmsController {
       }
 
       // Update balance
-      await conn.query('UPDATE wms_stock_balances SET quantity = ?, batch_number = ?, expiration_date = ?, supplier_id = ?, unit_price = ?, warehouse_id = ?, shelf_code = ? WHERE id = ?', [quantity, batch_number || '', formattedExpDate, supplier_id_val, unit_price_val, warehouse_id_val, shelf_code_val, id]);
+      await conn.query('UPDATE wms_stock_balances SET quantity = ?, batch_number = ?, expiration_date = ?, supplier_id = ?, unit_price = ?, warehouse_id = ?, shelf_code = ? WHERE id = ?', [newQty, batch_number || '', formattedExpDate, supplier_id_val, unit_price_val, warehouse_id_val, shelf_code_val, id]);
 
-      // Update global product stock if quantity changed
-      if (diff !== 0) {
+      // Update global product stock if quantity changed (prevent unsigned underflow)
+      if (diff > 0) {
         await conn.query('UPDATE products SET StockQuantity = StockQuantity + ? WHERE Id = ?', [diff, oldData.product_id]);
+      } else if (diff < 0) {
+        const absDiff = Math.abs(diff);
+        await conn.query('UPDATE products SET StockQuantity = CASE WHEN StockQuantity >= ? THEN StockQuantity - ? ELSE 0 END WHERE Id = ?', [absDiff, absDiff, oldData.product_id]);
       }
+
+      let userId = req.user?.id || req.headers?.['x-user-id'] || null;
+      if (!userId) {
+        try {
+          const [uRows] = await conn.query('SELECT id FROM users LIMIT 1');
+          if (uRows.length > 0) userId = uRows[0].id;
+        } catch (e) {}
+      }
+
       if (oldData.warehouse_id !== warehouse_id_val || oldData.shelf_code !== shelf_code_val) {
         // Log transfer out from old location
-        await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [oldData.product_id, req.user?.id || 1, 'OUT', oldData.quantity, oldData.warehouse_id, oldData.shelf_code, oldData.batch_number || null, oldData.expiration_date, `Konum Değişikliği (Çıkış -> Depo: ${warehouse_id_val}, Raf: ${shelf_code_val})`]);
-        // Log transfer in to new location with new quantity
-        await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [oldData.product_id, req.user?.id || 1, 'IN', quantity, warehouse_id_val, shelf_code_val, batch_number || null, formattedExpDate, `Konum Değişikliği (Giriş <- Depo: ${oldData.warehouse_id}, Raf: ${oldData.shelf_code})`]);
+        try {
+          await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [oldData.product_id, userId, 'OUT', oldData.quantity, oldData.warehouse_id, oldData.shelf_code, oldData.batch_number || null, oldData.expiration_date, `Konum Değişikliği (Çıkış -> Depo: ${warehouse_id_val}, Raf: ${shelf_code_val})`]);
+          // Log transfer in to new location with new quantity
+          await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [oldData.product_id, userId, 'IN', newQty, warehouse_id_val, shelf_code_val, batch_number || null, formattedExpDate, `Konum Değişikliği (Giriş <- Depo: ${oldData.warehouse_id}, Raf: ${oldData.shelf_code})`]);
+        } catch (e) {
+          console.warn('StockMovements log error:', e.message);
+        }
       } else if (diff !== 0) {
         // Log the movement difference
-        await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [oldData.product_id, req.user?.id || 1,
-        // fallback to 1 if not provided
-        diff > 0 ? 'IN' : 'OUT', Math.abs(diff), warehouse_id_val, shelf_code_val, batch_number || null, formattedExpDate, 'Manuel Stok Düzenlemesi']);
+        try {
+          await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [oldData.product_id, userId, diff > 0 ? 'IN' : 'OUT', Math.abs(diff), warehouse_id_val, shelf_code_val, batch_number || null, formattedExpDate, 'Manuel Stok Düzenlemesi']);
+        } catch (e) {
+          console.warn('StockMovements log error:', e.message);
+        }
       }
       await conn.query('COMMIT');
       conn.release();
-      await logActivity(req.user?.id, 'UPDATE', 'wms_stock_balances', id, `Stok kaydı güncellendi (Miktar: ${quantity}, Depo: ${warehouse_id_val}, Raf: ${shelf_code_val})`);
+      conn = null;
+
+      logActivity(userId, 'UPDATE', 'wms_stock_balances', id, `Stok kaydı güncellendi (Miktar: ${newQty}, Depo: ${warehouse_id_val}, Raf: ${shelf_code_val})`).catch(() => {});
 
       // Check critical stock after manual edit
       if (diff !== 0) {
-        await checkAndNotifyLowStock(oldData.product_id);
+        checkAndNotifyLowStock(oldData.product_id).catch(err => {
+          console.error('checkAndNotifyLowStock error:', err.message);
+        });
       }
-      res.json({
+      return res.json({
         success: true,
         message: 'Stok kaydı başarıyla güncellendi.'
       });
     } catch (error) {
-      if (typeof conn !== 'undefined') {
+      if (conn) {
         await conn.query('ROLLBACK').catch(() => {});
         conn.release();
       }
       console.error('Stok düzenleme hatası:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
-        message: 'Stok girişi sırasında sunucu hatası oluştu.'
+        message: 'Stok düzenleme hatası: ' + (error.message || 'Sunucu hatası oluştu.')
       });
     }
   }
@@ -615,8 +641,9 @@ class WmsController {
       success: false,
       message: 'Geçersiz Stok ID.'
     });
+    let conn = null;
     try {
-      const conn = await db.getConnection();
+      conn = await db.getConnection();
       await conn.query('BEGIN');
 
       // Find old balance
@@ -624,6 +651,7 @@ class WmsController {
       if (rows.length === 0) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(404).json({
           success: false,
           message: 'Stok kaydı bulunamadı.'
@@ -634,28 +662,52 @@ class WmsController {
       // Delete balance
       await conn.query('DELETE FROM wms_stock_balances WHERE id = ?', [id]);
 
-      // Deduct from global product stock
-      await conn.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [oldData.quantity, oldData.product_id]);
-      await checkAndNotifyLowStock(oldData.product_id);
+      // Deduct from global product stock safely (never underflow below 0)
+      await conn.query(
+        'UPDATE products SET StockQuantity = CASE WHEN StockQuantity >= ? THEN StockQuantity - ? ELSE 0 END WHERE Id = ?',
+        [oldData.quantity, oldData.quantity, oldData.product_id]
+      );
 
-      // Log movement
-      await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [oldData.product_id, req.user?.id || 1, 'OUT', oldData.quantity, oldData.warehouse_id, oldData.shelf_code, oldData.batch_number, oldData.expiration_date, 'Manuel Stok Silme']);
+      let userId = req.user?.id || req.headers?.['x-user-id'] || null;
+      if (!userId) {
+        try {
+          const [uRows] = await conn.query('SELECT id FROM users LIMIT 1');
+          if (uRows.length > 0) userId = uRows[0].id;
+        } catch (e) {}
+      }
+
+      // Log movement (safely handled)
+      try {
+        await conn.query(
+          'INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [oldData.product_id, userId, 'OUT', oldData.quantity, oldData.warehouse_id, oldData.shelf_code, oldData.batch_number, oldData.expiration_date, 'Manuel Stok Silme']
+        );
+      } catch (smErr) {
+        console.warn('StockMovements log error during deleteStockId:', smErr.message);
+      }
+
       await conn.query('COMMIT');
       conn.release();
-      await logActivity(req.user?.id || 1, 'DELETE', 'wms_stock_balances', id, `Stok kaydı silindi (Ürün #${oldData.product_id}, Miktar: ${oldData.quantity})`);
-      res.json({
+      conn = null;
+
+      logActivity(userId, 'DELETE', 'wms_stock_balances', id, `Stok kaydı silindi (Ürün #${oldData.product_id}, Miktar: ${oldData.quantity})`).catch(() => {});
+      checkAndNotifyLowStock(oldData.product_id).catch(err => {
+        console.error('checkAndNotifyLowStock error after delete:', err.message);
+      });
+
+      return res.json({
         success: true,
         message: 'Stok kaydı başarıyla silindi.'
       });
     } catch (error) {
-      if (typeof conn !== 'undefined') {
+      if (conn) {
         await conn.query('ROLLBACK').catch(() => {});
         conn.release();
       }
       console.error('Stok silme hatası:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
-        message: 'Stok silinirken sunucu hatası oluştu.'
+        message: 'Stok silinirken hata oluştu: ' + (error.message || 'Sunucu hatası')
       });
     }
   }
@@ -674,13 +726,15 @@ class WmsController {
         message: 'Lütfen tüm zorunlu alanları doldurun.'
       });
     }
+    let conn = null;
     try {
-      const conn = await db.getConnection();
+      conn = await db.getConnection();
       await conn.query('BEGIN');
       const transferQty = parseInt(quantity);
       if (isNaN(transferQty) || transferQty <= 0) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(400).json({
           success: false,
           message: 'Geçersiz transfer miktarı.'
@@ -690,6 +744,7 @@ class WmsController {
       if (rows.length === 0) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(404).json({
           success: false,
           message: 'Kaynak stok kaydı bulunamadı.'
@@ -699,6 +754,7 @@ class WmsController {
       if (balance.quantity < transferQty) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(400).json({
           success: false,
           message: 'Transfer miktarı mevcut stoktan büyük olamaz.'
@@ -710,6 +766,7 @@ class WmsController {
       if (targetShelfCheck.length === 0) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(404).json({
           success: false,
           message: 'Hedef depo veya raf bulunamadı.'
@@ -720,7 +777,11 @@ class WmsController {
       await conn.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [transferQty, balanceId]);
 
       // Log OUT movement from source
-      await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', transferQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Depo Transferi Çıkışı']);
+      try {
+        await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', transferQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Depo Transferi Çıkışı']);
+      } catch (e) {
+        console.warn('StockMovements out error:', e.message);
+      }
 
       // Add to target
       const safeBatch = balance.batch_number || '';
@@ -733,23 +794,28 @@ class WmsController {
       }
 
       // Log IN movement to target
-      await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'IN', transferQty, targetWarehouseId, targetShelfCode, balance.batch_number, balance.expiration_date, description || 'Depo Transferi Girişi']);
+      try {
+        await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'IN', transferQty, targetWarehouseId, targetShelfCode, balance.batch_number, balance.expiration_date, description || 'Depo Transferi Girişi']);
+      } catch (e) {
+        console.warn('StockMovements in error:', e.message);
+      }
       await conn.query('COMMIT');
       conn.release();
-      await logActivity(userId || req.user?.id, 'UPDATE', 'wms_stock_balances', balanceId, `Stok transferi yapıldı. Hedef Depo: ${targetWarehouseId}, Raf: ${targetShelfCode}, Miktar: ${transferQty}`);
-      res.json({
+      conn = null;
+      logActivity(userId || req.user?.id, 'UPDATE', 'wms_stock_balances', balanceId, `Stok transferi yapıldı. Hedef Depo: ${targetWarehouseId}, Raf: ${targetShelfCode}, Miktar: ${transferQty}`).catch(() => {});
+      return res.json({
         success: true,
         message: 'Depo transferi başarıyla tamamlandı.'
       });
     } catch (error) {
-      if (typeof conn !== 'undefined') {
+      if (conn) {
         await conn.query('ROLLBACK').catch(() => {});
         conn.release();
       }
       console.error('Transfer hatası:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
-        message: 'Transfer işlemi sırasında sunucu hatası oluştu.'
+        message: 'Transfer işlemi sırasında sunucu hatası oluştu: ' + (error.message || '')
       });
     }
   }
@@ -769,8 +835,9 @@ class WmsController {
         message: 'Geçersiz stok kayıtları.'
       });
     }
+    let conn = null;
     try {
-      const conn = await db.getConnection();
+      conn = await db.getConnection();
       await conn.query('BEGIN');
       for (const balanceId of balanceIds) {
         const [rows] = await conn.query('SELECT product_id, warehouse_id, shelf_code, quantity, batch_number, expiration_date FROM wms_stock_balances WHERE id = ? FOR UPDATE', [balanceId]);
@@ -781,23 +848,29 @@ class WmsController {
           if (addQty > 0) {
             await conn.query('UPDATE wms_stock_balances SET quantity = quantity + ? WHERE id = ?', [addQty, balanceId]);
             await conn.query('UPDATE products SET StockQuantity = StockQuantity + ? WHERE Id = ?', [addQty, balance.product_id]);
-            await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'IN', addQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Toplu Stok Ekleme']);
+            try {
+              await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'IN', addQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Toplu Stok Ekleme']);
+            } catch (e) {}
           }
         } else if (actionType === 'REMOVE') {
           const rmQty = parseInt(quantity) || 0;
           if (rmQty > 0 && balance.quantity >= rmQty) {
             await conn.query('UPDATE wms_stock_balances SET quantity = quantity - ? WHERE id = ?', [rmQty, balanceId]);
-            await conn.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [rmQty, balance.product_id]);
-            await checkAndNotifyLowStock(balance.product_id);
-            await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', rmQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Toplu Stok Düşürme']);
+            await conn.query('UPDATE products SET StockQuantity = CASE WHEN StockQuantity >= ? THEN StockQuantity - ? ELSE 0 END WHERE Id = ?', [rmQty, rmQty, balance.product_id]);
+            try {
+              await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', rmQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Toplu Stok Düşürme']);
+            } catch (e) {}
+            checkAndNotifyLowStock(balance.product_id).catch(() => {});
           }
         } else if (actionType === 'ZERO_OUT') {
           const currentQty = balance.quantity;
           if (currentQty > 0) {
             await conn.query('UPDATE wms_stock_balances SET quantity = 0 WHERE id = ?', [balanceId]);
-            await conn.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [currentQty, balance.product_id]);
-            await checkAndNotifyLowStock(balance.product_id);
-            await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', currentQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Toplu Sıfırlama (Zayi/Fire)']);
+            await conn.query('UPDATE products SET StockQuantity = CASE WHEN StockQuantity >= ? THEN StockQuantity - ? ELSE 0 END WHERE Id = ?', [currentQty, currentQty, balance.product_id]);
+            try {
+              await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', currentQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description || 'Toplu Sıfırlama (Zayi/Fire)']);
+            } catch (e) {}
+            checkAndNotifyLowStock(balance.product_id).catch(() => {});
           }
         } else if (actionType === 'TRANSFER') {
           if (!targetWarehouseId || !targetShelfCode) {
@@ -806,7 +879,9 @@ class WmsController {
           const transferQty = balance.quantity;
           if (transferQty > 0) {
             await conn.query('UPDATE wms_stock_balances SET quantity = 0 WHERE id = ?', [balanceId]);
-            await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', transferQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, 'Toplu Transfer - Çıkış']);
+            try {
+              await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'OUT', transferQty, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, 'Toplu Transfer - Çıkış']);
+            } catch (e) {}
             const safeBatch = balance.batch_number || '';
             const safeExp = balance.expiration_date || null;
             const [targetRows] = await conn.query('SELECT id FROM wms_stock_balances WHERE product_id = ? AND warehouse_id = ? AND shelf_code = ? AND batch_number = ? AND (expiration_date = ? OR (expiration_date IS NULL AND ? IS NULL)) FOR UPDATE', [balance.product_id, targetWarehouseId, targetShelfCode, safeBatch, safeExp, safeExp]);
@@ -815,26 +890,29 @@ class WmsController {
             } else {
               await conn.query('INSERT INTO wms_stock_balances (product_id, warehouse_id, shelf_code, batch_number, expiration_date, quantity) VALUES (?, ?, ?, ?, ?, ?)', [balance.product_id, targetWarehouseId, targetShelfCode, safeBatch, safeExp, transferQty]);
             }
-            await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'IN', transferQty, targetWarehouseId, targetShelfCode, balance.batch_number, balance.expiration_date, description || 'Toplu Transfer - Giriş']);
+            try {
+              await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [balance.product_id, userId, 'IN', transferQty, targetWarehouseId, targetShelfCode, balance.batch_number, balance.expiration_date, description || 'Toplu Transfer - Giriş']);
+            } catch (e) {}
           }
         }
       }
       await conn.query('COMMIT');
       conn.release();
-      await logActivity(userId || req.user?.id, 'UPDATE', 'wms_stock_balances', null, `Toplu stok işlemi yapıldı (${actionType}).`);
-      res.json({
+      conn = null;
+      logActivity(userId || req.user?.id, 'UPDATE', 'wms_stock_balances', null, `Toplu stok işlemi yapıldı (${actionType}).`).catch(() => {});
+      return res.json({
         success: true,
         message: 'Toplu işlemler başarıyla tamamlandı.'
       });
     } catch (error) {
-      if (typeof conn !== 'undefined') {
+      if (conn) {
         await conn.query('ROLLBACK').catch(() => {});
         conn.release();
       }
       console.error('Toplu işlem hatası:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
-        message: 'İşlem sırasında sunucu hatası oluştu.'
+        message: 'İşlem sırasında sunucu hatası oluştu: ' + (error.message || '')
       });
     }
   }
@@ -1108,8 +1186,9 @@ class WmsController {
         message: 'Geçerli bir barkod ve düşülecek miktar giriniz.'
       });
     }
+    let conn = null;
     try {
-      const conn = await db.getConnection();
+      conn = await db.getConnection();
       await conn.query('BEGIN');
 
       // 1. Ürünü bul
@@ -1122,6 +1201,7 @@ class WmsController {
       if (products.length === 0) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(404).json({
           success: false,
           message: 'Bu barkoda ait ürün bulunamadı.'
@@ -1144,6 +1224,7 @@ class WmsController {
       if (totalAvailable < deductQty) {
         await conn.query('ROLLBACK');
         conn.release();
+        conn = null;
         return res.status(400).json({
           success: false,
           message: warehouseId ? `Seçilen rafta yetersiz stok! Mevcut: ${totalAvailable}` : `Yetersiz stok! Mevcut: ${totalAvailable}`
@@ -1163,31 +1244,34 @@ class WmsController {
         }
 
         // Hareket kaydı
-        await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [product.Id, userId, 'OUT', qtyToTake, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description ? `Acil Çıkış: ${description.trim()}` : 'Hızlı Çıkış (FEFO) ile düşüldü.']);
+        try {
+          await conn.query('INSERT INTO StockMovements (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [product.Id, userId, 'OUT', qtyToTake, balance.warehouse_id, balance.shelf_code, balance.batch_number, balance.expiration_date, description ? `Acil Çıkış: ${description.trim()}` : 'Hızlı Çıkış (FEFO) ile düşüldü.']);
+        } catch (e) {}
       }
 
-      // 4. Genel ürün stokunu düş
-      await conn.query('UPDATE products SET StockQuantity = StockQuantity - ? WHERE Id = ?', [deductQty, product.Id]);
+      // 4. Genel ürün stokunu düş (güvenli)
+      await conn.query('UPDATE products SET StockQuantity = CASE WHEN StockQuantity >= ? THEN StockQuantity - ? ELSE 0 END WHERE Id = ?', [deductQty, deductQty, product.Id]);
       await conn.query('COMMIT');
       conn.release();
+      conn = null;
 
       // Kritik stok kontrolü (async, response'u bekletmez)
       checkAndNotifyLowStock(product.Id).catch(err => console.error("Stok uyarısı hatası (FEFO):", err));
-      const logMsg = description && description.trim() ? `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName} - Açıklama: ${description.trim()}` : `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName}`;
-      await logActivity(userId, 'UPDATE', 'wms_stock_balances', null, logMsg);
-      res.json({
+      const logMsg = description && description.trim() ? `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName || product.Name} - Açıklama: ${description.trim()}` : `Hızlı Çıkış (FEFO) ile stoktan ${deductQty} adet düşüldü. Ürün: ${product.ProductName || product.Name}`;
+      logActivity(userId, 'UPDATE', 'wms_stock_balances', null, logMsg).catch(() => {});
+      return res.json({
         success: true,
         message: `${deductQty} adet stok başarıyla FEFO sırasına göre düşüldü.`
       });
     } catch (error) {
-      if (typeof conn !== 'undefined') {
+      if (conn) {
         await conn.query('ROLLBACK').catch(() => {});
         conn.release();
       }
       console.error('FEFO stok düşümü hatası:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
-        message: 'Stok düşülürken hata oluştu.'
+        message: 'Stok düşülürken hata oluştu: ' + (error.message || '')
       });
     }
   }

@@ -16,11 +16,58 @@ const CampaignsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [activeProduct, setActiveProduct] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchCampaigns();
   }, []);
+
+  useEffect(() => {
+    if (!selectedCampaign) {
+      setActiveProduct(null);
+      return;
+    }
+
+    if (selectedCampaign.target_product) {
+      setActiveProduct(selectedCampaign.target_product);
+      return;
+    }
+
+    let isMounted = true;
+    const loadTargetProduct = async () => {
+      try {
+        // 1. target_product_ids varsa doğrudan ID ile ürünü çek
+        if (selectedCampaign.target_product_ids && selectedCampaign.target_product_ids.length > 0) {
+          const res = await fetch(`${API_BASE}/api/products/public/${selectedCampaign.target_product_ids[0]}`);
+          const json = await res.json();
+          if (isMounted && json.success && json.data) {
+            setActiveProduct(json.data);
+            return;
+          }
+        }
+
+        // 2. target_barcode veya ürün kodu varsa arama yap
+        const barcode = selectedCampaign.target_barcode;
+        if (barcode) {
+          const res = await fetch(`${API_BASE}/api/products/public?q=${encodeURIComponent(barcode)}`);
+          const json = await res.json();
+          if (isMounted && json.success && Array.isArray(json.data) && json.data.length > 0) {
+            setActiveProduct(json.data[0]);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error('Kampanya hedef ürünü yüklenemedi:', err);
+      }
+    };
+
+    loadTargetProduct();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCampaign]);
 
   const fetchCampaigns = async () => {
     try {
@@ -43,6 +90,24 @@ const CampaignsPage = () => {
     if (!path || path === 'null') return 'https://via.placeholder.com/600x300?text=Görsel+Yok';
     if (path.startsWith('http')) return path;
     return `${API_BASE}/${path.replace(/^\//, '')}`;
+  };
+
+  const getProductImageUrl = (imgPath) => {
+    if (!imgPath || imgPath === 'null') return 'https://via.placeholder.com/300x300?text=Ürün+Görseli';
+    let clean = imgPath;
+    try {
+      if (typeof clean === 'string' && (clean.startsWith('[') || clean.startsWith('{'))) {
+        const parsed = JSON.parse(clean);
+        if (Array.isArray(parsed) && parsed.length > 0) clean = parsed[0];
+      }
+    } catch (e) {}
+    if (typeof clean === 'string' && clean.includes(',')) {
+      clean = clean.split(',')[0].trim();
+    }
+    if (typeof clean !== 'string' || !clean) return 'https://via.placeholder.com/300x300?text=Ürün+Görseli';
+    if (clean.startsWith('http://') || clean.startsWith('https://')) return clean;
+    const prefix = clean.startsWith('/') ? '' : '/';
+    return `${API_BASE}${prefix}${clean}`;
   };
 
   const formatDate = (dateString) => {
@@ -156,35 +221,51 @@ const CampaignsPage = () => {
                 </div>
               )}
               
-              {selectedCampaign.target_product ? (
+              {/* Kampanyaya Dahil / Hedef Ürün Kartı */}
+              {(activeProduct || selectedCampaign.target_barcode) && (
                 <div 
                   className={styles.targetProductCard}
                   onClick={() => {
-                    navigate(`/product/${selectedCampaign.target_product.Id}`);
-                    setSelectedCampaign(null);
+                    if (activeProduct?.Id) {
+                      navigate(`/product/${activeProduct.Id}`);
+                      setSelectedCampaign(null);
+                    }
                   }}
+                  style={{ cursor: activeProduct?.Id ? 'pointer' : 'default' }}
                 >
                   <div className={styles.targetProductImageWrapper}>
-                    <img 
-                      src={getImageUrl(selectedCampaign.target_product.ImagePath?.split(',')[0])} 
-                      alt={selectedCampaign.target_product.ProductName}
-                    />
+                    {activeProduct && (activeProduct.ImagePath || activeProduct.images?.[0]) ? (
+                      <img 
+                        src={getProductImageUrl(activeProduct.ImagePath || activeProduct.images?.[0])} 
+                        alt={activeProduct.ProductName || 'Kampanyalı Ürün'}
+                      />
+                    ) : (
+                      <div className={styles.productIconFallback}>🛍️</div>
+                    )}
                   </div>
                   <div className={styles.targetProductInfo}>
+                    <div className={styles.targetProductHeaderRow}>
+                      <span className={styles.targetProductBadge}>Kampanyalı Ürün</span>
+                      {(activeProduct?.ProductCode || activeProduct?.Barcode || selectedCampaign.target_barcode) && (
+                        <span className={styles.targetProductCode}>
+                          Ürün Kodu: <strong>{activeProduct?.ProductCode || activeProduct?.Barcode || selectedCampaign.target_barcode}</strong>
+                        </span>
+                      )}
+                    </div>
                     <div className={styles.targetProductName}>
-                      {selectedCampaign.target_product.ProductName}
+                      {activeProduct?.ProductName || selectedCampaign.gift_product_name || 'Kampanyaya Dahil Ürün'}
                     </div>
-                    <div className={styles.targetProductPrice}>
-                      {selectedCampaign.target_product.SalePrice} TL
-                    </div>
+                    {activeProduct?.SalePrice ? (
+                      <div className={styles.targetProductPrice}>
+                        {Number(activeProduct.SalePrice).toLocaleString('tr-TR')} TL
+                      </div>
+                    ) : null}
                   </div>
-                  <div className={styles.targetProductArrow}>→</div>
+                  {activeProduct?.Id && (
+                    <div className={styles.targetProductArrow} title="Ürüne Git">→</div>
+                  )}
                 </div>
-              ) : selectedCampaign.target_barcode ? (
-                <div className={styles.modalRule}>
-                  ℹ️ Hedef Barkod/Ürün Kodu: <strong>{selectedCampaign.target_barcode}</strong>
-                </div>
-              ) : null}
+              )}
 
               <button 
                 className={styles.actionBtn}

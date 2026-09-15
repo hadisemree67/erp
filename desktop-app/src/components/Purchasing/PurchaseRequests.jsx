@@ -48,7 +48,7 @@ const PurchaseRequests = ({ currentUser }) => {
             const supData = await supRes.json();
             
             if (Array.isArray(matData)) {
-                setMaterials(matData.filter(p => p.Category === 'Hammadde'));
+                setMaterials(matData);
             }
             if (supData && Array.isArray(supData.data)) {
                 setSuppliers(supData.data);
@@ -390,14 +390,35 @@ const PurchaseRequests = ({ currentUser }) => {
                                             {req.status === 'Bekliyor' ? (
                                                 <div className="action-container" style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                                                     <button 
-                                                        onClick={() => setOrderModal({ 
-                                                            isOpen: true, 
-                                                            request: req, 
-                                                            quantity: req.quantity || '', 
-                                                            description: '', 
-                                                            supplier_email: req.supplier_email || '', 
-                                                            supplier_id: req.supplier_id || '' 
-                                                        })}
+                                                        onClick={() => {
+                                                            let supId = req.supplier_id ? String(req.supplier_id) : '';
+                                                            let supEmail = req.supplier_email || '';
+
+                                                            // Eğer talepte tedarikçi yoksa, materials listesinden bu ürünün tanımlı tedarikçisini bul
+                                                            if (!supId) {
+                                                                const mat = materials.find(m => m.ProductName === req.product_name);
+                                                                const primarySup = mat?.suppliers?.find(s => s.is_primary === 1) || mat?.suppliers?.[0];
+                                                                if (primarySup) {
+                                                                    supId = String(primarySup.supplier_id);
+                                                                } else if (mat?.supplier_id) {
+                                                                    supId = String(mat.supplier_id);
+                                                                }
+                                                            }
+
+                                                            if (supId && !supEmail) {
+                                                                const foundSup = suppliers.find(s => String(s.id || s.Id) === String(supId));
+                                                                if (foundSup) supEmail = foundSup.Email || foundSup.email || '';
+                                                            }
+
+                                                            setOrderModal({ 
+                                                                isOpen: true, 
+                                                                request: req, 
+                                                                quantity: req.quantity || '', 
+                                                                description: '', 
+                                                                supplier_email: supEmail, 
+                                                                supplier_id: supId 
+                                                            });
+                                                        }}
                                                         style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center', backgroundColor: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s' }}
                                                         title="Satın Almayı Onayla"
                                                     >
@@ -445,6 +466,30 @@ const PurchaseRequests = ({ currentUser }) => {
                                     onChange={(e) => setOrderModal({...orderModal, quantity: e.target.value})}
                                     style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px' }}
                                 />
+                            </div>
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', fontSize: '13px', color: '#475569', marginBottom: '6px', fontWeight: '500' }}>Tedarikçi *</label>
+                                <select 
+                                    value={orderModal.supplier_id || ''}
+                                    onChange={(e) => {
+                                        const selectedId = e.target.value;
+                                        const foundSup = suppliers.find(s => String(s.id || s.Id) === String(selectedId));
+                                        setOrderModal({
+                                            ...orderModal,
+                                            supplier_id: selectedId,
+                                            supplier_email: foundSup ? (foundSup.Email || foundSup.email || '') : orderModal.supplier_email
+                                        });
+                                    }}
+                                    required
+                                    style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', backgroundColor: 'white', fontSize: '13px' }}
+                                >
+                                    <option value="">Tedarikçi Seçin...</option>
+                                    {suppliers.map(s => (
+                                        <option key={s.id || s.Id} value={String(s.id || s.Id)}>
+                                            {s.SupplierName} {s.Email ? `(${s.Email})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div style={{ marginBottom: '16px' }}>
                                 <label style={{ display: 'block', fontSize: '13px', color: '#475569', marginBottom: '6px', fontWeight: '500' }}>Tedarikçi E-posta *</label>

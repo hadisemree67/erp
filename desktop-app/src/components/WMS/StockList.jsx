@@ -180,6 +180,10 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
     };
 
   const handleDeleteStock = async (id) => {
+      if (!id) {
+          alert('Silinecek geçerli bir stok kaydı bulunamadı.');
+          return;
+      }
       if (!window.confirm('Bu stok bakiye kaydını tamamen silmek istediğinize emin misiniz?')) return;
       try {
           const response = await apiFetch(`${import.meta.env.VITE_API_URL}/api/wms/stock/${id}`, { 
@@ -188,12 +192,13 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
           });
           const data = await response.json();
           if (data.success) {
+              setSelectedGroup(null);
               fetchStockList();
           } else {
               alert(data.message || 'Silme başarısız.');
           }
       } catch (err) {
-          alert('Sunucu hatası.');
+          alert('Sunucu hatası: ' + (err.message || 'Bağlantı kurulamadı.'));
       }
   };
 
@@ -310,8 +315,10 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                 batches: []
             };
         }
-        acc[key].total_quantity += item.quantity;
-        acc[key].batches.push(item);
+        acc[key].total_quantity += (item.quantity || 0);
+        if (item.balance_id) {
+            acc[key].batches.push(item);
+        }
         return acc;
     }, {})).map(group => {
         // Sort batches by FIFO (Expiration Date first, then ID or something else)
@@ -777,65 +784,71 @@ const StockList = ({ currentUser, initialEntryVisible = false }) => {
                   
                   {/* Drawer Body */}
                   <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {selectedGroup.batches.map((batch, index) => {
-                          const isFirstOut = index === 0 && (batch.expiration_date || batch.batch_number || selectedGroup.batches.length > 1);
-                          const totalOnShelf = selectedGroup.batches
-                              .filter(b => b.warehouse_name === batch.warehouse_name && b.shelf_code === batch.shelf_code)
-                              .reduce((sum, b) => sum + b.quantity, 0);
+                      {selectedGroup.batches.length === 0 ? (
+                          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+                              <p style={{ margin: 0, fontWeight: '500' }}>Bu ürüne ait depoda/rafta aktif stok kaydı bulunmuyor.</p>
+                          </div>
+                      ) : (
+                          selectedGroup.batches.map((batch, index) => {
+                              const isFirstOut = index === 0 && (batch.expiration_date || batch.batch_number || selectedGroup.batches.length > 1);
+                              const totalOnShelf = selectedGroup.batches
+                                  .filter(b => b.warehouse_name === batch.warehouse_name && b.shelf_code === batch.shelf_code)
+                                  .reduce((sum, b) => sum + b.quantity, 0);
 
-                          return (
-                              <div key={batch.balance_id} style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#fff', position: 'relative' }}>
-                                  {isFirstOut && (
-                                      <div style={{ color: '#10b981', fontSize: '12px', fontWeight: '600', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                          FEFO (İlk Çıkacak)
-                                      </div>
-                                  )}
-                                  
-                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', color: '#475569' }}>
-                                      <div>
-                                          <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Raf Konumu</div>
-                                          <div style={{ color: '#0f172a', fontWeight: '600' }}>{batch.warehouse_name} / {batch.shelf_code}</div>
-                                      </div>
-                                      <div>
-                                          <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Miktar (Bu Parti)</div>
-                                          <div style={{ color: '#0f172a', fontWeight: '600', fontSize: '15px' }}>
-                                              {batch.quantity} <span style={{ fontSize: '13px', color: '#0369a1' }}>{batch.unit_type || 'Adet'}</span>
+                              return (
+                                  <div key={batch.balance_id} style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#fff', position: 'relative' }}>
+                                      {isFirstOut && (
+                                          <div style={{ color: '#10b981', fontSize: '12px', fontWeight: '600', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                              FEFO (İlk Çıkacak)
                                           </div>
-                                          {batch.shelf_max_capacity > 0 && (
-                                              <div style={{ color: '#10b981', fontSize: '12px', fontWeight: '600', marginTop: '4px' }}>
-                                                  Raf Toplamı: {totalOnShelf} / {batch.shelf_max_capacity} (%{Math.min(((totalOnShelf / batch.shelf_max_capacity) * 100), 100).toFixed(1)} Dolu)
+                                      )}
+                                      
+                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', color: '#475569' }}>
+                                          <div>
+                                              <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Raf Konumu</div>
+                                              <div style={{ color: '#0f172a', fontWeight: '600' }}>{batch.warehouse_name} / {batch.shelf_code}</div>
+                                          </div>
+                                          <div>
+                                              <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Miktar (Bu Parti)</div>
+                                              <div style={{ color: '#0f172a', fontWeight: '600', fontSize: '15px' }}>
+                                                  {batch.quantity} <span style={{ fontSize: '13px', color: '#0369a1' }}>{batch.unit_type || 'Adet'}</span>
                                               </div>
-                                          )}
-                                          {batch.unit_type && batch.unit_type !== 'Adet' && batch.package_capacity > 0 && (
-                                              <div style={{ color: '#64748b', fontSize: '12px', marginTop: '2px' }}>
-                                                  ({Math.ceil(batch.quantity / batch.package_capacity)} {batch.package_name || 'Kap'})
-                                              </div>
-                                          )}
+                                              {batch.shelf_max_capacity > 0 && (
+                                                  <div style={{ color: '#10b981', fontSize: '12px', fontWeight: '600', marginTop: '4px' }}>
+                                                      Raf Toplamı: {totalOnShelf} / {batch.shelf_max_capacity} (%{Math.min(((totalOnShelf / batch.shelf_max_capacity) * 100), 100).toFixed(1)} Dolu)
+                                                  </div>
+                                              )}
+                                              {batch.unit_type && batch.unit_type !== 'Adet' && batch.package_capacity > 0 && (
+                                                  <div style={{ color: '#64748b', fontSize: '12px', marginTop: '2px' }}>
+                                                      ({Math.ceil(batch.quantity / batch.package_capacity)} {batch.package_name || 'Kap'})
+                                                  </div>
+                                              )}
+                                          </div>
+                                          <div>
+                                              <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Parti No</div>
+                                              <div style={{ color: '#0f172a', fontWeight: '500' }}>{batch.batch_number || '-'}</div>
+                                          </div>
+                                          <div>
+                                              <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Son Kullanma (SKT)</div>
+                                              <div style={{ color: '#0f172a', fontWeight: '500' }}>{batch.expiration_date ? new Date(batch.expiration_date).toLocaleDateString('tr-TR') : '-'}</div>
+                                          </div>
                                       </div>
-                                      <div>
-                                          <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Parti No</div>
-                                          <div style={{ color: '#0f172a', fontWeight: '500' }}>{batch.batch_number || '-'}</div>
-                                      </div>
-                                      <div>
-                                          <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Son Kullanma (SKT)</div>
-                                          <div style={{ color: '#0f172a', fontWeight: '500' }}>{batch.expiration_date ? new Date(batch.expiration_date).toLocaleDateString('tr-TR') : '-'}</div>
-                                      </div>
-                                  </div>
 
-                                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #e2e8f0' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f8fafc', padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                          <button onClick={() => { setSelectedGroup(null); handleEditStock(batch); }} title="Düzenle" style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center' }} onMouseOver={e => e.currentTarget.style.color = '#3b82f6'} onMouseOut={e => e.currentTarget.style.color = '#334155'}>
-                                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                          </button>
-                                          <button onClick={() => { setSelectedGroup(null); handleDeleteStock(batch.balance_id); }} title="Sil" style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center' }} onMouseOver={e => e.currentTarget.style.color = '#ef4444'} onMouseOut={e => e.currentTarget.style.color = '#334155'}>
-                                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                          </button>
+                                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed #e2e8f0' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#f8fafc', padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                              <button onClick={() => handleEditStock(batch)} title="Düzenle" style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center' }} onMouseOver={e => e.currentTarget.style.color = '#3b82f6'} onMouseOut={e => e.currentTarget.style.color = '#334155'}>
+                                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                              </button>
+                                              <button onClick={() => handleDeleteStock(batch.balance_id)} title="Sil" style={{ background: 'none', border: 'none', color: '#334155', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center' }} onMouseOver={e => e.currentTarget.style.color = '#ef4444'} onMouseOut={e => e.currentTarget.style.color = '#334155'}>
+                                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                              </button>
+                                          </div>
                                       </div>
                                   </div>
-                              </div>
-                          );
-                      })}
+                              );
+                          })
+                      )}
                   </div>
               </div>
           </div>

@@ -14,8 +14,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-// Bilgisayarın yerel ağ IP adresi (Wi-Fi)
-const DEFAULT_URL = 'http://192.168.10.186:3000/api';
+// Bilgisayarın yerel ağ IP adresi (Wi-Fi) veya Emülatör localhost adresi
+const DEFAULT_URL = 'http://10.0.2.2:3000/api';
 let configuredUrl = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
 
 // URL'in sonunun /api ile bittiğinden emin ol

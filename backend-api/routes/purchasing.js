@@ -19,15 +19,64 @@ const authMiddleware = require('../middleware/auth');
 const { checkRole, checkPermission } = require('../middleware/rbac');
 const crypto = require('crypto');
 const { logActivity } = require('../utils/logger');
+const { calculateShelf3D } = require('../utils/wmsUtils');
+
+// GÜVENLİK VE VERİTABANI: Eksik sütunların varlığını garantiye al (Crash önleme)
+db.query("ALTER TABLE purchase_orders ADD COLUMN action_token VARCHAR(255) NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN RelatedId INT NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN location_id INT NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN supplier_id INT NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN unit_price DECIMAL(15, 4) NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN batch_number VARCHAR(100) NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN expiration_date DATE NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN shelf_code VARCHAR(100) NULL").catch(() => {});
+db.query("ALTER TABLE stockmovements ADD COLUMN warehouse_id INT NULL").catch(() => {});
+db.query("ALTER TABLE wms_stock_balances ADD COLUMN supplier_id INT NULL").catch(() => {});
+db.query("ALTER TABLE wms_stock_balances ADD COLUMN unit_price DECIMAL(15, 4) NULL").catch(() => {});
+
+// Otomatik olarak eksik tedarikçili talepleri ürünün tanımlı tedarikçisiyle eşitle
+const syncMissingSuppliers = async () => {
+    try {
+        await db.query(`
+            UPDATE purchase_requests pr
+            JOIN products p ON (p.ProductName = pr.product_name OR (pr.product_id IS NOT NULL AND p.Id = pr.product_id))
+            JOIN (
+                SELECT ps1.product_id, ps1.supplier_id 
+                FROM product_suppliers ps1
+                WHERE ps1.id = (
+                    SELECT ps2.id FROM product_suppliers ps2 
+                    WHERE ps2.product_id = ps1.product_id 
+                    ORDER BY ps2.is_primary DESC, ps2.id ASC LIMIT 1
+                )
+            ) best_ps ON best_ps.product_id = p.Id
+            SET pr.supplier_id = best_ps.supplier_id
+            WHERE pr.supplier_id IS NULL
+        `);
+    } catch (e) {
+        console.warn('Sync purchase requests suppliers warning:', e.message);
+    }
+};
+syncMissingSuppliers();
 
 // GET /api/purchasing/requests - Tüm satın alma taleplerini listele
 router.get('/requests', authMiddleware, checkPermission('view_procurement'), async (req, res) => {
     try {
         const [rows] = await db.query(`
-            SELECT pr.*, u.name as employee_name, s.SupplierName as supplier_name, s.Email as supplier_email
+            SELECT pr.*, 
+                   u.name as employee_name, 
+                   COALESCE(s.SupplierName, fallback_s.SupplierName) as supplier_name, 
+                   COALESCE(s.Email, fallback_s.Email) as supplier_email,
+                   COALESCE(pr.supplier_id, fallback_ps.supplier_id, p.supplier_id) as supplier_id
             FROM purchase_requests pr
             LEFT JOIN users u ON pr.employee_id = u.id
             LEFT JOIN suppliers s ON pr.supplier_id = s.id
+            LEFT JOIN products p ON (p.ProductName = pr.product_name OR (pr.product_id IS NOT NULL AND p.Id = pr.product_id))
+            LEFT JOIN product_suppliers fallback_ps ON fallback_ps.id = (
+                SELECT ps2.id FROM product_suppliers ps2 
+                WHERE ps2.product_id = p.Id 
+                ORDER BY ps2.is_primary DESC, ps2.id ASC LIMIT 1
+            )
+            LEFT JOIN suppliers fallback_s ON fallback_s.id = COALESCE(fallback_ps.supplier_id, p.supplier_id)
             ORDER BY pr.created_at DESC
         `);
         res.json({ success: true, data: rows });
@@ -38,7 +87,7 @@ router.get('/requests', authMiddleware, checkPermission('view_procurement'), asy
 });
 
 // POST /api/purchasing/requests - Yeni bir satın alma talebi oluştur
-router.post('/requests', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
+router.post('/requests', authMiddleware, checkRole(['Depo', 'Satın Alma', 'Yönetici'], 'procurement_request'), async (req, res) => {
     const { employee_id, product_name, quantity, description, supplier_id } = req.body;
 
     if (!product_name || !quantity) {
@@ -60,7 +109,7 @@ router.post('/requests', authMiddleware, checkPermission('procurement_request'),
 });
 
 // PUT /api/purchasing/requests/:id/status - Talep durumunu güncelle
-router.put('/requests/:id/status', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
+router.put('/requests/:id/status', authMiddleware, checkRole(['Depo', 'Satın Alma', 'Yönetici'], 'procurement_request'), async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Talep ID.' });
     const { status } = req.body; // 'Bekliyor', 'Onaylandı', 'Reddedildi'
@@ -89,7 +138,7 @@ router.put('/requests/:id/status', authMiddleware, checkPermission('procurement_
 });
 
 // POST /api/purchasing/requests/:id/send-order - E-posta gönder ve satın alma siparişi oluştur
-router.post('/requests/:id/send-order', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
+router.post('/requests/:id/send-order', authMiddleware, checkRole(['Depo', 'Satın Alma', 'Yönetici'], 'procurement_request'), async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Talep ID.' });
     const { quantity, description, supplier_id, supplier_email, product_name } = req.body;
@@ -236,48 +285,35 @@ router.get('/orders/action', async (req, res) => {
         const safeQuantity = escapeHtml(order.quantity);
         const safeCurrentStatus = escapeHtml(order.status);
 
-        // Eğer zaten bu durumdaysa doğrudan bilgi ver
-        if (order.status === status) {
-            return res.send(`
-                <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bilgi</title></head>
-                <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 50px; background-color: #f8fafc;">
-                    <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto;">
-                        <h1 style="color: #0284c7; font-size: 40px; margin: 0;">ℹ️</h1>
-                        <h2 style="color: #0f172a; margin-top: 10px;">Sipariş Zaten "${safeStatus}"</h2>
-                        <p style="color: #64748b; font-size: 16px;"><strong>${safeProductName}</strong> (${safeQuantity} adet) için durum zaten kaydedilmiş.</p>
-                        <p style="color: #94a3b8; font-size: 14px; margin-top: 25px;">Bu pencereyi kapatabilirsiniz.</p>
-                    </div>
-                </body></html>
-            `);
-        }
+        // Sipariş durumunu doğrudan güncelle
+        await db.query(`
+            UPDATE purchase_orders 
+            SET status = ? 
+            WHERE action_token = ?
+        `, [status, token]);
 
-        // Onay formu (Botların otomatik tıklamasını engeller, insan onayını zorunlu kılar)
+        await logActivity(null, 'UPDATE', 'purchase_orders', order.id, `Tedarikçi sipariş durumunu mail linki üzerinden güncelledi: ${status}`);
+
         let btnColor = '#2563eb';
         if (status === 'Hazırlandı') btnColor = '#059669';
         if (status === 'Kargoya Verildi') btnColor = '#d97706';
 
         res.send(`
-            <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sipariş Onayı</title></head>
+            <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Sipariş Durumu Güncellendi</title></head>
             <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; text-align: center; padding: 50px; background-color: #f8fafc;">
-                <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; text-align: left;">
-                    <h2 style="color: #0f172a; margin-top: 0; text-align: center;">Sipariş Durumu Onayı</h2>
-                    <p style="color: #64748b; font-size: 15px; text-align: center;">Aşağıdaki siparişin durumunu güncellemek üzeresiniz:</p>
+                <div style="background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); max-width: 500px; margin: 0 auto; text-align: center;">
+                    <h1 style="color: ${btnColor}; font-size: 48px; margin: 0;">✓</h1>
+                    <h2 style="color: #0f172a; margin-top: 10px;">Sipariş Durumu Güncellendi!</h2>
                     
-                    <div style="background: #f1f5f9; padding: 18px; border-radius: 8px; margin: 20px 0; font-size: 15px; color: #334155; line-height: 1.8;">
+                    <div style="background: #f1f5f9; padding: 18px; border-radius: 8px; margin: 20px 0; font-size: 15px; color: #334155; line-height: 1.8; text-align: left;">
                         <div><strong>📦 Ürün:</strong> ${safeProductName}</div>
                         <div><strong>🔢 Miktar:</strong> ${safeQuantity} Adet</div>
-                        <div><strong>📍 Mevcut Durum:</strong> <span style="background: #e2e8f0; padding: 2px 8px; border-radius: 4px;">${safeCurrentStatus}</span></div>
                         <div><strong>🚀 Yeni Durum:</strong> <strong style="color: ${btnColor}; font-size: 16px;">${safeStatus}</strong></div>
                     </div>
 
-                    <form method="POST" action="/api/purchasing/orders/action" style="margin-top: 25px;">
-                        <input type="hidden" name="token" value="${safeToken}" />
-                        <input type="hidden" name="status" value="${safeStatus}" />
-                        <button type="submit" style="background-color: ${btnColor}; color: white; border: none; padding: 14px 28px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            Siparişi "${safeStatus}" Olarak Güncelle
-                        </button>
-                    </form>
-                    <p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 15px;">Bu işlem sistemde otomatik olarak kaydedilecektir.</p>
+                    <p style="color: #059669; font-size: 16px; font-weight: 600;">Sipariş durumu başarıyla "${safeStatus}" olarak sisteme işlendi.</p>
+                    <p style="color: #64748b; font-size: 14px; margin-top: 10px;">ERP sistemimizde tedarik siparişiniz anında güncellenmiştir.</p>
+                    <p style="color: #94a3b8; font-size: 12px; margin-top: 25px;">Bu pencereyi kapatabilirsiniz.</p>
                 </div>
             </body></html>
         `);
@@ -361,7 +397,7 @@ router.get('/orders', authMiddleware, checkPermission('view_procurement'), async
 });
 
 // PUT /api/purchasing/orders/:id/status - Sipariş durumunu güncelle
-router.put('/orders/:id/status', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
+router.put('/orders/:id/status', authMiddleware, checkRole(['Depo', 'Satın Alma', 'Yönetici'], 'procurement_request'), async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const { status } = req.body;
@@ -390,7 +426,7 @@ router.put('/orders/:id/status', authMiddleware, checkPermission('procurement_re
 });
 
 // POST /api/purchasing/orders/:id/receive - Depoya mal kabul işlemini gerçekleştir
-router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_request'),  checkRole(['Depo']), async (req, res) => {
+router.post('/orders/:id/receive', authMiddleware, checkRole(['Depo', 'Satın Alma', 'Yönetici'], 'procurement_request'), async (req, res) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ success: false, message: 'Geçersiz Sipariş ID.' });
     const { quantity, shelfAllocations, location_id, warehouse_id, shelf_code, batch_number, expiration_date, user_id } = req.body;
@@ -435,17 +471,85 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
         }
 
         // 2. We need the product ID from products table matching order.product_name
-        const [products] = await conn.query('SELECT Id FROM products WHERE ProductName = ?', [order.product_name]);
+        const [products] = await conn.query('SELECT * FROM products WHERE ProductName = ? OR Id = ? LIMIT 1', [order.product_name, order.product_id || 0]);
         if (products.length === 0) {
             await conn.rollback();
             conn.release();
             conn = null;
             return res.status(404).json({ success: false, message: 'Siparişteki ürün, malzeme listesinde bulunamadı.' });
         }
-        const productId = products[0].Id;
+        const product = products[0];
+        const productId = product.Id;
         const [uRows] = await conn.query('SELECT id FROM users LIMIT 1');
         const fallbackUserId = uRows.length > 0 ? uRows[0].id : 1;
         const finalUserId = user_id || order.employee_id || fallbackUserId;
+
+        // 2.1. Raf Kapasite Kontrolü (Capacity Validation)
+        const prodVol = parseFloat(product.Volume) || 0;
+        const pW = parseFloat(product.Width) || 0;
+        const pH = parseFloat(product.Height) || 0;
+        const pD = parseFloat(product.Depth) || 0;
+        const isStackable = product.is_stackable === 1;
+        const maxStackLimit = parseInt(product.max_stack_limit) || 1;
+        const pCap = parseFloat(product.package_capacity) || 1;
+
+        for (const alloc of allocs) {
+            const qty = parseFloat(alloc.quantity) || 0;
+            if (qty <= 0) continue;
+            const whId = alloc.warehouse_id || warehouse_id;
+            const shCode = alloc.shelf_code || shelf_code;
+
+            if (whId && shCode) {
+                const [shelfRows] = await conn.query(
+                    'SELECT max_volume, width, height, depth FROM warehouse_shelves WHERE warehouse_id = ? AND shelf_code = ?',
+                    [whId, shCode]
+                );
+
+                if (shelfRows.length > 0) {
+                    const maxVol = parseFloat(shelfRows[0].max_volume) || 0;
+                    const sW = parseFloat(shelfRows[0].width) || 0;
+                    const sH = parseFloat(shelfRows[0].height) || 0;
+                    const sD = parseFloat(shelfRows[0].depth) || 0;
+
+                    if (maxVol > 0 || (sW > 0 && sH > 0 && sD > 0)) {
+                        const [filledRows] = await conn.query(
+                            'SELECT b.product_id, b.quantity, p.Volume, p.package_capacity FROM wms_stock_balances b LEFT JOIN products p ON b.product_id = p.Id WHERE b.warehouse_id = ? AND b.shelf_code = ?',
+                            [whId, shCode]
+                        );
+                        let currentFilledVol = 0;
+                        let currentPackages = 0;
+                        for (const fr of filledRows) {
+                            let fVol = parseFloat(fr.Volume) || 0;
+                            if (fr.product_id && fr.product_id.toString() === productId.toString() && prodVol > 0) {
+                                fVol = prodVol;
+                            }
+                            let fCap = parseFloat(fr.package_capacity) || 1;
+                            if (fCap <= 0) fCap = 1;
+                            const pkgs = Math.ceil((parseFloat(fr.quantity) || 0) / fCap);
+                            currentPackages += pkgs;
+                            currentFilledVol += pkgs * fVol;
+                        }
+
+                        const calc = calculateShelf3D({
+                            sW, sH, sD, maxVolume: maxVol,
+                            pW, pH, pD, productVolume: prodVol,
+                            isStackable, maxStackLimit, pCap,
+                            currentPackages, currentFilledVol
+                        });
+
+                        if (calc.maxItems !== Infinity && calc.maxItems !== null && qty > calc.maxItems) {
+                            await conn.rollback();
+                            conn.release();
+                            conn = null;
+                            return res.status(400).json({
+                                success: false,
+                                message: `Kapasite Uyarısı: "${shCode}" rafının alabileceği maksimum ürün adedi ${calc.maxItems} adettir. Girdiğiniz ${qty} adet bu rafa sığmamaktadır. Lütfen bu raf için en fazla ${calc.maxItems} adet giriniz ve kalan miktar için (+ Raf Ekle) butonunu kullanarak başka bir raf seçiniz.`
+                            });
+                        }
+                    }
+                }
+            }
+        }
 
         // 3. Loop over allocations and save balances & movements
         let totalReceived = 0;
@@ -480,25 +584,21 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
                 );
             }
 
-            // Location is managed via warehouse_id and shelf_code
-            const validLocationId = null;
-
-            // Insert into stockmovements
+            // Insert into stockmovements (Standard WMS columns)
+            const movementDesc = `Mal Kabul (Satın Alma Sipariş No: #${order.id})`;
             await conn.query(`
                 INSERT INTO stockmovements 
-                (ProductId, UserId, MovementType, Quantity, location_id, warehouse_id, shelf_code, batch_number, expiration_date, RelatedId, Description, supplier_id, unit_price)
-                VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (ProductId, UserId, MovementType, Quantity, warehouse_id, shelf_code, batch_number, expiration_date, Description, supplier_id, unit_price)
+                VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
                 productId,
-                finalUserId, // Dynamic valid user ID
+                finalUserId,
                 qty,
-                validLocationId, // Valid wms_locations id or null
                 whId,
                 shCode || '',
                 bNum || null,
                 expDate || null,
-                order.id, // RelatedId points to purchase_order id
-                'Mal Kabul (Satın Alma Siparişi)',
+                movementDesc,
                 order.supplier_id || null,
                 order.unit_price || 0
             ]);
@@ -548,7 +648,10 @@ router.post('/orders/:id/receive', authMiddleware, checkPermission('procurement_
     } catch (err) {
         if (conn) { await conn.rollback(); conn.release(); conn = null; }
         console.error('Error receiving goods:', err);
-        res.status(500).json({ success: false, message: 'Mal kabul işlemi sırasında sunucu hatası oluştu.' });
+        res.status(500).json({ 
+            success: false, 
+            message: err.message ? `Mal kabul sırasında hata oluştu: ${err.message}` : 'Mal kabul işlemi sırasında sunucu hatası oluştu.' 
+        });
     }
 });
 

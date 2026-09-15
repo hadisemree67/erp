@@ -97,11 +97,13 @@ const GoodsReceipt = () => {
         const allocs = modal.allocations || [{ shelf_code: modal.location_id || '', quantity: modal.received_quantity || '' }];
         let changed = false;
         const usedShelves = allocs.map(a => a.shelf_code).filter(Boolean);
+        const remOrderQty = Math.max(0, (parseFloat(modal.order?.quantity) || 0) - (parseFloat(modal.order?.received_quantity) || 0));
 
-        const newAllocs = allocs.map((alloc) => {
+        const newAllocs = allocs.map((alloc, idx) => {
             const capCurrent = allShelvesCapacity[alloc.shelf_code];
             const isCurrentFull = alloc.shelf_code && capCurrent && (capCurrent.maxItems === 0 || !capCurrent.physicallyFits);
 
+            let chosenShelf = alloc.shelf_code;
             if (!alloc.shelf_code || isCurrentFull) {
                 const sortedShelves = [...locations].sort((aObj, bObj) => {
                     const a = typeof aObj === 'string' ? aObj : aObj.shelfCode;
@@ -141,11 +143,28 @@ const GoodsReceipt = () => {
                     if (bestShelf && !isBestFull && !usedShelves.includes(bestShelf)) {
                         usedShelves.push(bestShelf);
                         changed = true;
-                        return { ...alloc, shelf_code: bestShelf };
+                        chosenShelf = bestShelf;
+                        break;
                     }
                 }
             }
-            return alloc;
+
+            // Raf seçildiğinde miktar maksimum olsun:
+            let qty = alloc.quantity;
+            if (chosenShelf && allShelvesCapacity[chosenShelf]) {
+                const cap = allShelvesCapacity[chosenShelf];
+                if (cap && cap.maxItems > 0 && cap.maxItems !== Infinity) {
+                    if (!qty || parseFloat(qty) > cap.maxItems || (idx === 0 && allocs.length === 1 && parseFloat(qty) === remOrderQty && remOrderQty > cap.maxItems)) {
+                        const targetQty = Math.min(remOrderQty, cap.maxItems);
+                        if (targetQty !== parseFloat(qty)) {
+                            qty = targetQty;
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            return { ...alloc, shelf_code: chosenShelf, quantity: qty };
         });
 
         if (changed) {
@@ -278,9 +297,17 @@ const GoodsReceipt = () => {
                 }
             }
 
+            let initialQty = remaining > 0 ? remaining : '';
+            if (nextBestShelf && allShelvesCapacity[nextBestShelf]) {
+                const cap = allShelvesCapacity[nextBestShelf];
+                if (cap && cap.maxItems > 0 && cap.maxItems !== Infinity && remaining > 0) {
+                    initialQty = Math.min(remaining, cap.maxItems);
+                }
+            }
+
             return {
                 ...prev,
-                allocations: [...allocs, { shelf_code: nextBestShelf, quantity: remaining > 0 ? remaining : '' }]
+                allocations: [...allocs, { shelf_code: nextBestShelf, quantity: initialQty }]
             };
         });
     };
@@ -298,8 +325,31 @@ const GoodsReceipt = () => {
     const handleAllocationChange = (index, field, value) => {
         setModal(prev => {
             const allocs = prev.allocations || [{ shelf_code: prev.location_id || '', quantity: prev.received_quantity || '' }];
+            const remOrderQty = Math.max(0, (parseFloat(prev.order?.quantity) || 0) - (parseFloat(prev.order?.received_quantity) || 0));
+
             const newAllocs = allocs.map((a, i) => {
                 if (i === index) {
+                    if (field === 'shelf_code') {
+                        const newShelfCode = value;
+                        const cap = allShelvesCapacity[newShelfCode];
+
+                        // Diğer satırların toplam tahsis ettiği miktar
+                        const otherAllocTotal = allocs
+                            .filter((_, otherIdx) => otherIdx !== index)
+                            .reduce((sum, item) => sum + (parseFloat(item.quantity) || 0), 0);
+                        const remainingForThisRow = Math.max(0, remOrderQty - otherAllocTotal);
+
+                        let newQty = a.quantity;
+                        if (cap && cap.maxItems > 0 && cap.maxItems !== Infinity) {
+                            // Raf seçildiğinde bu satırın miktarını rafın maksimum kapasitesine ayarla
+                            const target = remainingForThisRow > 0 ? remainingForThisRow : remOrderQty;
+                            newQty = Math.min(target, cap.maxItems);
+                        } else if (!newQty || parseFloat(newQty) === 0) {
+                            newQty = remainingForThisRow > 0 ? remainingForThisRow : remOrderQty;
+                        }
+
+                        return { ...a, shelf_code: newShelfCode, quantity: newQty };
+                    }
                     return { ...a, [field]: value };
                 }
                 return a;
@@ -323,6 +373,17 @@ const GoodsReceipt = () => {
             if (totalQty > remOrderQty) {
                 alert(`Hata: Girdiğiniz toplam miktar (${totalQty} Adet), kalan sipariş miktarını (${remOrderQty} Adet) aşamaz! Lütfen miktarları kontrol ediniz.`);
                 return;
+            }
+
+            // Raf kapasite kontrolleri
+            for (const a of allocs) {
+                const cap = allShelvesCapacity[a.shelf_code];
+                const maxCap = (cap && cap.maxItems !== Infinity && cap.maxItems > 0) ? cap.maxItems : null;
+                const qtyNum = parseFloat(a.quantity) || 0;
+                if (maxCap !== null && qtyNum > maxCap) {
+                    alert(`Uyarı: "${a.shelf_code}" rafının alabileceği maksimum ürün miktarı ${maxCap} adettir. Girdiğiniz ${qtyNum} adet bu rafın kapasitesini aşıyor!\n\nLütfen bu raf için miktarı en fazla ${maxCap} olarak düzenleyip, kalan miktar için "(+ Raf Ekle)" butonunu kullanarak yeni bir raf seçiniz.`);
+                    return;
+                }
             }
 
             const res = await apiFetch(`${import.meta.env.VITE_API_URL}/api/purchasing/orders/${modal.order.id}/receive`, {
@@ -352,7 +413,7 @@ const GoodsReceipt = () => {
             }
         } catch (err) {
             console.error(err);
-            alert('Ağ hatası oluştu.');
+            alert('Ağ hatası: Sunucuya bağlanırken sorun oluştu.');
         }
     };
 
@@ -461,10 +522,38 @@ const GoodsReceipt = () => {
                                     const remOrderQty = Math.max(0, (parseFloat(modal.order?.quantity) || 0) - alreadyRec);
                                     const remaining = Math.max(0, remOrderQty - totalAllocated);
                                     const isExcess = totalAllocated > remOrderQty;
+
+                                    const hasShelfOverCapacity = allocs.some(a => {
+                                        const cap = allShelvesCapacity[a.shelf_code];
+                                        return cap && cap.maxItems > 0 && cap.maxItems !== Infinity && parseFloat(a.quantity) > cap.maxItems;
+                                    });
+
+                                    let bannerBg = '#e0f2fe';
+                                    let bannerBorder = '#bae6fd';
+                                    let bannerColor = '#0369a1';
+                                    let bannerText = `🔵 Dağıtılacak Kalan: ${remaining} Adet`;
+
+                                    if (isExcess) {
+                                        bannerBg = '#fee2e2';
+                                        bannerBorder = '#fecaca';
+                                        bannerColor = '#dc2626';
+                                        bannerText = `🔴 HATA: Kalan miktardan ${totalAllocated - remOrderQty} Adet fazla girdiniz!`;
+                                    } else if (hasShelfOverCapacity) {
+                                        bannerBg = '#fef2f2';
+                                        bannerBorder = '#fca5a5';
+                                        bannerColor = '#b91c1c';
+                                        bannerText = `⚠️ DİKKAT: Seçilen rafın kapasitesi aşıldı! (+ Raf Ekle) yaparak dağıtınız.`;
+                                    } else if (remaining === 0) {
+                                        bannerBg = '#dcfce7';
+                                        bannerBorder = '#bbf7d0';
+                                        bannerColor = '#166534';
+                                        bannerText = '🟢 Tümü Tahsis Edildi (0 Kalan)';
+                                    }
+
                                     return (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isExcess ? '#fee2e2' : remaining === 0 ? '#dcfce7' : '#e0f2fe', padding: '10px 14px', borderRadius: '8px', border: `1px solid ${isExcess ? '#fecaca' : remaining === 0 ? '#bbf7d0' : '#bae6fd'}` }}>
-                                            <span style={{ fontSize: '13px', color: isExcess ? '#dc2626' : remaining === 0 ? '#166534' : '#0369a1', fontWeight: '600' }}>
-                                                {isExcess ? `🔴 HATA: Kalan miktardan ${totalAllocated - remOrderQty} Adet fazla girdiniz!` : remaining === 0 ? '🟢 Tümü Tahsis Edildi (0 Kalan)' : `🔵 Dağıtılacak Kalan: ${remaining} Adet`}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: bannerBg, padding: '10px 14px', borderRadius: '8px', border: `1px solid ${bannerBorder}` }}>
+                                            <span style={{ fontSize: '13px', color: bannerColor, fontWeight: '600' }}>
+                                                {bannerText}
                                             </span>
                                             <span style={{ fontSize: '12px', color: '#475569' }}>
                                                 {alreadyRec > 0 ? (
@@ -478,110 +567,143 @@ const GoodsReceipt = () => {
                                 })()}
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    {(modal.allocations || [{ shelf_code: modal.location_id, quantity: modal.received_quantity }]).map((alloc, idx, arr) => (
-                                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: arr.length > 1 ? '1fr 120px 40px' : '1fr 120px', gap: '10px', alignItems: 'flex-end', backgroundColor: idx > 0 ? '#f8fafc' : 'transparent', padding: idx > 0 ? '10px' : '0', borderRadius: '8px', border: idx > 0 ? '1px dashed #cbd5e1' : 'none' }}>
-                                            <div>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                                                    <label style={{ fontSize: '13px', color: '#475569', fontWeight: '500' }}>
-                                                        Raf / Lokasyon {arr.length > 1 ? `#${idx + 1}` : ''} *
-                                                    </label>
-                                                    {idx === arr.length - 1 && (
-                                                        <button type="button" onClick={addAllocation} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0 }}>
-                                                            (+ Raf Ekle)
+                                    {(modal.allocations || [{ shelf_code: modal.location_id, quantity: modal.received_quantity }]).map((alloc, idx, arr) => {
+                                        const cap = allShelvesCapacity[alloc.shelf_code];
+                                        const maxCap = (cap && cap.maxItems !== Infinity && cap.maxItems > 0) ? cap.maxItems : null;
+                                        const isOverCap = maxCap !== null && parseFloat(alloc.quantity) > maxCap;
+                                        const excess = isOverCap ? (parseFloat(alloc.quantity) - maxCap) : 0;
+
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: idx > 0 ? '#f8fafc' : 'transparent', padding: idx > 0 ? '10px' : '0', borderRadius: '8px', border: idx > 0 ? '1px dashed #cbd5e1' : 'none' }}>
+                                                <div style={{ display: 'grid', gridTemplateColumns: arr.length > 1 ? '1fr 120px 40px' : '1fr 120px', gap: '10px', alignItems: 'flex-end' }}>
+                                                    <div>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                                            <label style={{ fontSize: '13px', color: '#475569', fontWeight: '500' }}>
+                                                                Raf / Lokasyon {arr.length > 1 ? `#${idx + 1}` : ''} *
+                                                            </label>
+                                                            {idx === arr.length - 1 && (
+                                                                <button type="button" onClick={addAllocation} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: 0 }}>
+                                                                    (+ Raf Ekle)
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <select 
+                                                            value={alloc.shelf_code} 
+                                                            onChange={(e) => handleAllocationChange(idx, 'shelf_code', e.target.value)} 
+                                                            required 
+                                                            style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px' }}
+                                                        >
+                                                            <option value="">Seçiniz...</option>
+                                                            {(() => {
+                                                                const otherSelectedShelves = arr.filter((_, i) => i !== idx).map(a => a.shelf_code).filter(Boolean);
+                                                                const sortedShelves = [...locations].sort((aObj, bObj) => {
+                                                                    const a = typeof aObj === 'string' ? aObj : aObj.shelfCode;
+                                                                    const b = typeof bObj === 'string' ? bObj : bObj.shelfCode;
+                                                                    const capA = allShelvesCapacity[a];
+                                                                    const capB = allShelvesCapacity[b];
+                                                                    const isFullA = capA && (capA.maxItems === 0 || !capA.physicallyFits);
+                                                                    const isFullB = capB && (capB.maxItems === 0 || !capB.physicallyFits);
+                                                                    
+                                                                    const usedA = otherSelectedShelves.includes(a);
+                                                                    const usedB = otherSelectedShelves.includes(b);
+                                                                    if (usedA && !usedB) return 1;
+                                                                    if (!usedA && usedB) return -1;
+
+                                                                    if (isFullA && !isFullB) return 1;
+                                                                    if (!isFullA && isFullB) return -1;
+                                                                    
+                                                                    const hasSameA = capA && capA.hasSameProduct;
+                                                                    const hasSameB = capB && capB.hasSameProduct;
+                                                                    if (hasSameA && !hasSameB) return -1;
+                                                                    if (!hasSameA && hasSameB) return 1;
+                                                                    
+                                                                    const maxA = capA ? (capA.maxItems === Infinity ? 9999999 : capA.maxItems) : 0;
+                                                                    const maxB = capB ? (capB.maxItems === Infinity ? 9999999 : capB.maxItems) : 0;
+                                                                    if (maxA !== maxB) return maxB - maxA;
+
+                                                                    const effA = capA ? capA.efficiency : 0;
+                                                                    const effB = capB ? capB.efficiency : 0;
+                                                                    return effB - effA;
+                                                                });
+
+                                                                return sortedShelves.map((l, shelfIdx) => {
+                                                                    const s = typeof l === 'string' ? l : l.shelfCode;
+                                                                    const cap = allShelvesCapacity[s];
+                                                                    const isFull = cap && (cap.maxItems === 0 || !cap.physicallyFits);
+                                                                    const isRecommended = !isFull && shelfIdx === 0 && cap && (cap.efficiency > 0 || cap.hasSameProduct || cap.maxItems > 0);
+                                                                    
+                                                                    let text = s;
+                                                                    if (isFull) {
+                                                                        text = `🔴 ${s} (Dolu veya Sığmaz)`;
+                                                                    } else if (isRecommended) {
+                                                                        const tags = [];
+                                                                        if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
+                                                                        tags.push(`Maks. ${cap.maxItems} Adet`);
+                                                                        text = `⭐ ${s} (Önerilen - ${tags.join(', ')})`;
+                                                                    } else if (cap) {
+                                                                        const tags = [`Maks. ${cap.maxItems} Adet`];
+                                                                        if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
+                                                                        text = `${s} (${tags.join(', ')})`;
+                                                                    }
+                                                                    return (
+                                                                        <option key={s} value={s} disabled={isFull} style={{ color: isFull ? '#ef4444' : isRecommended ? '#15803d' : 'inherit', fontWeight: isRecommended ? 'bold' : 'normal' }}>
+                                                                            {text}
+                                                                        </option>
+                                                                    );
+                                                                });
+                                                            })()}
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label style={{ display: 'block', fontSize: '13px', color: '#475569', marginBottom: '6px', fontWeight: '500' }}>Miktar *</label>
+                                                        <input 
+                                                            type="number" 
+                                                            value={alloc.quantity} 
+                                                            onChange={(e) => handleAllocationChange(idx, 'quantity', e.target.value)} 
+                                                            required 
+                                                            min="0.01" 
+                                                            step="0.01"
+                                                            style={{ 
+                                                                width: '100%', 
+                                                                padding: '10px', 
+                                                                border: isOverCap ? '2px solid #ef4444' : '1px solid #cbd5e1', 
+                                                                borderRadius: '8px', 
+                                                                boxSizing: 'border-box',
+                                                                backgroundColor: isOverCap ? '#fff1f2' : 'white'
+                                                            }} 
+                                                        />
+                                                    </div>
+                                                    {arr.length > 1 && (
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => removeAllocation(idx)} 
+                                                            title="Bu rafı sil"
+                                                            style={{ height: '38px', backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
+                                                        >
+                                                            ✕
                                                         </button>
                                                     )}
                                                 </div>
-                                                <select 
-                                                    value={alloc.shelf_code} 
-                                                    onChange={(e) => handleAllocationChange(idx, 'shelf_code', e.target.value)} 
-                                                    required 
-                                                    style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px' }}
-                                                >
-                                                    <option value="">Seçiniz...</option>
-                                                    {(() => {
-                                                        const otherSelectedShelves = arr.filter((_, i) => i !== idx).map(a => a.shelf_code).filter(Boolean);
-                                                        const sortedShelves = [...locations].sort((aObj, bObj) => {
-                                                            const a = typeof aObj === 'string' ? aObj : aObj.shelfCode;
-                                                            const b = typeof bObj === 'string' ? bObj : bObj.shelfCode;
-                                                            const capA = allShelvesCapacity[a];
-                                                            const capB = allShelvesCapacity[b];
-                                                            const isFullA = capA && (capA.maxItems === 0 || !capA.physicallyFits);
-                                                            const isFullB = capB && (capB.maxItems === 0 || !capB.physicallyFits);
-                                                            
-                                                            const usedA = otherSelectedShelves.includes(a);
-                                                            const usedB = otherSelectedShelves.includes(b);
-                                                            if (usedA && !usedB) return 1;
-                                                            if (!usedA && usedB) return -1;
 
-                                                            if (isFullA && !isFullB) return 1;
-                                                            if (!isFullA && isFullB) return -1;
-                                                            
-                                                            const hasSameA = capA && capA.hasSameProduct;
-                                                            const hasSameB = capB && capB.hasSameProduct;
-                                                            if (hasSameA && !hasSameB) return -1;
-                                                            if (!hasSameA && hasSameB) return 1;
-                                                            
-                                                            const maxA = capA ? (capA.maxItems === Infinity ? 9999999 : capA.maxItems) : 0;
-                                                            const maxB = capB ? (capB.maxItems === Infinity ? 9999999 : capB.maxItems) : 0;
-                                                            if (maxA !== maxB) return maxB - maxA;
-
-                                                            const effA = capA ? capA.efficiency : 0;
-                                                            const effB = capB ? capB.efficiency : 0;
-                                                            return effB - effA;
-                                                        });
-
-                                                        return sortedShelves.map((l, shelfIdx) => {
-                                                            const s = typeof l === 'string' ? l : l.shelfCode;
-                                                            const cap = allShelvesCapacity[s];
-                                                            const isFull = cap && (cap.maxItems === 0 || !cap.physicallyFits);
-                                                            const isRecommended = !isFull && shelfIdx === 0 && cap && (cap.efficiency > 0 || cap.hasSameProduct || cap.maxItems > 0);
-                                                            
-                                                            let text = s;
-                                                            if (isFull) {
-                                                                text = `🔴 ${s} (Dolu veya Sığmaz)`;
-                                                            } else if (isRecommended) {
-                                                                const tags = [];
-                                                                if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
-                                                                tags.push(`Maks. ${cap.maxItems} Adet`);
-                                                                text = `⭐ ${s} (Önerilen - ${tags.join(', ')})`;
-                                                            } else if (cap) {
-                                                                const tags = [`Maks. ${cap.maxItems} Adet`];
-                                                                if (cap.hasSameProduct) tags.push('Ürün Zaten Var');
-                                                                text = `${s} (${tags.join(', ')})`;
-                                                            }
-                                                            return (
-                                                                <option key={s} value={s} disabled={isFull} style={{ color: isFull ? '#ef4444' : isRecommended ? '#15803d' : 'inherit', fontWeight: isRecommended ? 'bold' : 'normal' }}>
-                                                                    {text}
-                                                                </option>
-                                                            );
-                                                        });
-                                                    })()}
-                                                </select>
+                                                {/* Kapasite Aşım Uyarısı ve Otomatik Düzeltme Butonu */}
+                                                {isOverCap && (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', fontSize: '12px', color: '#b91c1c' }}>
+                                                        <span>
+                                                            ⚠️ <strong>Kapasite Yetersiz:</strong> Bu raf en fazla <strong>{maxCap} Adet</strong> alabilir ({excess} adet sığmıyor). Kalan miktar için <strong>(+ Raf Ekle)</strong> yapınız.
+                                                        </span>
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => handleAllocationChange(idx, 'quantity', maxCap)}
+                                                            style={{ backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: '8px' }}
+                                                            title="Bu rafın miktarını maksimum kapasitesine ayarla"
+                                                        >
+                                                            Maksimuma ({maxCap}) Çek
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div>
-                                                <label style={{ display: 'block', fontSize: '13px', color: '#475569', marginBottom: '6px', fontWeight: '500' }}>Miktar *</label>
-                                                <input 
-                                                    type="number" 
-                                                    value={alloc.quantity} 
-                                                    onChange={(e) => handleAllocationChange(idx, 'quantity', e.target.value)} 
-                                                    required 
-                                                    min="0.01" 
-                                                    step="0.01"
-                                                    style={{ width: '100%', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', boxSizing: 'border-box' }} 
-                                                />
-                                            </div>
-                                            {arr.length > 1 && (
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => removeAllocation(idx)} 
-                                                    title="Bu rafı sil"
-                                                    style={{ height: '38px', backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}
-                                                >
-                                                    ✕
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -622,23 +744,34 @@ const GoodsReceipt = () => {
                                     const totalAllocated = allocs.reduce((sum, a) => sum + (parseFloat(a.quantity) || 0), 0);
                                     const remOrderQty = Math.max(0, (parseFloat(modal.order?.quantity) || 0) - (parseFloat(modal.order?.received_quantity) || 0));
                                     const isExcess = totalAllocated > remOrderQty;
+                                    const hasShelfOverCapacity = allocs.some(a => {
+                                        const cap = allShelvesCapacity[a.shelf_code];
+                                        return cap && cap.maxItems > 0 && cap.maxItems !== Infinity && parseFloat(a.quantity) > cap.maxItems;
+                                    });
+
+                                    const isBlocked = isExcess || hasShelfOverCapacity;
+
                                     return (
                                         <button 
                                             type="submit" 
-                                            disabled={isExcess}
+                                            disabled={isBlocked}
                                             style={{ 
                                                 padding: '10px 16px', 
-                                                backgroundColor: isExcess ? '#ef4444' : '#059669', 
+                                                backgroundColor: isBlocked ? '#ef4444' : '#059669', 
                                                 color: 'white', 
                                                 border: 'none', 
                                                 borderRadius: '8px', 
-                                                cursor: isExcess ? 'not-allowed' : 'pointer', 
+                                                cursor: isBlocked ? 'not-allowed' : 'pointer', 
                                                 fontWeight: '600',
-                                                opacity: isExcess ? 0.8 : 1
+                                                opacity: isBlocked ? 0.85 : 1
                                             }}
-                                            title={isExcess ? `Kalan sipariş miktarından (${remOrderQty} Adet) fazla ürün eklenemez!` : ''}
+                                            title={isExcess ? `Kalan sipariş miktarından (${remOrderQty} Adet) fazla ürün eklenemez!` : hasShelfOverCapacity ? 'Raf kapasitesini aşan miktarlar var!' : ''}
                                         >
-                                            {isExcess ? '❌ Kalan Miktardan Fazla Girildi (Engellendi)' : 'Onayla ve Envantere Ekle'}
+                                            {isExcess 
+                                                ? '❌ Kalan Miktardan Fazla Girildi (Engellendi)' 
+                                                : hasShelfOverCapacity 
+                                                    ? '⚠️ Raf Kapasitesi Aşıldı (Düzeltiniz)' 
+                                                    : 'Onayla ve Envantere Ekle'}
                                         </button>
                                     );
                                 })()}

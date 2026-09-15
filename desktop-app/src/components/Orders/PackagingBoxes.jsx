@@ -13,6 +13,7 @@
 import React, { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
 import Barcode from 'react-barcode';
+import BarcodePrintModal from '../Common/BarcodePrintModal';
 
 const PackagingBoxes = () => {
     // 1. Durum (State) Tanımlamaları ve Hook'lar
@@ -36,6 +37,10 @@ const PackagingBoxes = () => {
     const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
     const [selectedBoxForBarcode, setSelectedBoxForBarcode] = useState(null);
     const [newBarcode, setNewBarcode] = useState('');
+
+    // Barkod Yazdırma Modal State'leri
+    const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [printBarcodeData, setPrintBarcodeData] = useState({ value: '', title: '' });
 
     // 2. Sayfa Yüklendiğinde Çalışacak İşlemler (useEffect)
 
@@ -321,6 +326,26 @@ const PackagingBoxes = () => {
                                     </td>
                                     <td style={{ padding: '16px', textAlign: 'right' }}>
                                         <div className="action-container" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', alignItems: 'center' }}>
+                                            <button 
+                                                onClick={() => {
+                                                    const bList = (box.barcodes || []).map(b => b.barcode).filter(Boolean);
+                                                    if (bList.length === 0) {
+                                                        alert('Bu kutu için henüz kayıtlı bir barkod bulunmuyor. Önce barkod ekleyin.');
+                                                        setSelectedBoxForBarcode(box);
+                                                        setIsBarcodeModalOpen(true);
+                                                        setNewBarcode('');
+                                                        return;
+                                                    }
+                                                    setPrintBarcodeData({ value: bList, title: `Kutu: ${box.BoxName}` });
+                                                    setPrintModalOpen(true);
+                                                }}
+                                                title="Barkod Görüntüle ve Yazdır" 
+                                                style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px', transition: 'color 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center' }} 
+                                                onMouseOver={e => e.currentTarget.style.color = '#1d4ed8'} 
+                                                onMouseOut={e => e.currentTarget.style.color = '#3b82f6'}
+                                            >
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                            </button>
                                             <button 
                                                 onClick={() => {
                                                     setSelectedBoxForBarcode(box);
@@ -647,13 +672,25 @@ const PackagingBoxes = () => {
                                             <div>
                                                 <Barcode value={b.barcode} height={40} width={1.5} fontSize={14} background="transparent" />
                                             </div>
-                                            <button 
-                                                onClick={() => handleDeleteBarcode(b.id)}
-                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                                                title="Sil"
-                                            >
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                            </button>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <button 
+                                                    onClick={() => {
+                                                        setPrintBarcodeData({ value: b.barcode, title: `Kutu: ${selectedBoxForBarcode.BoxName}` });
+                                                        setPrintModalOpen(true);
+                                                    }}
+                                                    style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: '4px' }}
+                                                    title="Yazdır"
+                                                >
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteBarcode(b.id)}
+                                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                                                    title="Sil"
+                                                >
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                                </button>
+                                            </div>
                                         </li>
                                     ))}
                                 </ul>
@@ -662,6 +699,14 @@ const PackagingBoxes = () => {
                     </div>
                 </div>
             )}
+
+            {/* BARKOD YAZDIRMA MODALI (Ürünlerdeki ile aynı) */}
+            <BarcodePrintModal 
+                isOpen={printModalOpen}
+                onClose={() => setPrintModalOpen(false)}
+                barcodeValue={printBarcodeData.value}
+                title={printBarcodeData.title}
+            />
         </div>
     );
 };

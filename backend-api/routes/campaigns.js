@@ -141,23 +141,52 @@ router.get('/public', async (req, res) => {
             const [products] = await db.query('SELECT product_id FROM campaign_products WHERE campaign_id = ?', [row.id]);
             row.target_product_ids = products.map(p => p.product_id);
 
-            if (row.target_barcode) {
-                // target_barcode is sometimes stored as a JSON array string e.g. '["12345"]'
-                // Strip all non-alphanumeric characters to be absolutely safe (removes brackets, quotes, escapes)
-                let cleanBarcode = row.target_barcode.replace(/[^a-zA-Z0-9]/g, '');
-                row.target_barcode = cleanBarcode; // Update for frontend
-
-                // Fetch basic product info for the target barcode to display in the UI
-                const pQuery = `
-                    SELECT p.Id, p.ProductName, p.SalePrice, p.ImagePath
+            // 1. Önce bağlı ürün ID'leri varsa oradan ürünü getir
+            if (row.target_product_ids && row.target_product_ids.length > 0) {
+                const [tpById] = await db.query(`
+                    SELECT p.Id, p.ProductName, p.ProductCode, p.SalePrice, p.ImagePath,
+                           COALESCE((SELECT pb.barcode FROM product_barcodes pb WHERE pb.product_id = p.Id LIMIT 1), p.ProductCode) as Barcode
                     FROM products p
-                    LEFT JOIN product_barcodes pb ON p.Id = pb.product_id
-                    WHERE pb.barcode = ? OR p.ProductCode = ?
+                    WHERE p.Id = ?
                     LIMIT 1
-                `;
-                const [targetProducts] = await db.query(pQuery, [cleanBarcode, cleanBarcode]);
-                if (targetProducts.length > 0) {
-                    row.target_product = targetProducts[0];
+                `, [row.target_product_ids[0]]);
+                if (tpById.length > 0) {
+                    row.target_product = tpById[0];
+                }
+            }
+
+            // 2. Hedef barkod / ürün kodu varsa ve henüz target_product bulunamadıysa
+            if (row.target_barcode) {
+                let cleanBarcode = row.target_barcode.trim();
+                try {
+                    const parsed = JSON.parse(cleanBarcode);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        cleanBarcode = String(parsed[0]);
+                    }
+                } catch (e) {}
+                if (cleanBarcode.includes(',')) {
+                    cleanBarcode = cleanBarcode.split(',')[0].trim();
+                }
+                cleanBarcode = cleanBarcode.replace(/[^a-zA-Z0-9]/g, '');
+                row.target_barcode = cleanBarcode; // Frontend için temizlenmiş halini ata
+
+                if (!row.target_product && cleanBarcode) {
+                    const pQuery = `
+                        SELECT p.Id, p.ProductName, p.ProductCode, p.SalePrice, p.ImagePath,
+                               COALESCE(pb.barcode, p.ProductCode) as Barcode
+                        FROM products p
+                        LEFT JOIN product_barcodes pb ON p.Id = pb.product_id
+                        WHERE TRIM(pb.barcode) = ? 
+                           OR TRIM(p.ProductCode) = ?
+                           OR pb.barcode LIKE CONCAT('%', ?, '%')
+                           OR p.ProductCode LIKE CONCAT('%', ?, '%')
+                           OR p.Id = ?
+                        LIMIT 1
+                    `;
+                    const [targetProducts] = await db.query(pQuery, [cleanBarcode, cleanBarcode, cleanBarcode, cleanBarcode, cleanBarcode]);
+                    if (targetProducts.length > 0) {
+                        row.target_product = targetProducts[0];
+                    }
                 }
             }
         }

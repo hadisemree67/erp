@@ -219,7 +219,6 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
             {openDropdown === 'depo' && (
               <div className="dropdown-menu">
                 <a href="#mal-kabul" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('mal-kabul'); }}>Mal Kabul (Depo Onayı)</a>
-                <a href="#depo-kabulleri" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-kabulleri'); }}>Depo Kabulleri</a>
                 <a href="#depo-listesi" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-listesi'); }}>Depolar & Raflar</a>
                 <a href="#tasima-arabalari" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('tasima-arabalari'); }}>Taşıma Arabaları</a>
                 <a href="#depo-transfer" className="dropdown-item" onClick={(e) => { e.preventDefault(); onNavigate('depo-transfer'); }}>Depo Transferleri</a>
@@ -280,7 +279,6 @@ const Sidebar = ({ onLogout, onNavigate, currentView, userRole, currentUser }) =
               <div className="dropdown-menu">
                 <a href="#musteri-ekle" className={`dropdown-item ${currentView === 'musteri-ekle' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('musteri-ekle'); }}>Yeni Müşteri Ekle</a>
                 <a href="#musteri-listesi" className={`dropdown-item ${currentView === 'musteri-listesi' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('musteri-listesi'); }}>Müşteri Listesi</a>
-                <a href="#b2b-b2c-cari" className={`dropdown-item ${currentView === 'b2b-b2c-cari' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('b2b-b2c-cari'); }}>B2B / B2C Cari Hesapları</a>
                 <a href="#sikayet-sorular" className={`dropdown-item ${currentView === 'sikayet-sorular' ? 'active-sub' : ''}`} onClick={(e) => { e.preventDefault(); onNavigate('sikayet-sorular'); }}>Şikayet ve Sorular</a>
               </div>
             )}
